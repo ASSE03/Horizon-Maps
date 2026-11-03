@@ -1238,8 +1238,10 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
             }
             Text("Partir", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
+        // fork FR : cette suggestion (lieux habituels à cette heure) suit aussi le réglage « Deviner votre destination », et se ferme avec ×
+        var hideSuggestion by remember { mutableStateOf(false) }
         val suggestion = remember { engine.habits.suggest(System.currentTimeMillis()) }
-        if (pr == null && suggestion != null) Row(
+        if (pr == null && suggestion != null && !hideSuggestion && engine.prefs.b(PreferenceKeys.PREDICT, true)) Row(
             Modifier.fillMaxWidth().shadow(8.dp, RoundedCornerShape(22.dp)).clip(RoundedCornerShape(22.dp)).background(Teal).clickable { engine.startRoute(suggestion) }.padding(horizontal = 16.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1249,6 +1251,7 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
                 if (suggestion.sub.isNotBlank()) Text(suggestion.sub, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Text("Partir", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Icon(Icons.Rounded.Close, "Fermer", tint = Color.White, modifier = Modifier.padding(start = 10.dp).size(24.dp).clickable { hideSuggestion = true })
         }
         // three places on show to keep the map clear; "Tout" opens the rest (it used to be a list up to five tall)
         AnimatedVisibility(showSaved && engine.prefs.b(PreferenceKeys.QUICKLIST, true),
