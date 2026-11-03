@@ -385,9 +385,9 @@ fun StopsDialog(engine: NavEngine, onClose: () -> Unit) {
                             Text("${i + 1}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         Text(p.name, color = c.text, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 12.dp))
-                        Icon(Icons.Rounded.KeyboardArrowUp, "Avant", tint = if (i > 0) c.text else c.sub.copy(alpha = 0.3f),
+                        Icon(Icons.Rounded.KeyboardArrowUp, "Monter", tint = if (i > 0) c.text else c.sub.copy(alpha = 0.3f),
                             modifier = Modifier.size(36.dp).clickable(enabled = i > 0) { stops = stops.toMutableList().also { l -> val t = l[i]; l[i] = l[i - 1]; l[i - 1] = t } })
-                        Icon(Icons.Rounded.KeyboardArrowDown, "Après", tint = if (i < stops.size - 1) c.text else c.sub.copy(alpha = 0.3f),
+                        Icon(Icons.Rounded.KeyboardArrowDown, "Descendre", tint = if (i < stops.size - 1) c.text else c.sub.copy(alpha = 0.3f),
                             modifier = Modifier.size(36.dp).clickable(enabled = i < stops.size - 1) { stops = stops.toMutableList().also { l -> val t = l[i]; l[i] = l[i + 1]; l[i + 1] = t } })
                         Icon(Icons.Rounded.Close, "Retirer", tint = Bad, modifier = Modifier.padding(start = 6.dp).size(30.dp).clickable { stops = stops.filterIndexed { n, _ -> n != i } })
                     }
@@ -814,7 +814,7 @@ fun MapboxKeyDialog(prefs: com.headunit.launcher.Prefs, refused: Boolean = false
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Pill("Enregistrer", true, { if (t.isNotEmpty() && !t.startsWith("sk.")) { prefs.put(PreferenceKeys.MAPBOX_TOKEN, t); onClose() } })
-                Pill("Après", false, onClose)
+                Pill("Plus tard", false, onClose)
             }
         }
     }
