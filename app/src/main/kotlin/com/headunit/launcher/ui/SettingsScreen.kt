@@ -973,6 +973,11 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
         var feedback by remember { mutableStateOf(false) }
         SItem("Avis ou problème", "Envoie un rapport avec la version, votre appareil et le dernier plantage, pour une correction rapide") { SButton("Signaler", primary = true) { feedback = true } }
         if (feedback) FeedbackDialog(engine) { feedback = false }
+        // fork FR : jeton pour déposer les rapports et les plantages dans le dépôt GitHub du fork
+        SFieldItem("Jeton GitHub (rapports)", prefs.s(com.headunit.launcher.DiagUpload.TOKEN_KEY, ""),
+            "Jeton « fine-grained » limité à ${BuildConfig.UPDATE_REPO}, droit « Contents : Read and write ». Les rapports et plantages sont alors envoyés tout seuls dans la branche « diagnostics »" +
+                (com.headunit.launcher.DiagUpload.status.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+            placeholder = "github_pat_…", password = true) { prefs.put(com.headunit.launcher.DiagUpload.TOKEN_KEY, it.trim()) }
     }
     SGroup("Autorisations", footer = "Pendant un itinéraire, le guidage continue quand vous changez d'appli et une notification s'affiche. Autorisez les notifications pour qu'elle apparaisse.") {
         val hasLoc = ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -1039,7 +1044,7 @@ private fun FeedbackDialog(engine: NavEngine, onClose: () -> Unit) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
         Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.panel).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Avis ou problème", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text("Que s'est-il passé, ou que souhaitez-vous ? Où vous étiez et ce que vous avez touché aide beaucoup. (Le développeur est anglophone : l'anglais est préférable.)", color = c.sub, fontSize = 14.sp)
+            Text("Que s'est-il passé, ou que souhaitez-vous ? Où vous étiez et ce que vous avez touché aide beaucoup.", color = c.sub, fontSize = 14.sp)
             SField(note, { note = it.take(600) }, placeholder = "ex. Mauvais recalcul près de Lyon", width = 516.dp, fill = true)
             Text("Envoyés avec : la version de l'appli, votre autoradio, les principaux réglages, vos zones téléchargées et le dernier plantage (ni lieux ni clés API).", color = c.sub, fontSize = 12.sp)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
@@ -1049,7 +1054,17 @@ private fun FeedbackDialog(engine: NavEngine, onClose: () -> Unit) {
                     cm?.setPrimaryClip(android.content.ClipData.newPlainText("Horizon Nav report", engine.feedbackReport(note)))
                     engine.toast("Rapport copié : collez-le dans un message ou un commentaire Reddit", 3500)
                 }
-                SButton("Envoyer sur GitHub", primary = true) {
+                // fork FR : avec un jeton GitHub, le rapport est déposé directement dans le dépôt (branche « diagnostics »)
+                if (com.headunit.launcher.DiagUpload.hasToken(ctx)) SButton("Envoyer", primary = true) {
+                    val report = engine.feedbackReport(note)
+                    engine.toast("Envoi du rapport…", 2000)
+                    Thread {
+                        val msg = try { "Rapport envoyé : " + com.headunit.launcher.DiagUpload.send(ctx, "avis-${com.headunit.launcher.DiagUpload.stamp()}.txt", report) }
+                                  catch (e: Exception) { "Envoi impossible : ${e.message}. Utilisez Copier." }
+                        android.os.Handler(android.os.Looper.getMainLooper()).post { engine.toast(msg, 5000) }
+                    }.start()
+                    onClose()
+                } else SButton("Envoyer sur GitHub", primary = true) {
                     val title = note.lineSequence().firstOrNull()?.take(80)?.ifBlank { null } ?: "Report from Horizon Nav ${com.headunit.launcher.BuildConfig.VERSION_NAME}"
                     // a link has a length limit, so a very long report is cut down (Copy always has all of it)
                     val body = engine.feedbackReport(note).take(5000)

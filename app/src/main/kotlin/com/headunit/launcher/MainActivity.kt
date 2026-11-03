@@ -51,7 +51,8 @@ class MainActivity : ComponentActivity() {
         }
         // freezes ("isn't responding") don't reach the crash handler: watch for them, and pick up Android's record of the last one
         FreezeWatch.start(applicationContext)
-        Thread { FreezeWatch.collectLastExit(applicationContext) }.start()
+        // fork FR : le dernier plantage ou blocage part ensuite dans le dépôt GitHub (branche « diagnostics »), si un jeton est réglé
+        Thread { try { FreezeWatch.collectLastExit(applicationContext) } catch (e: Throwable) { }; DiagUpload.uploadPending(applicationContext) }.start()
         // it crashed while starting twice running: show a plain page that can send the crash report (it doesn't start the map),
         // instead of crashing again before anything can be tapped
         if (boot.getInt(CrashGuardPrefs.START_FAILURES, 0) >= 2 && crashFile.exists()) {

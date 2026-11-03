@@ -266,7 +266,7 @@ class Prefs(ctx: Context) {
     /** Everything except the API key, as JSON text (settings, saved places, logs...). */
     fun exportJson(): String = synchronized(LOCK) {
         val o = JSONObject()
-        raw.forEach { (k, v) -> if (k != PreferenceKeys.API_KEY) o.put(k, v) }
+        raw.forEach { (k, v) -> if (k != PreferenceKeys.API_KEY && k != DiagUpload.TOKEN_KEY) o.put(k, v) }
         o.toString(2)
     }
 
