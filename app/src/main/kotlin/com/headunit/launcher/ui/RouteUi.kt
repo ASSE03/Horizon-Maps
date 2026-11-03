@@ -651,16 +651,19 @@ fun DataUpdateCard(engine: NavEngine) {
     val wifi = remember(id) { engine.onWifi() }
     val more = engine.dataUpdates.size - 1
     val shape = RoundedCornerShape(22.dp)
-    Row(
-        Modifier.fillMaxWidth().panel(8.dp, shape, c.surface).padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    // fork FR : texte en haut, boutons en dessous (en ligne, les boutons français écrasaient le texte sur un téléphone)
+    Column(
+        Modifier.fillMaxWidth().panel(8.dp, shape, c.surface).padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.fillMaxWidth()) {
             Text("Nouvelles données de carte pour $name" + if (more > 0) " (+$more autres)" else "", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(if (wifi) "Seules les modifications sont téléchargées" else "Seules les modifications sont téléchargées · de préférence en Wi-Fi", color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Pill("Mettre à jour", true, { engine.updateData(id) })
-        Pill("Après", false, { engine.snoozeDataUpdates() })
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            Pill("Plus tard", false, { engine.snoozeDataUpdates() })
+            Pill("Mettre à jour", true, { engine.updateData(id) })
+        }
     }
 }
 
@@ -676,16 +679,19 @@ fun PackAgeCard(engine: NavEngine) {
     val wifi = remember(rev) { engine.onWifi() }
     val months = (age / 30).coerceAtLeast(4)
     val shape = RoundedCornerShape(22.dp)
-    Row(
-        Modifier.fillMaxWidth().panel(8.dp, shape, c.surface).padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    // fork FR : texte en haut, boutons en dessous (en ligne, les boutons français écrasaient le texte sur un téléphone)
+    Column(
+        Modifier.fillMaxWidth().panel(8.dp, shape, c.surface).padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.fillMaxWidth()) {
             Text("La carte hors ligne date de $months mois", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Text(if (wifi) "Mettez-la à jour pour les nouvelles routes et carrefours" else "Mettez à jour en Wi-Fi pour les nouvelles routes et carrefours", color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (wifi) Pill("Mettre à jour", true, { engine.updatePack(); hidden = true })
-        Pill("Après", false, { engine.snoozePackUpdate(); hidden = true })
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            Pill("Plus tard", false, { engine.snoozePackUpdate(); hidden = true })
+            if (wifi) Pill("Mettre à jour", true, { engine.updatePack(); hidden = true })
+        }
     }
 }
 
@@ -695,17 +701,18 @@ fun AppUpdateCard(engine: NavEngine) {
     val u = engine.appUpdate ?: return
     val c = LocalVw.current
     val shape = RoundedCornerShape(22.dp)
-    Row(
-        Modifier.fillMaxWidth().panel(8.dp, shape, c.surface).padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    // fork FR : texte en haut, boutons en dessous (en ligne, les boutons français écrasaient le texte sur un téléphone)
+    Column(
+        Modifier.fillMaxWidth().panel(8.dp, shape, c.surface).padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.fillMaxWidth()) {
             Text("Mise à jour d'Horizon Nav disponible", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Text("Installée ${com.headunit.launcher.BuildConfig.VERSION_NAME}  →  Disponible ${u.version}", color = c.sub, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(if (engine.updateBusy || engine.updateStatus.isNotBlank()) engine.updateStatus else "Mettez à jour : vos réglages et lieux sont conservés",
                 color = c.sub, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (u.releaseNotes.isNotBlank() && !engine.updateBusy) {
-                Text(u.releaseNotes, color = c.sub, fontSize = 11.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(u.releaseNotes.lines().filter { it.isNotBlank() && !it.trimStart().startsWith("#") }.joinToString("\n"), color = c.sub, fontSize = 11.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
             // Horizon Nav isn't on Google Play, so "installée par Google Play" means a tool like AAEnabler installed it to get it into
             // Android Auto. Android Auto drops apps that update themselves, so say so before they find it missing in the car.
@@ -716,8 +723,10 @@ fun AppUpdateCard(engine: NavEngine) {
                 else "Installée avec AAEnabler (ou similaire) ? Mettre à jour ici la retire d'Android Auto : réinstallez ensuite la nouvelle version avec AAEnabler.",
                 color = Warn, fontSize = 11.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
-        if (!engine.updateBusy) Pill("Mettre à jour", true, { engine.installAppUpdate() })
-        if (!engine.updateBusy) Pill("Après", false, { engine.snoozeAppUpdate() })
+        if (!engine.updateBusy) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            Pill("Plus tard", false, { engine.snoozeAppUpdate() })
+            Pill("Mettre à jour", true, { engine.installAppUpdate() })
+        }
     }
 }
 
