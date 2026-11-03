@@ -3929,10 +3929,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (sig != radarSig) { radarSig = sig; radar = shown }
     }
 
-    private val refRx = Regex("\\b([MAB][0-9]{1,4}(?:\\(M\\))?)\\b")
+    // fork FR : les numéros français aussi (A7, N7, D820, E15), écrits avec ou sans espace ("A 7")
+    private val refRx = Regex("\\b([MABNDE] ?[0-9]{1,4}(?:\\(M\\))?)\\b")
 
-    /** Road numbers on a sign ("A34", "M3"). */
-    private fun signRefs(sign: String): List<String> = refRx.findAll(sign).map { it.groupValues[1] }.distinct().toList()
+    /** Road numbers on a sign ("A34", "M3", "A7", "D820"). */
+    private fun signRefs(sign: String): List<String> = refRx.findAll(sign).map { it.groupValues[1].replace(" ", "") }.distinct().toList()
+
+    /** "l'A7", "l'E15", "la N7", "la D820" (pour la voix). */
+    private fun theRoad(r: String) = if (r.startsWith("A") || r.startsWith("E")) "l'$r" else "la $r"
 
     /** Place names on a sign, without the road numbers ("Winchester", "Basingstoke"). */
     private fun signDests(sign: String): List<String> =
@@ -3951,15 +3955,15 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val refs = signRefs(cur.sign)
         main += when {
             !sayRoads -> tail
-            dests.isNotEmpty() -> (if (refs.isNotEmpty() && cur.exitNo.isNotBlank()) " vers la ${refs[0]}" else "") + " direction " + dests.take(2).joinToString(" et ")
-            refs.isNotEmpty() && exitLike -> " vers la ${refs[0]}"
+            dests.isNotEmpty() -> (if (refs.isNotEmpty() && cur.exitNo.isNotBlank()) " vers ${theRoad(refs[0])}" else "") + " direction " + dests.take(2).joinToString(" et ")
+            refs.isNotEmpty() && exitLike -> " vers ${theRoad(refs[0])}"
             else -> tail
         }
         if (nxt != null && nxt.off - cur.off in 1.0..450.0 && !nxt.maneuver.uppercase().startsWith("ARRIVE")) {
             val target = signRefs(nxt.sign).firstOrNull() ?: nxt.street
             val forWhat = when {
                 target.isBlank() || !sayRoads -> ""
-                refRx.matches(target) -> " vers la $target"
+                refRx.matches(target) -> " vers ${theRoad(target.replace(" ", ""))}"
                 else -> " sur $target"
             }
             main += ", puis " + Geo.maneuverText(nxt.maneuver, nxt.roundExit) + forWhat

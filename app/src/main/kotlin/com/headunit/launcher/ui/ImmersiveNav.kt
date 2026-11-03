@@ -978,7 +978,9 @@ internal fun ImmTurnCard(
         }
         // A proper UK direction sign: blue for motorways, green for primary roads, white for local roads.
         if (engine.prefs.b(PreferenceKeys.UKSIGNS, true) && (t.sign.isNotBlank() && t.sign != t.street || t.tag.startsWith("Sortie")))
-            UkSign(t.sign, t.tag.removePrefix("Sortie ").takeIf { t.tag.startsWith("Sortie") }.orEmpty(), t.street, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp))
+            // fork FR : style des panneaux britanniques au Royaume-Uni et en Irlande, français partout ailleurs
+            if (engine.detectedCountry.uppercase() in setOf("GB", "IE", "IM", "JE", "GG")) UkSign(t.sign, t.tag.removePrefix("Sortie ").takeIf { t.tag.startsWith("Sortie") }.orEmpty(), t.street, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp))
+            else FrSign(t.sign, t.tag.removePrefix("Sortie ").takeIf { t.tag.startsWith("Sortie") }.orEmpty(), t.street, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp))
         if (!compact && engine.prefs.b(PreferenceKeys.LANE_STRIP, true)) t.lanes?.let { ls ->
             // lane hero view: before a complex junction the lanes grow into a big picture with yours lit; simple ones keep the strip
             // (not in Android Auto: the big lane picture made the card grow to fill much of a car screen as soon as a junction came up)

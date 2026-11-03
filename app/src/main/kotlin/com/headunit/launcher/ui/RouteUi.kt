@@ -576,6 +576,58 @@ fun UkSign(sign: String, junction: String, street: String, modifier: Modifier = 
     }
 }
 
+// ------------------------------------------------------------------ panneaux français (fork FR)
+
+private val frRefRx = Regex("\\b([ANDEM]) ?([0-9]{1,4})\\b")
+
+/** Cartouche d'un numéro de route à la française : rouge pour A et N, jaune pour D, vert pour E. */
+@Composable
+private fun FrCartouche(r: String) {
+    val (bg, fg) = when (r.first()) {
+        'A', 'N' -> Color(0xFFD7263D) to Color.White
+        'D' -> Color(0xFFF7C600) to Color(0xFF111111)
+        'E' -> Color(0xFF00843D) to Color.White
+        else -> Color.White to Color(0xFF111111)
+    }
+    Text(r, color = fg, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(3.dp)).background(bg).border(1.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(3.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
+}
+
+/**
+ * Le panneau de direction comme sur les routes françaises : bleu pour les autoroutes, vert pour les grands itinéraires (routes
+ * nationales, européennes), blanc pour les autres routes. Le numéro de sortie est dans un cartouche blanc « Sortie », et chaque
+ * numéro de route dans sa cartouche (rouge A/N, jaune D, vert E).
+ */
+@Composable
+fun FrSign(sign: String, junction: String, street: String, modifier: Modifier = Modifier) {
+    val text = sign.ifBlank { street }
+    val refs = frRefRx.findAll(text).map { it.groupValues[1] + it.groupValues[2] }.filter { !it.startsWith("M") }.distinct().toList()
+    val dests = text.split(',', '/', ';', '|', ':').map { frRefRx.replace(it, "").replace(Regex("[()]"), "").trim().trim(':', '-', '–', ' ') }
+        .filter { it.length >= 3 && it.any { ch -> ch.isLetter() } }.distinct().take(3)
+    val motorway = refs.any { it.startsWith("A") } || (junction.isNotBlank() && refs.none { it.startsWith("N") || it.startsWith("D") })
+    val green = !motorway && refs.any { it.startsWith("N") || it.startsWith("E") }
+    val bg = when { motorway -> Color(0xFF1F4FA3); green -> Color(0xFF0E7A45); else -> Color.White }
+    val fg = if (motorway || green) Color.White else Color(0xFF111111)
+    val shape = RoundedCornerShape(6.dp)
+    Row(
+        modifier.clip(shape).background(bg).border(2.dp, if (motorway || green) Color.White else Color(0xFF111111), shape).padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (junction.isNotBlank()) Column(
+            Modifier.clip(RoundedCornerShape(4.dp)).background(Color.White).padding(horizontal = 7.dp, vertical = 2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("SORTIE", color = Color(0xFF1F4FA3), fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1, letterSpacing = 0.5.sp)
+            Text(junction, color = Color(0xFF1F4FA3), fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+        Column(Modifier.weight(1f, fill = false)) {
+            if (dests.isNotEmpty()) dests.forEach { Text(it, color = fg, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            else if (refs.isEmpty()) Text(text, color = fg, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        refs.take(2).forEach { FrCartouche(it) }
+    }
+}
+
 // ------------------------------------------------------------------ hazard radar
 
 private fun radarColor(kind: String): Color = when (kind) {

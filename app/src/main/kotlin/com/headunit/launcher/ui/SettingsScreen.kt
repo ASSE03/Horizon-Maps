@@ -429,7 +429,7 @@ private fun RoutesSection(prefs: Prefs) {
 private fun GuidanceSection(prefs: Prefs, engine: NavEngine) {
     val mi = engine.imperial
     SGroup("Carte de direction") {
-        SToggle(prefs, "Panneaux britanniques sur la carte de direction", "uksigns", true)
+        SToggle(prefs, "Panneaux de direction sur la carte", "uksigns", true, "Aux sorties : numéro de sortie, routes et villes, comme sur les panneaux (style français, britannique au Royaume-Uni)")
         SToggle(prefs, "Carte de direction animée", "livecard", true, "Grandit et s'illumine à l'approche du virage")
         SToggle(prefs, "Guidage par voie sur la carte de direction", "lanestrip", true)
         if (prefs.b(PreferenceKeys.LANE_STRIP, true)) SChoice("Style du guidage par voie", listOf("hero" to "Grande vue des voies", "classic" to "Bandeau classique"), prefs.s(PreferenceKeys.LANE_STYLE, "hero"),

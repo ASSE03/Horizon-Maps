@@ -66,7 +66,7 @@ internal val settingsIndex = listOf(
     SettingRef("Durée du compte à rebours", "", "Démarrer un itinéraire", 3),
     SettingRef("Survoler un nouvel itinéraire", "Un survol 3D de 3 secondes avant la vue d'ensemble. Touchez la carte pour passer", "Démarrer un itinéraire", 3),
     SettingRef("Bouton de survol de l'itinéraire", "Survol 3D du trajet", "Démarrer un itinéraire", 3),
-    SettingRef("Panneaux britanniques sur la carte de direction", "", "Carte de direction", 4),
+    SettingRef("Panneaux de direction sur la carte", "", "Carte de direction", 4),
     SettingRef("Carte de direction animée", "Grandit et s'illumine à l'approche du virage", "Carte de direction", 4),
     SettingRef("Guidage par voie sur la carte de direction", "", "Carte de direction", 4),
     SettingRef("Style du guidage par voie", "", "Carte de direction", 4),
