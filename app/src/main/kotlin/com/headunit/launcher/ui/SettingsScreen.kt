@@ -536,7 +536,7 @@ private fun PlacesSection(engine: NavEngine) {
     // (read again whenever the saved places change, so a change shows straight away)
     val slotsRaw = engine.prefs.s(PreferenceKeys.PLACE_HOME, "") + engine.prefs.s("place_work", "")
     SGroup("Lieux enregistrés", footer = "Domicile et Travail se définissent aussi depuis les pastilles sous la barre de recherche, ou la maison et la mallette dans les options d'itinéraire.") {
-        PlaceItem("Domicile", remember(slotsRaw) { pl.slot("home") }, { settingSlot = "home" }) { pl.clearSlot("home") }
+        PlaceItem("Maison", remember(slotsRaw) { pl.slot("home") }, { settingSlot = "home" }) { pl.clearSlot("home") }
         PlaceItem("Travail", remember(slotsRaw) { pl.slot("work") }, { settingSlot = "work" }) { pl.clearSlot("work") }
     }
     settingSlot?.let { s -> AddPlaceDialog(engine, null, slot = s) { settingSlot = null } }
@@ -579,7 +579,7 @@ private fun PlacesSection(engine: NavEngine) {
                     }
                 }
                 slotFor == f -> SItem("Définir ${f.name} comme…") {
-                    SButton("Domicile", primary = true) { pl.setSlot("home", f); slotFor = null; engine.toast("${f.name} est maintenant le domicile", 2500) }
+                    SButton("Maison", primary = true) { pl.setSlot("home", f); slotFor = null; engine.toast("${f.name} est maintenant le domicile", 2500) }
                     SButton("Travail", primary = true) { pl.setSlot("work", f); slotFor = null; engine.toast("${f.name} est maintenant le travail", 2500) }
                     SButton("Annuler") { slotFor = null }
                 }

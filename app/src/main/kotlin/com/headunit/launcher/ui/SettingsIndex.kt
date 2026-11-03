@@ -187,7 +187,7 @@ internal val settingsIndex = listOf(
     SettingRef("Carte à afficher", "", "Sans réseau", 9),
     SettingRef("Supprimer le pack", "Libère l'espace occupé par le pack hors ligne", "Stockage", 9),
     SettingRef("Taille de la voiture", "Taille de la voiture ou flèche 3D", "Votre flèche", 2),
-    SettingRef("Domicile", "Définir ou effacer votre domicile", "Lieux enregistrés", 7),
+    SettingRef("Maison", "Définir ou effacer votre domicile", "Lieux enregistrés", 7),
     SettingRef("Travail", "Définir ou effacer votre lieu de travail", "Lieux enregistrés", 7),
     SettingRef("Journal des trajets", "Chaque trajet, enregistré quand vous vous garez", "Journal des trajets", 7),
     SettingRef("Compteur et panneau de limitation", "Taille de la limitation et du compteur", "En conduite", 10),

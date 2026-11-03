@@ -198,7 +198,7 @@ private fun HomeWorkStep(engine: NavEngine) {
         Text("Rechercher en", color = c.sub, fontSize = 14.sp)
         Segmented(searchCountryOptions(engine), searchCountryValue(engine.prefs)) { engine.prefs.put(PreferenceKeys.COUNTRY, it); if (q.length >= 3) engine.search(q) }
     }
-    for ((slot, label, icon) in listOf(Triple("home", "Domicile", Icons.Rounded.Home), Triple("work", "Travail", Icons.Rounded.Work))) {
+    for ((slot, label, icon) in listOf(Triple("home", "Maison", Icons.Rounded.Home), Triple("work", "Travail", Icons.Rounded.Work))) {
         val cur = engine.places.slot(slot)
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(if (which == slot) c.accent.copy(alpha = 0.14f) else c.tile)

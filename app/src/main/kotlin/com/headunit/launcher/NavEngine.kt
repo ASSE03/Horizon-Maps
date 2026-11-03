@@ -129,7 +129,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     fun routeBack() {
         val from = tripFrom ?: return
         val home = places.slot("home")
-        val name = if (home != null && Geo.dist(home.pos, from) < 250.0) home.name.ifBlank { "Domicile" } else "Point de départ"
+        val name = if (home != null && Geo.dist(home.pos, from) < 250.0) home.name.ifBlank { "Maison" } else "Point de départ"
         dismissArrival()
         startRoute(Place(name, "", if (home != null && Geo.dist(home.pos, from) < 250.0) home.pos else from))
     }
@@ -1598,7 +1598,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             places.setSlot(slot, p)
             pendingSave = null
             results = emptyList()
-            toast("${if (slot == "home") "Domicile" else "Travail"} enregistré : ${p.name}", 3500)
+            toast("${if (slot == "home") "Maison enregistrée" else "Travail enregistré"} : ${p.name}", 3500)
         } else startRoute(p)
     }
 
@@ -3810,7 +3810,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val pl = cand
         if (pl == null || Geo.dist(here, pl.pos) < 800) { prediction = null; return }
         val title = when {
-            home != null && Geo.dist(home.pos, pl.pos) < 150 -> "Domicile"
+            home != null && Geo.dist(home.pos, pl.pos) < 150 -> "Maison"
             work != null && Geo.dist(work.pos, pl.pos) < 150 -> "Travail"
             else -> pl.name
         }

@@ -1009,7 +1009,7 @@ private fun ImmSearch(engine: NavEngine, q: String, onQ: (String) -> Unit, locke
     Box(Modifier.fillMaxWidth().height(60.dp).panel(10.dp, shape, c.surface)) {
         TextField(
             value = q, onValueChange = onQ, enabled = !locked,
-            placeholder = { Text(if (locked) "Touchez le micro pour chercher en roulant" else "Où allez-vous ?", fontSize = if (locked) 15.sp else 18.sp) },
+            placeholder = { Text(if (locked) "Touchez le micro pour chercher en roulant" else "Rechercher", fontSize = if (locked) 15.sp else 18.sp) },
             leadingIcon = { Icon(Icons.Rounded.Search, null, tint = c.sub) },
             trailingIcon = {
                 if (q.isNotEmpty()) Icon(Icons.Rounded.Close, "Effacer", tint = c.sub, modifier = Modifier.padding(end = 8.dp).clickable { onQ(""); engine.results = emptyList() })
@@ -1083,7 +1083,7 @@ private fun ImmChips(engine: NavEngine, focusSearch: () -> Unit) {
     LaunchedEffect(Unit) { while (true) { engine.refreshSlotTimes(); delay(60_000) } }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PlaceTile(engine, Modifier.weight(1f), Icons.Rounded.Home, Color(0xFF4C8DFF), "Domicile", home, engine.slotMins["home"]) {
+            PlaceTile(engine, Modifier.weight(1f), Icons.Rounded.Home, Color(0xFF4C8DFF), "Maison", home, engine.slotMins["home"]) {
                 if (home != null) engine.startRoute(home) else { engine.pendingSave = "home"; engine.toast("Cherchez l'adresse de votre domicile", 3500); focusSearch() }
             }
             PlaceTile(engine, Modifier.weight(1f), Icons.Rounded.Work, Color(0xFFF29900), "Travail", work, engine.slotMins["work"]) {
@@ -1110,7 +1110,7 @@ private fun PlaceTile(engine: NavEngine, modifier: Modifier, icon: ImageVector, 
     val here = engine.fix?.pos
     val sub = when {
         place == null -> "Touchez pour définir"
-        mins == 0 -> "Vous y êtes"
+        mins == 0 -> "Sur place"
         mins != null && mins > 0 -> Geo.fmtDur(mins * 60.0)
         here != null -> Geo.fmtDist(Geo.dist(here, place.pos), engine.imperial)
         else -> place.sub
@@ -1229,7 +1229,7 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
             Modifier.fillMaxWidth().shadow(8.dp, RoundedCornerShape(22.dp)).clip(RoundedCornerShape(22.dp)).background(Teal).clickable { engine.startRoute(pr.place) }.padding(horizontal = 16.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(when (pr.title) { "Domicile" -> Icons.Rounded.Home; "Travail" -> Icons.Rounded.Work; else -> Icons.Rounded.History }, null, tint = Color.White, modifier = Modifier.size(26.dp))
+            Icon(when (pr.title) { "Maison" -> Icons.Rounded.Home; "Travail" -> Icons.Rounded.Work; else -> Icons.Rounded.History }, null, tint = Color.White, modifier = Modifier.size(26.dp))
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                 Text(listOfNotNull(pr.title, if (pr.mins >= 0) Geo.fmtDur(pr.mins * 60.0) else null, pr.note.ifBlank { null }).joinToString(" · "),
                     color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1255,7 +1255,7 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
             enter = fadeIn(tween(200)) + androidx.compose.animation.expandVertically(tween(240)), exit = fadeOut(tween(140)) + androidx.compose.animation.shrinkVertically(tween(200))) {
         Column(Modifier.fillMaxWidth().panel(10.dp, RoundedCornerShape(26.dp), c.surface).padding(vertical = 6.dp)) {
             Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("ENREGISTRÉS ET RÉCENTS", color = c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f))
+                Text("FAVORIS ET RÉCENTS", color = c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f))
                 if (saved.size > 3) Text(if (showAll) "Moins" else "Tous (${saved.size})", color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { showAll = !showAll }.padding(horizontal = 10.dp, vertical = 8.dp))
                 Row(Modifier.clip(RoundedCornerShape(12.dp)).clickable { adding = true }.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

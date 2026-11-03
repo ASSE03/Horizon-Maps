@@ -345,7 +345,7 @@ fun StopsDialog(engine: NavEngine, onClose: () -> Unit) {
                 }
             }
             // your own places, added to the list below (then Update route)
-            val mine = remember { listOfNotNull(engine.places.slot("home")?.let { "Domicile" to it }, engine.places.slot("work")?.let { "Travail" to it }) +
+            val mine = remember { listOfNotNull(engine.places.slot("home")?.let { "Maison" to it }, engine.places.slot("work")?.let { "Travail" to it }) +
                 engine.places.favourites().take(4).map { "★ " + it.name to it } }
             if (mine.isNotEmpty()) {
                 Text("VOS LIEUX", color = c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)

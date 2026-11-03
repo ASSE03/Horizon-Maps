@@ -788,7 +788,7 @@ class PlacesScreen(carContext: CarContext, private val holder: CarHolder) : Scre
         if (e != null) {
             // (label, place, icon, colour) in the app's colours: Home blue, Work amber, saved teal, favourites gold, recent grey
             val all = ArrayList<Triple<String, Place, Pair<Int, Int>>>()
-            e.places.slot("home")?.let { all += Triple("Domicile", it, R.drawable.ic_car_home to 0xFF4C8DFF.toInt()) }
+            e.places.slot("home")?.let { all += Triple("Maison", it, R.drawable.ic_car_home to 0xFF4C8DFF.toInt()) }
             e.places.slot("work")?.let { all += Triple("Travail", it, R.drawable.ic_car_work to 0xFFF29900.toInt()) }
             for (c in e.places.customs()) all += Triple(c.label, c.place, R.drawable.ic_car_star to 0xFF12A4B4.toInt())
             for (p in e.places.favourites()) all += Triple(p.name, p, R.drawable.ic_car_star to 0xFFF2C230.toInt())
