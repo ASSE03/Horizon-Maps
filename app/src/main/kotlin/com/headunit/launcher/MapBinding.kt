@@ -975,8 +975,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             })
             mbMap.addInteraction(com.mapbox.maps.ClickInteraction.standardPoi { f, _ ->
                 if (!tapSelectOn) return@standardPoi false
-                val g = f.geometry
-                f.name?.let { n -> onPoiTap?.invoke(n, LL(g.latitude(), g.longitude())) }
+                // (fork FR : certains lieux n'ont pas de nom, et Mapbox plante alors en lisant f.name : JsonNull)
+                try {
+                    val g = f.geometry
+                    val n = try { f.name } catch (e: Throwable) { null }
+                    onPoiTap?.invoke(n?.takeIf { it.isNotBlank() } ?: "Lieu", LL(g.latitude(), g.longitude()))
+                } catch (e: Throwable) { android.util.Log.w("MapBinding", "tap on a place: ${e.message}") }
                 false
             })
         } catch (e: Throwable) { android.util.Log.w("MapBinding", "tap highlight: ${e.message}") }
