@@ -82,15 +82,37 @@ internal fun SItem(title: String, sub: String? = null, onClick: (() -> Unit)? = 
         }
         hlMod = Modifier.bringIntoViewRequester(req).clip(RoundedCornerShape(14.dp)).drawBehind { drawRect(c.accent.copy(alpha = 0.18f * glow.value)) }
     }
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).then(hlMod).then(if (onClick != null) Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick) else Modifier).padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f).padding(end = 14.dp)) {
-            Text(title, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            if (!sub.isNullOrBlank()) Text(sub, color = c.sub, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+    // fork FR : les boutons français sont plus larges ; quand ils prendraient plus de 45 % de la ligne (téléphone), ils passent
+    // sous le texte, alignés à droite, au lieu d'écraser le titre en colonne d'une syllabe
+    androidx.compose.ui.layout.Layout(
+        content = {
+            Column(Modifier.padding(end = 14.dp)) {
+                Text(title, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                if (!sub.isNullOrBlank()) Text(sub, color = c.sub, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { trailing() }
+        },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).then(hlMod).then(if (onClick != null) Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick) else Modifier).padding(vertical = 8.dp),
+    ) { ms, cons ->
+        val w = cons.maxWidth
+        val trail = ms[1].measure(androidx.compose.ui.unit.Constraints(maxWidth = w))
+        val minH = cons.minHeight
+        if (trail.width == 0 || trail.width <= w * 0.45f) {
+            val text = ms[0].measure(androidx.compose.ui.unit.Constraints(maxWidth = (w - trail.width).coerceAtLeast(0)))
+            val h = maxOf(text.height, trail.height, minH)
+            layout(w, h) {
+                text.placeRelative(0, (h - text.height) / 2)
+                trail.placeRelative(w - trail.width, (h - trail.height) / 2)
+            }
+        } else {
+            val text = ms[0].measure(androidx.compose.ui.unit.Constraints(maxWidth = w))
+            val gap = 8.dp.roundToPx()
+            val h = maxOf(text.height + gap + trail.height, minH)
+            layout(w, h) {
+                text.placeRelative(0, 0)
+                trail.placeRelative(w - trail.width, text.height + gap)
+            }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { trailing() }
     }
 }
 
