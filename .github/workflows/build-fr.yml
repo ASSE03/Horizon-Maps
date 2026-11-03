@@ -61,7 +61,7 @@ jobs:
           git fetch --tags --force -q || true
           PREV="$(git tag -l 'v1.0.*' --sort=-v:refname | head -n1)"
           if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="-15"; fi
-          git log $RANGE --no-merges --format='- %s' | grep -v -i -E 'skip ci|^- Merge ' > "$RUNNER_TEMP/notes.md" || true
+          git log $RANGE --first-parent --format='- %s' | grep -v -i -E 'skip ci|^- Merge |Add files via upload|Sync Horizon Nav source' > "$RUNNER_TEMP/notes.md" || true
           [ -s "$RUNNER_TEMP/notes.md" ] || printf -- "- Petites améliorations\n" > "$RUNNER_TEMP/notes.md"
           mkdir -p app/src/main/assets
           cp "$RUNNER_TEMP/notes.md" app/src/main/assets/whatsnew.md
