@@ -463,7 +463,7 @@ private fun GuidanceSection(prefs: Prefs, engine: NavEngine) {
 private fun ZonesItem() {
     val ctx = LocalContext.current
     val sc = rememberCoroutineScope()
-    var st by remember { mutableStateOf(Zones.all(ctx).let { z -> if (z.isEmpty()) "Pas encore téléchargé" else "${z.size} zones: " + z.joinToString(", ") { it.name }.take(140) }) }
+    var st by remember { mutableStateOf(Zones.all(ctx).let { z -> if (z.isEmpty()) "Pas encore téléchargé" else "${z.size} zones" + z.map { it.name }.filter { it != "Zone à faibles émissions" }.distinct().takeIf { it.isNotEmpty() }?.let { n -> " : " + n.joinToString(", ").take(140) }.orEmpty() }) }
     var busy by remember { mutableStateOf(false) }
     SItem("Zones à faibles émissions sur cet appareil", st) {
         SButton(if (busy) "Mise à jour…" else "Mettre à jour") {

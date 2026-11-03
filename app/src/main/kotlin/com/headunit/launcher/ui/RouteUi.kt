@@ -419,7 +419,7 @@ fun ZonesRow(engine: NavEngine) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Icon(Icons.Rounded.Eco, null, tint = Warn, modifier = Modifier.size(20.dp))
-        Text("Traverse " + z.joinToString(", ") + ". Une redevance peut s'appliquer.", color = c.text, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Text("Traverse " + z.joinToString(", ") + (if (engine.detectedCountry.equals("GB", true)) ". Une redevance peut s'appliquer." else ". Vérifiez votre vignette Crit'Air."), color = c.text, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         if (!engine.prefs.b(PreferenceKeys.AVOIDZONES, false)) Pill("Éviter les zones", false, { engine.prefs.put(PreferenceKeys.AVOIDZONES, true); engine.dest?.let { engine.startRoute(it, engine.departMin, true) } })
     }
 }

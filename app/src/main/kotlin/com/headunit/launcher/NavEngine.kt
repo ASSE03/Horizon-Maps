@@ -4498,7 +4498,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val ahead = off - progress
             if (ahead in -50.0..1500.0 && zoneAlerted.add(name)) {
                 raiseAlert("zone", if (ahead <= 0) "Vous êtes dans : $name" else "Entrée dans $name dans ${Geo.fmtDist(ahead, imperial)}", 7000)
-                speak(if (ahead <= 0) "Vous êtes dans $name. Un péage peut s'appliquer." else "Vous allez entrer dans $name. Un péage peut s'appliquer.", true)
+                // (fork FR : les ZFE françaises ne sont pas payantes, la redevance n'est annoncée qu'au Royaume-Uni)
+                val fee = if (detectedCountry.equals("GB", true)) " Une redevance peut s'appliquer." else ""
+                speak(if (ahead <= 0) "Vous êtes dans $name.$fee" else "Vous allez entrer dans $name.$fee", true)
             }
         }
 

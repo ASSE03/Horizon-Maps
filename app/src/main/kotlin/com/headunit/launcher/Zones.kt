@@ -42,7 +42,7 @@ object Zones {
             }
         } catch (e: Exception) { }
         cache = out
-        status = if (out.isEmpty()) "Aucune zone trouvée dans les données de la carte" else "${out.size} zones: " + out.joinToString(", ") { it.name }.take(200)
+        status = if (out.isEmpty()) "Aucune zone trouvée dans les données de la carte" else "${out.size} zones" + out.map { it.name }.filter { it != "Zone à faibles émissions" }.distinct().takeIf { it.isNotEmpty() }?.let { n -> " : " + n.joinToString(", ").take(200) }.orEmpty()
         return out
     }
 
@@ -84,13 +84,13 @@ object Zones {
         return r.filterIndexed { i, _ -> i % step == 0 } + r.last()
     }
 
-    /** Downloads the zones for Great Britain (blocking: call it off the main thread). */
+    /** Downloads the zones for Great Britain and France (fork FR : ZFE françaises incluses) (blocking: call it off the main thread). */
     fun fetch(ctx: Context) {
         if (fetching) return
         fetching = true
         try {
-            val q = "[out:json][timeout:90];(relation[\"boundary\"~\"^(low_emission_zone|congestion_charge|clean_air_zone)$\"](49.8,-8.7,60.9,1.9);" +
-                "way[\"boundary\"~\"^(low_emission_zone|congestion_charge|clean_air_zone)$\"](49.8,-8.7,60.9,1.9););out geom;"
+            val q = "[out:json][timeout:90];(relation[\"boundary\"~\"^(low_emission_zone|congestion_charge|clean_air_zone)$\"](41.3,-8.7,60.9,9.6);" +
+                "way[\"boundary\"~\"^(low_emission_zone|congestion_charge|clean_air_zone)$\"](41.3,-8.7,60.9,9.6););out geom;"
             val els = Overpass.query(q, 15000, 120000, 3)
             val out = JSONArray()
             var n = 0
