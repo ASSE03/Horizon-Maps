@@ -713,27 +713,31 @@ private fun FuelSection(prefs: Prefs, engine: NavEngine) {
     fun fmt1(v: Double) = if (v == Math.floor(v)) v.toLong().toString() else String.format(java.util.Locale.US, "%.1f", v)
     val ctx = LocalContext.current
     val sc = rememberCoroutineScope()
-    SGroup("Prix des carburants", footer = "Au Royaume-Uni, les prix en direct viennent du service gouvernemental Fuel Finder. C'est gratuit : sur gov.uk, cherchez « Fuel Finder », inscrivez-vous comme destinataire d'informations avec un GOV.UK One Login, puis collez ici l'identifiant et le secret client. Sans eux la liste des stations fonctionne, mais sans les prix. (En France, les prix sont automatiques : voir plus bas.)") {
+    // fork FR : les réglages britanniques (Fuel Finder) ne s'affichent qu'au Royaume-Uni ou s'ils sont déjà remplis
+    val ukFuel = engine.detectedCountry.equals("GB", true) || prefs.s(PreferenceKeys.FFID, "").isNotBlank()
+    SGroup(if (ukFuel) "Prix des carburants" else "Carburant", footer = if (ukFuel) "Au Royaume-Uni, les prix en direct viennent du service gouvernemental Fuel Finder. C'est gratuit : sur gov.uk, cherchez « Fuel Finder », inscrivez-vous comme destinataire d'informations avec un GOV.UK One Login, puis collez ici l'identifiant et le secret client. Sans eux la liste des stations fonctionne, mais sans les prix. (En France, les prix sont automatiques : voir plus bas.)" else null) {
         SChoice("Votre carburant", listOf("E10" to "SP95-E10", "E5" to "SP98", "B7" to "Gazole", "E85" to "Superéthanol (E85)", "EV" to "Électrique"), prefs.s(PreferenceKeys.FUEL_TYPE, "E10")) { prefs.put(PreferenceKeys.FUEL_TYPE, it) }
         SToggle(prefs, "Proposer un plein sur les longs trajets", "smartfuel", true, if (prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV") (if (mi) "Au-delà d'environ 95 miles" else "Au-delà d'environ 150 km") + ", une borne sur le trajet avec le plus petit détour" else (if (mi) "Au-delà d'environ 95 miles" else "Au-delà d'environ 150 km") + ", la station la moins chère sur le trajet")
-        SFieldItem("Identifiant client", prefs.s(PreferenceKeys.FFID, "")) { prefs.put(PreferenceKeys.FFID, it.trim()) }
-        SFieldItem("Secret client", prefs.s(PreferenceKeys.FFSECRET, ""), password = true) { prefs.put(PreferenceKeys.FFSECRET, it.trim()) }
-        var st by remember { mutableStateOf(FuelFinder.status) }
-        var busy by remember { mutableStateOf(false) }
-        SItem("Prix", st.ifBlank { if (FuelFinder.configured(prefs)) "Pas encore téléchargé" else "Renseignez d'abord vos identifiants" }) {
-            SButton(if (busy) "Mise à jour…" else "Mettre à jour maintenant", primary = true) {
-                if (!busy && FuelFinder.configured(prefs)) {
-                    busy = true; st = "Téléchargement des stations et des prix (une minute la première fois)…"
-                    sc.launch {
-                        try { withContext(Dispatchers.IO) { FuelFinder.refresh(ctx, prefs, force = true) } } catch (e: Exception) { }
-                        st = FuelFinder.status; busy = false
+        if (ukFuel) {
+            SFieldItem("Identifiant client", prefs.s(PreferenceKeys.FFID, "")) { prefs.put(PreferenceKeys.FFID, it.trim()) }
+            SFieldItem("Secret client", prefs.s(PreferenceKeys.FFSECRET, ""), password = true) { prefs.put(PreferenceKeys.FFSECRET, it.trim()) }
+            var st by remember { mutableStateOf(FuelFinder.status) }
+            var busy by remember { mutableStateOf(false) }
+            SItem("Prix", st.ifBlank { if (FuelFinder.configured(prefs)) "Pas encore téléchargé" else "Renseignez d'abord vos identifiants" }) {
+                SButton(if (busy) "Mise à jour…" else "Mettre à jour maintenant", primary = true) {
+                    if (!busy && FuelFinder.configured(prefs)) {
+                        busy = true; st = "Téléchargement des stations et des prix (une minute la première fois)…"
+                        sc.launch {
+                            try { withContext(Dispatchers.IO) { FuelFinder.refresh(ctx, prefs, force = true) } } catch (e: Exception) { }
+                            st = FuelFinder.status; busy = false
+                        }
                     }
                 }
             }
+            SItem("Un prix erroné ?") { SButton("Le signaler") { openSystemSettings(ctx, android.content.Intent.ACTION_VIEW, android.net.Uri.parse(FuelFinder.REPORT_URL)) } }
         }
-        SItem("Un prix erroné ?") { SButton("Le signaler") { openSystemSettings(ctx, android.content.Intent.ACTION_VIEW, android.net.Uri.parse(FuelFinder.REPORT_URL)) } }
     }
-    SGroup("Prix des carburants hors Royaume-Uni", footer = "La France et l'Autriche fonctionnent toutes seules, via les services de prix de leurs gouvernements. L'Allemagne demande une clé gratuite sur creativecommons.tankerkoenig.de (Tankerkönig). Ailleurs la liste des stations fonctionne, sans les prix.") {
+    SGroup(if (ukFuel) "Prix des carburants hors Royaume-Uni" else "Prix des carburants", footer = "La France et l'Autriche fonctionnent toutes seules, via les services de prix de leurs gouvernements. L'Allemagne demande une clé gratuite sur creativecommons.tankerkoenig.de (Tankerkönig). Ailleurs la liste des stations fonctionne, sans les prix.") {
         SFieldItem("Clé Tankerkönig (Allemagne)", prefs.s(PreferenceKeys.TANKERKOENIG_KEY, ""), placeholder = "Collez la clé", password = true) { prefs.put(PreferenceKeys.TANKERKOENIG_KEY, it.trim()) }
     }
     if (prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV") SGroup("Votre voiture électrique", footer = "Avec la consommation et le prix renseignés, chaque itinéraire indique à peu près ce que coûtera la recharge. La consommation et la capacité de batterie servent aussi à l'estimation de batterie sur la carte de trajet et aux suggestions d'arrêt recharge (réglez votre niveau de batterie dans les options d'itinéraire).") {

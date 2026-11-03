@@ -144,7 +144,10 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
     if (arriveBy) ArriveByDialog(engine) { arriveBy = false }
     val fmt = com.headunit.launcher.Clock.format()
     val baseMs = if (engine.departAtMs > 0) engine.departAtMs else System.currentTimeMillis()
-    Column(Modifier.align(Alignment.BottomCenter).padding(horizontal = 10.dp, vertical = 4.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // fork FR : en paysage sur téléphone (peu de hauteur), le panneau défile au lieu de couper les cartes d'itinéraire et Démarrer
+    // (reverseScrolling : il reste calé en bas, sur les itinéraires et le bouton)
+    Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().verticalScroll(rememberScrollState(), reverseScrolling = true)
+        .padding(horizontal = 10.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     val selRoute = rs.getOrNull(engine.active)
     // fuel estimate from the economy and pump price set in Settings > Driving (blank = not shown)
     val ev = engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV"
