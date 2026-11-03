@@ -196,6 +196,12 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
     }
     // electric: the battery now, the least you want to arrive with, and the eco route; a charging stop is then suggested
     // below if the trip needs one
+    // fork FR : batterie réelle lue dans Home Assistant (MG4 via saic-python-mqtt-gateway) à chaque nouvelle destination
+    val haCtx = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    if (ev && com.headunit.launcher.HaBattery.configured(engine.prefs)) androidx.compose.runtime.LaunchedEffect(engine.dest) {
+        val v = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.headunit.launcher.HaBattery.fetch(haCtx) }
+        if (v != null) { engine.prefs.put(PreferenceKeys.EV_CHARGE_PCT, v.coerceIn(5, 100)); engine.refreshEvPlan() }
+    }
     if (ev) Row(
         Modifier.floating(50.dp).horizontalScroll(rememberScrollState()).padding(6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -204,7 +210,8 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         val minArr = engine.prefs.i(PreferenceKeys.EV_MIN_ARRIVE, 20)
         Text("Batterie actuelle", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 10.dp))
         Pill("−", false, { engine.prefs.put(PreferenceKeys.EV_CHARGE_PCT, (pct - 10).coerceAtLeast(5)); engine.refreshEvPlan() })
-        Text("$pct%", color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("$pct%" + (if (com.headunit.launcher.HaBattery.lastPct == pct && System.currentTimeMillis() - com.headunit.launcher.HaBattery.lastAt < 3_600_000L) " · voiture" else ""),
+            color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
         Pill("+", false, { engine.prefs.put(PreferenceKeys.EV_CHARGE_PCT, (pct + 10).coerceAtMost(100)); engine.refreshEvPlan() })
         Text("Arriver avec au moins", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 14.dp, end = 4.dp))
         for (m in listOf(10, 20, 30)) Pill("$m%", minArr == m, { engine.prefs.put(PreferenceKeys.EV_MIN_ARRIVE, m); engine.refreshEvPlan() })

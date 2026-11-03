@@ -737,6 +737,14 @@ private fun FuelSection(prefs: Prefs, engine: NavEngine) {
         SFieldItem("Clé Tankerkönig (Allemagne)", prefs.s(PreferenceKeys.TANKERKOENIG_KEY, ""), placeholder = "Collez la clé", password = true) { prefs.put(PreferenceKeys.TANKERKOENIG_KEY, it.trim()) }
     }
     if (prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV") SGroup("Votre voiture électrique", footer = "Avec la consommation et le prix renseignés, chaque itinéraire indique à peu près ce que coûtera la recharge. La consommation et la capacité de batterie servent aussi à l'estimation de batterie sur la carte de trajet et aux suggestions d'arrêt recharge (réglez votre niveau de batterie dans les options d'itinéraire).") {
+        // fork FR : la batterie réelle de la voiture, lue dans Home Assistant au moment de choisir une destination
+        SFieldItem("Home Assistant : adresse", prefs.s(com.headunit.launcher.HaBattery.URL_KEY, ""),
+            "Pour lire la batterie réelle de la voiture (ex. https://xxxx.ui.nabu.casa)" + com.headunit.launcher.HaBattery.status.takeIf { it.isNotBlank() }.let { if (it != null) " · $it" else "" },
+            placeholder = "https://…") { prefs.put(com.headunit.launcher.HaBattery.URL_KEY, it.trim()) }
+        SFieldItem("Home Assistant : jeton longue durée", prefs.s(com.headunit.launcher.HaBattery.TOKEN_KEY, ""),
+            "Profil Home Assistant › Sécurité › Jetons d'accès longue durée", password = true) { prefs.put(com.headunit.launcher.HaBattery.TOKEN_KEY, it.trim()) }
+        SFieldItem("Home Assistant : entité batterie (%)", prefs.s(com.headunit.launcher.HaBattery.ENTITY_KEY, ""),
+            "L'entité du niveau de charge, ex. sensor.mg4_soc", placeholder = "sensor.…") { prefs.put(com.headunit.launcher.HaBattery.ENTITY_KEY, it.trim()) }
         SToggle(prefs, "Afficher aussi les stations-service", PreferenceKeys.EV_SHOW_FUEL, false, "Le bouton Carburant sur la carte (téléphone et Android Auto). Désactivé : Recharge le remplace")
         if (mi) SFieldItem("Consommation (miles par kWh)", prefs.s(PreferenceKeys.EVMPK, ""), placeholder = "ex. 3.5", number = true) { s -> prefs.put(PreferenceKeys.EVMPK, num(s).take(5)) }
         else SFieldItem("Consommation (km par kWh)", prefs.s(PreferenceKeys.EVMPK, "").toDoubleOrNull()?.let { fmt1(it * 1.609344) } ?: "", placeholder = "ex. 5.6", number = true) { s ->
