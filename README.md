@@ -1,3 +1,13 @@
+# Horizon Nav FR (fork en français)
+
+Version française d'[Horizon Nav](https://github.com/benbishop028-arch/Horizon-Maps) : interface, annonces vocales, commandes vocales et Android Auto traduits.
+
+- ⬇️ **[Télécharger l'APK](https://github.com/ASSE03/Horizon-Maps/releases/download/app/HorizonNav-public.apk)** (s'installe à côté de l'appli officielle, sous le nom « Horizon Nav FR »)
+- Compilation : workflow **Build Horizon Nav FR** (onglet Actions), secret `SIGNING_KEYSTORE_BASE64` requis.
+- La voix utilise la synthèse vocale française du système : installez la voix française si besoin.
+
+---
+
 # Horizon Nav
 
 Free sat nav for Android car head units, that also runs on Android Auto. No ads, no account and no tracking. Made by one person in their spare time, and a lot of it comes from your feedback here and on Reddit.

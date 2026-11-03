@@ -31,37 +31,37 @@ private fun MapboxOfflineGroup(prefs: Prefs, engine: NavEngine) {
     LaunchedEffect(Unit) { com.headunit.launcher.MapboxOffline.refresh(ctx) }
     val off = com.headunit.launcher.MapboxOffline
     var confirm by remember { mutableStateOf<String?>(null) }
-    SGroup("Mapbox map with no signal", footer = "Mapbox lets each device keep only limited offline areas: a radius round home and several routes fit, a whole country doesn't. Areas you've driven recently are also kept automatically.") {
-        if (!engine.hasMapbox) SNote("Add your Mapbox access token in Settings > Keys & accounts first.")
+    SGroup("Carte Mapbox sans réseau", footer = "Mapbox ne laisse chaque appareil garder qu'une surface hors ligne limitée : un rayon autour du domicile et plusieurs itinéraires tiennent, pas un pays entier. Les zones parcourues récemment sont aussi gardées automatiquement.") {
+        if (!engine.hasMapbox) SNote("Ajoutez d'abord votre jeton d'accès Mapbox dans Réglages > Clés et comptes.")
         val km = prefs.s(PreferenceKeys.MBHOMEKM, "30").toIntOrNull() ?: 30
         val home = engine.places.slot("home")
-        SItem("Around home", if (home == null) "Set Home first (Search, then save a place as Home)" else "The 3D map within $km km of Home · about ${off.homeMb(km)} MB")
+        SItem("Autour du domicile", if (home == null) "Définissez d'abord le domicile (cherchez, puis enregistrez un lieu comme domicile)" else "La carte 3D dans un rayon de $km km du domicile · environ ${off.homeMb(km)} Mo")
         // (the distance choice and Save go on a line of their own: beside the title they squeezed it into a narrow column)
         androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Segmented(listOf("15" to "15 km", "30" to "30 km", "50" to "50 km"), km.toString()) { prefs.put(PreferenceKeys.MBHOMEKM, it) }
             androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-            if (home != null && engine.hasMapbox) SButton(if (off.busy?.startsWith("Around home") == true) "Saving…" else "Save", primary = true) { off.saveHome(ctx, home.pos, km) }
+            if (home != null && engine.hasMapbox) SButton(if (off.busy?.startsWith("Autour du domicile") == true) "Enregistrement…" else "Enregistrer", primary = true) { off.saveHome(ctx, home.pos, km) }
         }
         val r = engine.route
-        SItem("Save the map for this route", if (r == null) "Plan a route first" else engine.offlineRouteName() + " · a strip along the route · about ${off.routeMb(r.len)} MB") {
-            if (r != null && engine.hasMapbox) SButton("Save", primary = true) { off.saveRoute(ctx, engine.offlineRouteName(), r.pts) }
+        SItem("Enregistrer la carte de cet itinéraire", if (r == null) "Calculez d'abord un itinéraire" else engine.offlineRouteName() + " · une bande le long de l'itinéraire · environ ${off.routeMb(r.len)} Mo") {
+            if (r != null && engine.hasMapbox) SButton("Enregistrer", primary = true) { off.saveRoute(ctx, engine.offlineRouteName(), r.pts) }
         }
-        SToggle(prefs, "Save every route's map", "mbautoroute", false, "When a route starts, its strip is saved in the background")
-        if (prefs.b(PreferenceKeys.MBAUTOROUTE, false)) SChoice("Save routes", listOf("wifi" to "On Wi-Fi only", "always" to "Always (uses mobile data)"), prefs.s(PreferenceKeys.MAPBOX_AUTO_NETWORK, "wifi")) { prefs.put(PreferenceKeys.MAPBOX_AUTO_NETWORK, it) }
+        SToggle(prefs, "Enregistrer la carte de chaque itinéraire", "mbautoroute", false, "Au démarrage d'un itinéraire, sa bande de carte est enregistrée en arrière-plan")
+        if (prefs.b(PreferenceKeys.MBAUTOROUTE, false)) SChoice("Enregistrer les itinéraires", listOf("wifi" to "En Wi-Fi seulement", "always" to "Toujours (utilise les données mobiles)"), prefs.s(PreferenceKeys.MAPBOX_AUTO_NETWORK, "wifi")) { prefs.put(PreferenceKeys.MAPBOX_AUTO_NETWORK, it) }
         if (off.saved.isNotEmpty() || off.busy != null) {
-            SItem("Saved", null)
+            SItem("Enregistré", null)
             for (a in off.saved) {
-                SItem(a.name, "%.0f MB".format(a.mb) + if (a.complete) " · saved" else " · part saved") {
+                SItem(a.name, "%.0f MB".format(a.mb) + if (a.complete) " · enregistré" else " · partiellement enregistré") {
                     if (confirm == a.id) {
-                        SButton("Yes, delete", danger = true) { confirm = null; off.delete(ctx, a.id) }
-                        SButton("Keep") { confirm = null }
-                    } else SButton("Delete", danger = true) { confirm = a.id }
+                        SButton("Oui, supprimer", danger = true) { confirm = null; off.delete(ctx, a.id) }
+                        SButton("Garder") { confirm = null }
+                    } else SButton("Supprimer", danger = true) { confirm = a.id }
                 }
             }
         }
         if (off.busy != null) {
-            SItem(off.busy ?: "", off.status) { SButton("Stop") { off.stop() } }
+            SItem(off.busy ?: "", off.status) { SButton("Arrêter") { off.stop() } }
             LinearProgressIndicator(progress = { off.progress }, color = LocalVw.current.accent, trackColor = LocalVw.current.tile, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
         } else if (off.status.isNotBlank()) SNote(off.status)
     }
@@ -99,8 +99,8 @@ internal fun OfflineMapsContent(prefs: Prefs, engine: NavEngine) {
     }
 
     MapboxOfflineGroup(prefs, engine)
-    SGroup("Downloaded areas", footer = "Keep as many areas as you like: the one you're in is used automatically (routes work offline within one area). Each is a snapshot of the roads on the day it was built, so update now and then." + if (free >= 0) " ${fmtSize(free)} free." else "") {
-        if (have.isEmpty()) SNote("Nothing downloaded yet. Pick an area below and download it on Wi-Fi.")
+    SGroup("Zones téléchargées", footer = "Gardez autant de zones que vous voulez : celle où vous êtes est utilisée automatiquement (les itinéraires hors ligne fonctionnent à l'intérieur d'une zone). Chacune est une photo des routes au jour de sa création, mettez-la à jour de temps en temps." + if (free >= 0) " ${fmtSize(free)} libres." else "") {
+        if (have.isEmpty()) SNote("Rien de téléchargé. Choisissez une zone ci-dessous et téléchargez-la en Wi-Fi.")
         for (id in have) {
             val r = PackRegions.byId(id)
             val d = OfflineRouter.packDir(ctx, id)
@@ -108,35 +108,35 @@ internal fun OfflineMapsContent(prefs: Prefs, engine: NavEngine) {
             val built = if (tiles.exists()) java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK).format(java.util.Date(tiles.lastModified())) else ""
             val inUse = id == activeId
             val hasLimits = File(d, "limits.bin").exists()
-            SItem(r.name + if (inUse) " · in use" else "", (sizes[id]?.let { fmtSize(it) } ?: "…") + (if (built.isNotEmpty()) " · built $built" else "") +
-                (if (hasLimits) " · speed limits and cameras offline" else "")) {
+            SItem(r.name + if (inUse) " · utilisée" else "", (sizes[id]?.let { fmtSize(it) } ?: "…") + (if (built.isNotEmpty()) " · créée le $built" else "") +
+                (if (hasLimits) " · limitations et radars hors ligne" else "")) {
                 if (confirmDelete == id) {
-                    SButton("Yes, delete", danger = true) { confirmDelete = null; engine.deletePack(id) }
-                    SButton("Keep") { confirmDelete = null }
+                    SButton("Oui, supprimer", danger = true) { confirmDelete = null; engine.deletePack(id) }
+                    SButton("Garder") { confirmDelete = null }
                 } else {
-                    if (!inUse && have.size > 1) SButton("Use") { engine.useArea(id) }
-                    SButton(if (engine.packDownloading == id) "Updating…" else "Update") { engine.downloadRegion(r) }
-                    SButton("Delete", danger = true) { confirmDelete = id }
+                    if (!inUse && have.size > 1) SButton("Utiliser") { engine.useArea(id) }
+                    SButton(if (engine.packDownloading == id) "Mise à jour…" else "Mettre à jour") { engine.downloadRegion(r) }
+                    SButton("Supprimer", danger = true) { confirmDelete = id }
                 }
             }
         }
         for (id in extrasReady) if (engine.packDownloading != id)
-            SNote("Offline speed limits and cameras are now ready for ${PackRegions.byId(id).name}: tap its Update (only the new files download, usually under 100 MB).")
+            SNote("Limitations et radars hors ligne disponibles pour ${PackRegions.byId(id).name} : touchez sa mise à jour (seuls les nouveaux fichiers sont téléchargés, en général moins de 100 Mo).")
         val age = engine.packAgeDays()
-        if (age != null && age >= 120 && !engine.packBusy) SNote("The area in use is about ${age / 30} months old. Update it on Wi-Fi to pick up new roads and junction changes.")
+        if (age != null && age >= 120 && !engine.packBusy) SNote("La zone utilisée date d'environ ${age / 30} mois. Mettez-la à jour en Wi-Fi pour les nouvelles routes et carrefours.")
     }
-    SGroup("Add an area") {
-        SItem("Area", region.name + " · " + region.group) { SButton("Change") { picking = true } }
-        if (region.id !in have && avail == false) SNote("The ${region.name} pack hasn't been built yet, so it can't be downloaded at the moment.")
-        SItem(if (region.id in have) "${region.name} is already downloaded" else "Download ${region.name}", "Best done on Wi-Fi: a country is usually 1 to 4 GB") {
-            SButton(if (engine.packBusy) "Downloading…" else if (region.id in have) "Update" else "Download", primary = true) { engine.downloadRegion(region) }
+    SGroup("Ajouter une zone") {
+        SItem("Zone", region.name + " · " + region.group) { SButton("Changer") { picking = true } }
+        if (region.id !in have && avail == false) SNote("Le pack ${region.name} n'a pas encore été créé, il ne peut pas être téléchargé pour l'instant.")
+        SItem(if (region.id in have) "${region.name} est déjà téléchargé" else "Télécharger ${region.name}", "De préférence en Wi-Fi : un pays fait en général 1 à 4 Go") {
+            SButton(if (engine.packBusy) "Téléchargement…" else if (region.id in have) "Mettre à jour" else "Télécharger", primary = true) { engine.downloadRegion(region) }
         }
         if (engine.packBusy) LinearProgressIndicator(color = c.accent, trackColor = c.tile, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
-        if (engine.packStatus.isNotBlank()) SNote((engine.packDownloading?.let { PackRegions.byId(it).name + ": " } ?: "") + engine.packStatus + if (engine.packBusy) " · you can leave this page" else "")
+        if (engine.packStatus.isNotBlank()) SNote((engine.packDownloading?.let { PackRegions.byId(it).name + ": " } ?: "") + engine.packStatus + if (engine.packBusy) " · vous pouvez quitter cette page" else "")
     }
-    SGroup("Without signal") {
-        SChoice("Which map to draw", listOf("auto" to "Auto", "always" to "Downloaded", "never" to "Online"), prefs.s(PreferenceKeys.OFF_MAP, "auto"),
-            "Auto: with no signal Mapbox's map carries on with the areas it has stored (where you've been recently, and saved Mapbox areas); the downloaded pack's map takes over only where Mapbox has nothing, and the online map comes back with signal") { prefs.put(PreferenceKeys.OFF_MAP, it); engine.restyle() }
+    SGroup("Sans réseau") {
+        SChoice("Carte à afficher", listOf("auto" to "Auto", "always" to "Téléchargée", "never" to "En ligne"), prefs.s(PreferenceKeys.OFF_MAP, "auto"),
+            "Auto : sans réseau, la carte Mapbox continue avec les zones en mémoire (là où vous êtes passé récemment, et les zones Mapbox enregistrées) ; la carte du pack téléchargé ne prend le relais que là où Mapbox n'a rien, et la carte en ligne revient avec le réseau") { prefs.put(PreferenceKeys.OFF_MAP, it); engine.restyle() }
     }
     if (picking) PackPickerDialog(region, { prefs.put(PreferenceKeys.PACK_REGION, it.id) }, engine.fix?.pos ?: engine.map.center()) { picking = false }
 }

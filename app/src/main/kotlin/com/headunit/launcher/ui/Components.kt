@@ -345,10 +345,11 @@ fun rememberVoiceInput(prompt: String, onResult: (String) -> Unit): () -> Unit {
             launcher.launch(
                 android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                     .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
                     .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, prompt),
             )
         } catch (e: Exception) {
-            android.widget.Toast.makeText(ctx, "No voice recognition app found on this device", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(ctx, "Aucune appli de reconnaissance vocale sur cet appareil", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 }

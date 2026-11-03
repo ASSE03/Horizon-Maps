@@ -82,7 +82,7 @@ object RouteExtras {
             val t = e.optJSONObject("tags") ?: JSONObject()
             val pos = if (e.has("lat")) LL(e.getDouble("lat"), e.getDouble("lon")) else e.optJSONObject("center")?.let { LL(it.getDouble("lat"), it.getDouble("lon")) } ?: continue
             val rest = t.optString("highway") == "rest_area"
-            val name = t.optString("name").ifBlank { t.optString("operator") }.ifBlank { if (rest) "Rest area" else "Services" }
+            val name = t.optString("name").ifBlank { t.optString("operator") }.ifBlank { if (rest) "Aire de repos" else "Aire de services" }
             out += RoutePoi(if (rest) "rest" else "services", name, pos)
         }
         return out
@@ -117,11 +117,11 @@ object RouteExtras {
                     val t = e.optJSONObject("tags") ?: continue
                     if (pos == null) continue
                     if (t.optString("highway") == "stop") pois += RoutePoi("stop", "Stop", pos)
-                    else if (t.optString("railway") == "level_crossing") pois += RoutePoi("rail", "Level crossing", pos)
-                    else if (t.optString("ford") == "yes") pois += RoutePoi("ford", "Ford", pos)
+                    else if (t.optString("railway") == "level_crossing") pois += RoutePoi("rail", "Passage à niveau", pos)
+                    else if (t.optString("ford") == "yes") pois += RoutePoi("ford", "Gué", pos)
                     else if (t.optString("highway") == "crossing") pois += RoutePoi("crossing", t.optString("crossing"), pos)
                     else if (t.has("traffic_calming")) pois += RoutePoi("bump", t.optString("traffic_calming"), pos)
-                    else if (t.optString("amenity") == "school") pois += RoutePoi("school", t.optString("name").ifBlank { "School" }, pos)
+                    else if (t.optString("amenity") == "school") pois += RoutePoi("school", t.optString("name").ifBlank { "École" }, pos)
                 }
             }
         }
@@ -139,7 +139,7 @@ object RouteExtras {
             val lim = t.optString("maxspeed").takeIf { it.isNotBlank() }?.let { Overpass.parseSpeed(it, "GB") }
             val starts = from.ifEmpty { dev }; val ends = to.ifEmpty { dev }
             if (starts.isEmpty() || ends.isEmpty()) continue
-            avgs += AvgDef(rel.optLong("id"), t.optString("name").ifBlank { "Average speed check" }, starts, ends, lim)
+            avgs += AvgDef(rel.optLong("id"), t.optString("name").ifBlank { "Radar tronçon" }, starts, ends, lim)
         }
         return pois to avgs
     }
@@ -161,7 +161,7 @@ object RouteExtras {
     }
 
     /** Compass point for a heading in degrees. */
-    fun compass(h: Double): String = arrayOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")[(((h % 360.0) + 360.0 + 22.5) / 45.0).toInt() % 8]
+    fun compass(h: Double): String = arrayOf("N", "NE", "E", "SE", "S", "SO", "O", "NO")[(((h % 360.0) + 360.0 + 22.5) / 45.0).toInt() % 8]
 }
 
 

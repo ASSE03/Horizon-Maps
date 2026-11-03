@@ -63,7 +63,7 @@ object CarLink {
         c.setRequestProperty("User-Agent", "HorizonNav/${BuildConfig.VERSION_NAME}")
         try {
             c.outputStream.use { it.write(encrypt(code, body).toByteArray()) }
-            if (c.responseCode !in 200..299) throw java.io.IOException(if (c.responseCode == 429) "Too many sends: try again in a minute" else "HTTP ${c.responseCode}")
+            if (c.responseCode !in 200..299) throw java.io.IOException(if (c.responseCode == 429) "Trop d'envois : réessayez dans une minute" else "HTTP ${c.responseCode}")
         } finally { c.disconnect() }
     }
 

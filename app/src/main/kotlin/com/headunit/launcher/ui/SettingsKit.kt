@@ -140,7 +140,7 @@ internal fun SSlider(title: String, value: Float, range: ClosedFloatingPointRang
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         SItem(title, sub) {
             Text("${v.roundToInt()}$unit", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            if (reset != null && v.roundToInt() != reset.roundToInt()) SButton("Reset") { v = reset; onDone(reset.roundToInt()) }
+            if (reset != null && v.roundToInt() != reset.roundToInt()) SButton("Réinitialiser") { v = reset; onDone(reset.roundToInt()) }
         }
         Slider(
             value = v, onValueChange = { v = it; if (live) onDone(it.roundToInt()) }, onValueChangeFinished = { onDone(v.roundToInt()) },

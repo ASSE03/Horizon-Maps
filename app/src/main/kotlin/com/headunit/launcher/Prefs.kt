@@ -346,5 +346,5 @@ fun Prefs.locatorSpec(): Pair<String, String> {
     }
 }
 
-/** Settings > Map > Map detail: "full", "lite" or "lightest" (the old "Light map" switch counts as lite). */
+/** Settings > Map > Map detail: "full", "lite" or "lightest" (the old "Carte légère" switch counts as lite). */
 fun Prefs.mapDetail(): String = s(PreferenceKeys.MAP_DETAIL, if (b(PreferenceKeys.MAP_LITE, false)) "lite" else "full")

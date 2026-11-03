@@ -100,35 +100,46 @@ object Geo {
     fun spoken(m: Double, imperial: Boolean): String {
         if (imperial) {
             val ft = m * 3.28084
-            return if (ft < 528) "${((ft / 50).roundToInt()) * 50} feet" else String.format("%.1f miles", m / 1609.344)
+            return if (ft < 528) "${((ft / 50).roundToInt()) * 50} pieds" else String.format(java.util.Locale.FRANCE, "%.1f miles", m / 1609.344)
         }
-        return if (m < 1000) "${((m / 50).roundToInt()) * 50} metres" else String.format("%.1f kilometres", m / 1000.0)
+        if (m < 1000) return "${((m / 50).roundToInt()) * 50} mètres"
+        val km = m / 1000.0
+        // "1 kilomètre", "2 kilomètres", "1,5 kilomètre" (a decimal comma so the French voice reads it properly)
+        return if (abs(km - km.roundToInt()) < 0.05) { val n = km.roundToInt(); if (n == 1) "un kilomètre" else "$n kilomètres" }
+            else String.format(java.util.Locale.FRANCE, "%.1f kilomètres", km)
     }
 
-    fun ordinal(n: Int): String = when {
-        n % 100 in 11..13 -> "${n}th"
-        n % 10 == 1 -> "${n}st"; n % 10 == 2 -> "${n}nd"; n % 10 == 3 -> "${n}rd"
-        else -> "${n}th"
-    }
+    fun ordinal(n: Int): String = if (n == 1) "1re" else "${n}e"
+
+    /** Spoken ordinal for the voice ("première", "deuxième"...), so the text-to-speech never stumbles on "2e". */
+    fun ordinalWord(n: Int): String = listOf("", "première", "deuxième", "troisième", "quatrième", "cinquième", "sixième", "septième", "huitième", "neuvième", "dixième")
+        .getOrNull(n)?.takeIf { it.isNotEmpty() } ?: "${n}e"
+
+    /** "left"/"right" (as the route code uses them) in French: "à gauche"/"à droite". */
+    fun sideFr(side: String): String = when (side) { "left" -> "à gauche"; "right" -> "à droite"; else -> side }
 
     /** Spoken/short wording for a manoeuvre, e.g. "turn left" or "take the 2nd exit at the roundabout". */
     fun maneuverText(m: String, exit: Int = 0): String {
         val u = m.uppercase()
         if (u.startsWith("ROUNDABOUT")) {
-            if (u == "ROUNDABOUT_BACK") return if (exit > 0) "take the ${ordinal(exit)} exit at the roundabout" else "go all the way round the roundabout"
-            return if (exit > 0) "at the roundabout, take the ${ordinal(exit)} exit" else "take the roundabout"
+            if (u == "ROUNDABOUT_BACK") return if (exit > 0) "prenez la ${ordinalWord(exit)} sortie au rond-point" else "faites le tour complet du rond-point"
+            return if (exit > 0) "au rond-point, prenez la ${ordinalWord(exit)} sortie" else "prenez le rond-point"
         }
         val t = mapOf(
-            "ARRIVE" to "arrive", "ARRIVE_LEFT" to "arrive, destination on the left", "ARRIVE_RIGHT" to "arrive, destination on the right",
-            "DEPART" to "head out", "MAKE_UTURN" to "make a U-turn", "TRY_MAKE_UTURN" to "make a U-turn when possible",
-            "STRAIGHT" to "continue straight", "FOLLOW" to "continue", "TURN_LEFT" to "turn left", "TURN_RIGHT" to "turn right",
-            "SHARP_LEFT" to "turn sharp left", "SHARP_RIGHT" to "turn sharp right", "BEAR_LEFT" to "bear left", "BEAR_RIGHT" to "bear right",
-            "KEEP_LEFT" to "keep left", "KEEP_RIGHT" to "keep right", "ENTER_MOTORWAY" to "join the motorway", "ENTER_FREEWAY" to "join the main road",
-            "ENTER_HIGHWAY" to "join the main road", "TAKE_EXIT" to "take the exit", "MOTORWAY_EXIT_LEFT" to "take the exit on the left",
-            "MOTORWAY_EXIT_RIGHT" to "take the exit on the right", "ENTRANCE_RAMP" to "take the slip road", "SWITCH_PARALLEL_ROAD" to "switch to the parallel road",
-            "SWITCH_MAIN_ROAD" to "switch to the main road", "TAKE_FERRY" to "take the ferry",
+            "ARRIVE" to "vous arrivez", "ARRIVE_LEFT" to "vous arrivez, destination à gauche", "ARRIVE_RIGHT" to "vous arrivez, destination à droite",
+            "DEPART" to "partez", "MAKE_UTURN" to "faites demi-tour", "TRY_MAKE_UTURN" to "faites demi-tour dès que possible",
+            "STRAIGHT" to "continuez tout droit", "FOLLOW" to "continuez", "TURN_LEFT" to "tournez à gauche", "TURN_RIGHT" to "tournez à droite",
+            "SHARP_LEFT" to "tournez franchement à gauche", "SHARP_RIGHT" to "tournez franchement à droite", "BEAR_LEFT" to "tournez légèrement à gauche", "BEAR_RIGHT" to "tournez légèrement à droite",
+            "KEEP_LEFT" to "restez à gauche", "KEEP_RIGHT" to "restez à droite", "ENTER_MOTORWAY" to "prenez l'autoroute", "ENTER_FREEWAY" to "prenez la voie rapide",
+            "ENTER_HIGHWAY" to "prenez la voie rapide", "TAKE_EXIT" to "prenez la sortie", "MOTORWAY_EXIT_LEFT" to "prenez la sortie à gauche",
+            "MOTORWAY_EXIT_RIGHT" to "prenez la sortie à droite", "ENTRANCE_RAMP" to "prenez la bretelle", "SWITCH_PARALLEL_ROAD" to "rejoignez la voie parallèle",
+            "SWITCH_MAIN_ROAD" to "rejoignez la route principale", "TAKE_FERRY" to "prenez le ferry",
         )
-        return t[u] ?: u.lowercase().replace('_', ' ')
+        return t[u] ?: when {
+            u.contains("LEFT") -> "tournez à gauche"
+            u.contains("RIGHT") -> "tournez à droite"
+            else -> "continuez"
+        }
     }
 
     private fun laneFits(dir: String, maneuver: String): Boolean {
@@ -149,19 +160,19 @@ object Geo {
         val act = sec.lanes.indices.filter { i -> if (anyFollow) sec.lanes[i].follow != null else sec.lanes[i].dirs.any { laneFits(it, maneuver) } }
         if (act.isEmpty() || act.size == n) return null
         val cnt = act.size
-        val lanes = if (cnt == 1) "lane" else "${if (cnt == 2) "two" else if (cnt == 3) "three" else cnt.toString()} lanes"
+        val lanes = if (cnt == 1) "la voie" else "les ${if (cnt == 2) "deux" else if (cnt == 3) "trois" else cnt.toString()} voies"
         return when {
-            act.first() == 0 -> "Use the left $lanes"
-            act.last() == n - 1 -> "Use the right $lanes"
-            cnt == 1 -> "Use lane ${act[0] + 1} from the left"
-            else -> "Use the middle $lanes"
+            act.first() == 0 -> "Utilisez $lanes de gauche"
+            act.last() == n - 1 -> "Utilisez $lanes de droite"
+            cnt == 1 -> "Utilisez la voie ${act[0] + 1} en partant de la gauche"
+            else -> "Utilisez $lanes du milieu"
         }
     }
 
     /** Short caption shown on the turn card for a roundabout or motorway exit, or blank. */
     fun stepTag(s: Step): String = when {
-        s.maneuver.uppercase().startsWith("ROUNDABOUT") && s.roundExit > 0 -> "${ordinal(s.roundExit)} exit"
-        s.exitNo.isNotBlank() -> "Exit ${s.exitNo}"
+        s.maneuver.uppercase().startsWith("ROUNDABOUT") && s.roundExit > 0 -> "${ordinal(s.roundExit)} sortie"
+        s.exitNo.isNotBlank() -> "Sortie ${s.exitNo}"
         else -> ""
     }
 
@@ -197,8 +208,8 @@ object TomTomRest {
 
     /** A failed request, explained in plain words for the common cases (a missing or wrong key, the daily limit). */
     private fun httpError(code: Int, body: String): IOException = IOException(when (code) {
-        401, 403 -> "TomTom didn't accept the API key. Check it in Settings > Keys & accounts (a free key from developer.tomtom.com needs the Search and Routing APIs)"
-        429 -> "This TomTom key has reached its daily limit. It resets tomorrow"
+        401, 403 -> "TomTom n'a pas accepté la clé API. Vérifiez-la dans Réglages > Clés et comptes (une clé gratuite de developer.tomtom.com doit avoir les API Search et Routing)"
+        429 -> "Cette clé TomTom a atteint sa limite du jour. Elle repart à zéro demain"
         else -> "HTTP $code ${body.take(140)}"
     })
 
@@ -239,7 +250,7 @@ object TomTomRest {
         val out = ArrayList<Place>()
         // 1. classic fuzzy search
         try {
-            var url = "$SEARCH/$enc.json?key=$k&limit=15&language=en-GB&typeahead=true&minFuzzyLevel=1&maxFuzzyLevel=2&idxSet=POI,Addr,Str,Xstr,Geo,PAD"
+            var url = "$SEARCH/$enc.json?key=$k&limit=15&language=fr-FR&typeahead=true&minFuzzyLevel=1&maxFuzzyLevel=2&idxSet=POI,Addr,Str,Xstr,Geo,PAD"
             if (cc.isNotEmpty()) url += "&countrySet=$cc"
             if (near != null) url += "&lat=${near.lat}&lon=${near.lon}"
             parsePlaces(JSONObject(get(url)).optJSONArray("results") ?: JSONArray(), q, out)
@@ -328,7 +339,7 @@ object TomTomRest {
         val base = "$API/routing/calculateRoute/$loc/json?key=$k&apiVersion=2&maxAlternatives=$n"
         val iso = if (departAtMs > 0) java.net.URLEncoder.encode(java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US).format(java.util.Date(departAtMs)), "UTF-8") else ""
         val dep = if (iso.isNotEmpty()) "&departAt=$iso" else ""
-        val lang = "&language=" + URLEncoder.encode(java.util.Locale.getDefault().toLanguageTag(), "UTF-8")
+        val lang = "&language=fr-FR"
         // The classic routing API is tried first: it returns turn-by-turn instructions, roundabout exits and lane data.
         // The newer Orbis routing API does not return any guidance, so it is only a fallback for the line itself.
         val prefs = avoid.joinToString("") { "&avoid=$it" } + (if (routeType != "fastest") "&routeType=$routeType" else "")
@@ -654,9 +665,9 @@ object Weather {
     } catch (e: Exception) { null }
 
     fun text(code: Int) = when (code) {
-        0 -> "Clear"; 1, 2 -> "Partly cloudy"; 3 -> "Overcast"; 45, 48 -> "Fog"
-        in 51..57 -> "Drizzle"; in 61..67 -> "Rain"; in 71..77 -> "Snow"; in 80..82 -> "Showers"
-        in 85..86 -> "Snow showers"; in 95..99 -> "Thunderstorm"; else -> "—"
+        0 -> "Ciel dégagé"; 1, 2 -> "Partiellement nuageux"; 3 -> "Couvert"; 45, 48 -> "Brouillard"
+        in 51..57 -> "Bruine"; in 61..67 -> "Pluie"; in 71..77 -> "Neige"; in 80..82 -> "Averses"
+        in 85..86 -> "Averses de neige"; in 95..99 -> "Orage"; else -> "—"
     }
 }
 
@@ -682,7 +693,7 @@ object OsmSearch {
         val out = ArrayList<Place>()
         var anyOk = false
         try {
-            val lang = java.util.Locale.getDefault().language.takeIf { it in setOf("en", "de", "fr", "it") } ?: "en"
+            val lang = "fr"
             var url = "https://photon.komoot.io/api/?q=$enc&limit=15&lang=$lang"
             if (near != null) url += String.format(java.util.Locale.US, "&lat=%.5f&lon=%.5f", near.lat, near.lon)
             val arr = JSONObject(get(url)).optJSONArray("features") ?: JSONArray()

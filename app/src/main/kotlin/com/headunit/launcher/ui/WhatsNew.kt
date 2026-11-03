@@ -142,7 +142,7 @@ internal fun WhatsNewList(notes: String, dark: Boolean, columns: Int = 1, maxHei
     Column(Modifier.fillMaxWidth().heightIn(max = capH).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (items.isEmpty()) {
-            Text(if (notes.isBlank()) "This version is installed and ready. The details of what changed aren't available right now." else notes,
+            Text(if (notes.isBlank()) "Cette version est installée et prête. Le détail des nouveautés n'est pas disponible pour l'instant." else notes,
                 color = v.text, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(4.dp))
             return@Column
         }

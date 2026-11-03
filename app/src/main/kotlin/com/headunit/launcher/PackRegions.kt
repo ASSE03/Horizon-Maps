@@ -32,36 +32,36 @@ object PackRegions {
 
     private fun r(group: String, path: String, name: String, cc: String) = PackRegion(idOf(path), name, group, path, cc)
 
-    val groups = listOf("UK & Ireland", "Europe", "United States", "Canada", "Mexico & Central America", "South America", "Asia", "Africa", "Oceania")
+    val groups = listOf("Royaume-Uni et Irlande", "Europe", "États-Unis", "Canada", "Mexique et Amérique centrale", "Amérique du Sud", "Asie", "Afrique", "Océanie")
 
     val all: List<PackRegion> = buildList {
         // the original UK packs (built by the "Build offline region pack" workflow)
-        add(PackRegion("ew", "England & Wales", "UK & Ireland", "europe/great-britain", "GB"))
+        add(PackRegion("ew", "England & Wales", "Royaume-Uni et Irlande", "europe/great-britain", "GB"))
         // the rest of the UK is built like every other area (in Horizon-Maps), straight from Geofabrik's UK extracts
-        add(r("UK & Ireland", "europe/great-britain", "Great Britain (England, Scotland & Wales)", "GB"))
-        add(r("UK & Ireland", "europe/united-kingdom/england", "England", "GB"))
-        add(r("UK & Ireland", "europe/united-kingdom/scotland", "Scotland", "GB"))
-        add(r("UK & Ireland", "europe/united-kingdom/wales", "Wales", "GB"))
-        add(r("UK & Ireland", "europe/ireland-and-northern-ireland", "Ireland & Northern Ireland", "IE"))
-        add(r("UK & Ireland", "europe/isle-of-man", "Isle of Man", "IM"))
-        add(r("UK & Ireland", "europe/guernsey-jersey", "Guernsey & Jersey", "GG"))
+        add(r("Royaume-Uni et Irlande", "europe/great-britain", "Great Britain (England, Scotland & Wales)", "GB"))
+        add(r("Royaume-Uni et Irlande", "europe/united-kingdom/england", "England", "GB"))
+        add(r("Royaume-Uni et Irlande", "europe/united-kingdom/scotland", "Scotland", "GB"))
+        add(r("Royaume-Uni et Irlande", "europe/united-kingdom/wales", "Wales", "GB"))
+        add(r("Royaume-Uni et Irlande", "europe/ireland-and-northern-ireland", "Ireland & Northern Ireland", "IE"))
+        add(r("Royaume-Uni et Irlande", "europe/isle-of-man", "Isle of Man", "IM"))
+        add(r("Royaume-Uni et Irlande", "europe/guernsey-jersey", "Guernsey & Jersey", "GG"))
         val eu = listOf(
-            "albania" to ("Albania" to "AL"), "andorra" to ("Andorra" to "AD"), "austria" to ("Austria" to "AT"), "belarus" to ("Belarus" to "BY"),
-            "belgium" to ("Belgium" to "BE"), "bosnia-herzegovina" to ("Bosnia & Herzegovina" to "BA"), "bulgaria" to ("Bulgaria" to "BG"),
-            "croatia" to ("Croatia" to "HR"), "cyprus" to ("Cyprus" to "CY"), "czech-republic" to ("Czechia" to "CZ"), "denmark" to ("Denmark" to "DK"),
-            "estonia" to ("Estonia" to "EE"), "faroe-islands" to ("Faroe Islands" to "FO"), "finland" to ("Finland" to "FI"), "france" to ("France" to "FR"),
-            "georgia" to ("Georgia" to "GE"), "germany" to ("Germany" to "DE"), "greece" to ("Greece" to "GR"), "hungary" to ("Hungary" to "HU"),
-            "iceland" to ("Iceland" to "IS"), "italy" to ("Italy" to "IT"), "kosovo" to ("Kosovo" to "XK"), "latvia" to ("Latvia" to "LV"),
-            "liechtenstein" to ("Liechtenstein" to "LI"), "lithuania" to ("Lithuania" to "LT"), "luxembourg" to ("Luxembourg" to "LU"),
-            "macedonia" to ("North Macedonia" to "MK"), "malta" to ("Malta" to "MT"), "moldova" to ("Moldova" to "MD"), "monaco" to ("Monaco" to "MC"),
-            "montenegro" to ("Montenegro" to "ME"), "netherlands" to ("Netherlands" to "NL"), "norway" to ("Norway" to "NO"), "poland" to ("Poland" to "PL"),
-            "portugal" to ("Portugal" to "PT"), "romania" to ("Romania" to "RO"), "serbia" to ("Serbia" to "RS"), "slovakia" to ("Slovakia" to "SK"),
-            "slovenia" to ("Slovenia" to "SI"), "spain" to ("Spain" to "ES"), "sweden" to ("Sweden" to "SE"), "switzerland" to ("Switzerland" to "CH"),
-            "turkey" to ("Turkey" to "TR"), "ukraine" to ("Ukraine" to "UA"),
+            "albania" to ("Albanie" to "AL"), "andorra" to ("Andorre" to "AD"), "austria" to ("Autriche" to "AT"), "belarus" to ("Biélorussie" to "BY"),
+            "belgium" to ("Belgique" to "BE"), "bosnia-herzegovina" to ("Bosnie-Herzégovine" to "BA"), "bulgaria" to ("Bulgarie" to "BG"),
+            "croatia" to ("Croatie" to "HR"), "cyprus" to ("Chypre" to "CY"), "czech-republic" to ("Tchéquie" to "CZ"), "denmark" to ("Danemark" to "DK"),
+            "estonia" to ("Estonie" to "EE"), "faroe-islands" to ("Îles Féroé" to "FO"), "finland" to ("Finlande" to "FI"), "france" to ("France" to "FR"),
+            "georgia" to ("Géorgie" to "GE"), "germany" to ("Allemagne" to "DE"), "greece" to ("Grèce" to "GR"), "hungary" to ("Hongrie" to "HU"),
+            "iceland" to ("Islande" to "IS"), "italy" to ("Italie" to "IT"), "kosovo" to ("Kosovo" to "XK"), "latvia" to ("Lettonie" to "LV"),
+            "liechtenstein" to ("Liechtenstein" to "LI"), "lithuania" to ("Lituanie" to "LT"), "luxembourg" to ("Luxembourg" to "LU"),
+            "macedonia" to ("Macédoine du Nord" to "MK"), "malta" to ("Malte" to "MT"), "moldova" to ("Moldavie" to "MD"), "monaco" to ("Monaco" to "MC"),
+            "montenegro" to ("Monténégro" to "ME"), "netherlands" to ("Pays-Bas" to "NL"), "norway" to ("Norvège" to "NO"), "poland" to ("Pologne" to "PL"),
+            "portugal" to ("Portugal" to "PT"), "romania" to ("Roumanie" to "RO"), "serbia" to ("Serbie" to "RS"), "slovakia" to ("Slovaquie" to "SK"),
+            "slovenia" to ("Slovénie" to "SI"), "spain" to ("Espagne" to "ES"), "sweden" to ("Suède" to "SE"), "switzerland" to ("Suisse" to "CH"),
+            "turkey" to ("Turquie" to "TR"), "ukraine" to ("Ukraine" to "UA"),
         )
         for ((p, nc) in eu) add(r("Europe", "europe/$p", nc.first, nc.second))
-        add(r("Europe", "europe/azores", "Azores", "PT"))
-        add(r("Europe", "russia", "Russia", "RU"))
+        add(r("Europe", "europe/azores", "Açores", "PT"))
+        add(r("Europe", "russia", "Russie", "RU"))
         val states = listOf(
             "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "district-of-columbia", "florida",
             "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts",
@@ -69,31 +69,31 @@ object PackRegions {
             "new-york", "north-carolina", "north-dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "puerto-rico", "rhode-island",
             "south-carolina", "south-dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west-virginia", "wisconsin", "wyoming",
         )
-        for (s in states) add(r("United States", "north-america/us/$s", title(s), "US"))
+        for (s in states) add(r("États-Unis", "north-america/us/$s", title(s), "US"))
         val provinces = listOf(
             "alberta", "british-columbia", "manitoba", "new-brunswick", "newfoundland-and-labrador", "northwest-territories", "nova-scotia",
             "nunavut", "ontario", "prince-edward-island", "quebec", "saskatchewan", "yukon",
         )
         for (s in provinces) add(r("Canada", "north-america/canada/$s", title(s), "CA"))
-        add(r("Mexico & Central America", "north-america/mexico", "Mexico", "MX"))
-        add(r("Mexico & Central America", "central-america", "Central America (all)", ""))
+        add(r("Mexique et Amérique centrale", "north-america/mexico", "Mexique", "MX"))
+        add(r("Mexique et Amérique centrale", "central-america", "Amérique centrale (tout)", ""))
         val ca = listOf(
             "bahamas" to ("Bahamas" to "BS"), "belize" to ("Belize" to "BZ"), "costa-rica" to ("Costa Rica" to "CR"), "cuba" to ("Cuba" to "CU"),
             "el-salvador" to ("El Salvador" to "SV"), "guatemala" to ("Guatemala" to "GT"), "haiti-and-domrep" to ("Haiti & Dominican Republic" to "DO"),
             "honduras" to ("Honduras" to "HN"), "jamaica" to ("Jamaica" to "JM"), "nicaragua" to ("Nicaragua" to "NI"), "panama" to ("Panama" to "PA"),
         )
-        for ((p, nc) in ca) add(r("Mexico & Central America", "central-america/$p", nc.first, nc.second))
+        for ((p, nc) in ca) add(r("Mexique et Amérique centrale", "central-america/$p", nc.first, nc.second))
         val sa = listOf(
-            "argentina" to ("Argentina" to "AR"), "bolivia" to ("Bolivia" to "BO"), "brazil" to ("Brazil" to "BR"), "chile" to ("Chile" to "CL"),
+            "argentina" to ("Argentina" to "AR"), "bolivia" to ("Bolivia" to "BO"), "brazil" to ("Brésil" to "BR"), "chile" to ("Chile" to "CL"),
             "colombia" to ("Colombia" to "CO"), "ecuador" to ("Ecuador" to "EC"), "paraguay" to ("Paraguay" to "PY"), "peru" to ("Peru" to "PE"),
             "suriname" to ("Suriname" to "SR"), "guyana" to ("Guyana" to "GY"), "uruguay" to ("Uruguay" to "UY"), "venezuela" to ("Venezuela" to "VE"),
         )
-        for ((p, nc) in sa) add(r("South America", "south-america/$p", nc.first, nc.second))
+        for ((p, nc) in sa) add(r("Amérique du Sud", "south-america/$p", nc.first, nc.second))
         val asia = listOf(
             "afghanistan" to ("Afghanistan" to "AF"), "armenia" to ("Armenia" to "AM"), "azerbaijan" to ("Azerbaijan" to "AZ"), "bangladesh" to ("Bangladesh" to "BD"),
-            "bhutan" to ("Bhutan" to "BT"), "cambodia" to ("Cambodia" to "KH"), "china" to ("China" to "CN"), "east-timor" to ("East Timor" to "TL"),
-            "gcc-states" to ("Gulf States (UAE, Saudi Arabia, Qatar…)" to "AE"), "india" to ("India" to "IN"), "indonesia" to ("Indonesia" to "ID"),
-            "iran" to ("Iran" to "IR"), "iraq" to ("Iraq" to "IQ"), "israel-and-palestine" to ("Israel & Palestine" to "IL"), "japan" to ("Japan" to "JP"),
+            "bhutan" to ("Bhutan" to "BT"), "cambodia" to ("Cambodia" to "KH"), "china" to ("Chine" to "CN"), "east-timor" to ("East Timor" to "TL"),
+            "gcc-states" to ("Gulf States (UAE, Saudi Arabia, Qatar…)" to "AE"), "india" to ("Inde" to "IN"), "indonesia" to ("Indonesia" to "ID"),
+            "iran" to ("Iran" to "IR"), "iraq" to ("Iraq" to "IQ"), "israel-and-palestine" to ("Israel & Palestine" to "IL"), "japan" to ("Japon" to "JP"),
             "jordan" to ("Jordan" to "JO"), "kazakhstan" to ("Kazakhstan" to "KZ"), "kyrgyzstan" to ("Kyrgyzstan" to "KG"), "laos" to ("Laos" to "LA"),
             "lebanon" to ("Lebanon" to "LB"), "malaysia-singapore-brunei" to ("Malaysia, Singapore & Brunei" to "MY"), "maldives" to ("Maldives" to "MV"),
             "mongolia" to ("Mongolia" to "MN"), "myanmar" to ("Myanmar" to "MM"), "nepal" to ("Nepal" to "NP"), "north-korea" to ("North Korea" to "KP"),
@@ -101,37 +101,37 @@ object PackRegions {
             "syria" to ("Syria" to "SY"), "taiwan" to ("Taiwan" to "TW"), "tajikistan" to ("Tajikistan" to "TJ"), "thailand" to ("Thailand" to "TH"),
             "turkmenistan" to ("Turkmenistan" to "TM"), "uzbekistan" to ("Uzbekistan" to "UZ"), "vietnam" to ("Vietnam" to "VN"), "yemen" to ("Yemen" to "YE"),
         )
-        for ((p, nc) in asia) add(r("Asia", "asia/$p", nc.first, nc.second))
+        for ((p, nc) in asia) add(r("Asie", "asia/$p", nc.first, nc.second))
         // smaller areas cut out of a bigger one (Geofabrik has none of their own): the pack workflow knows them as cut/<name>
-        add(r("Asia", "cut/singapore", "Singapore", "SG"))
-        add(r("Asia", "cut/brunei", "Brunei", "BN"))
+        add(r("Asie", "cut/singapore", "Singapore", "SG"))
+        add(r("Asie", "cut/brunei", "Brunei", "BN"))
         val africa = listOf(
-            "algeria" to ("Algeria" to "DZ"), "angola" to ("Angola" to "AO"), "benin" to ("Benin" to "BJ"), "botswana" to ("Botswana" to "BW"),
-            "burkina-faso" to ("Burkina Faso" to "BF"), "burundi" to ("Burundi" to "BI"), "cameroon" to ("Cameroon" to "CM"), "canary-islands" to ("Canary Islands" to "ES"),
+            "algeria" to ("Algérie" to "DZ"), "angola" to ("Angola" to "AO"), "benin" to ("Benin" to "BJ"), "botswana" to ("Botswana" to "BW"),
+            "burkina-faso" to ("Burkina Faso" to "BF"), "burundi" to ("Burundi" to "BI"), "cameroon" to ("Cameroun" to "CM"), "canary-islands" to ("Îles Canaries" to "ES"),
             "cape-verde" to ("Cape Verde" to "CV"), "central-african-republic" to ("Central African Republic" to "CF"), "chad" to ("Chad" to "TD"),
             "comores" to ("Comoros" to "KM"), "congo-brazzaville" to ("Congo (Brazzaville)" to "CG"), "congo-democratic-republic" to ("Congo (Kinshasa)" to "CD"),
-            "djibouti" to ("Djibouti" to "DJ"), "egypt" to ("Egypt" to "EG"), "equatorial-guinea" to ("Equatorial Guinea" to "GQ"), "eritrea" to ("Eritrea" to "ER"),
+            "djibouti" to ("Djibouti" to "DJ"), "egypt" to ("Égypte" to "EG"), "equatorial-guinea" to ("Equatorial Guinea" to "GQ"), "eritrea" to ("Eritrea" to "ER"),
             "ethiopia" to ("Ethiopia" to "ET"), "gabon" to ("Gabon" to "GA"), "ghana" to ("Ghana" to "GH"), "guinea" to ("Guinea" to "GN"),
-            "guinea-bissau" to ("Guinea-Bissau" to "GW"), "ivory-coast" to ("Ivory Coast" to "CI"), "kenya" to ("Kenya" to "KE"), "lesotho" to ("Lesotho" to "LS"),
+            "guinea-bissau" to ("Guinea-Bissau" to "GW"), "ivory-coast" to ("Côte d'Ivoire" to "CI"), "kenya" to ("Kenya" to "KE"), "lesotho" to ("Lesotho" to "LS"),
             "liberia" to ("Liberia" to "LR"), "libya" to ("Libya" to "LY"), "madagascar" to ("Madagascar" to "MG"), "malawi" to ("Malawi" to "MW"),
-            "mali" to ("Mali" to "ML"), "mauritania" to ("Mauritania" to "MR"), "mauritius" to ("Mauritius" to "MU"), "morocco" to ("Morocco" to "MA"),
+            "mali" to ("Mali" to "ML"), "mauritania" to ("Mauritania" to "MR"), "mauritius" to ("Maurice" to "MU"), "morocco" to ("Maroc" to "MA"),
             "mozambique" to ("Mozambique" to "MZ"), "namibia" to ("Namibia" to "NA"), "niger" to ("Niger" to "NE"), "nigeria" to ("Nigeria" to "NG"),
             "rwanda" to ("Rwanda" to "RW"), "saint-helena-ascension-and-tristan-da-cunha" to ("St Helena, Ascension & Tristan da Cunha" to "SH"),
-            "sao-tome-and-principe" to ("São Tomé & Príncipe" to "ST"), "senegal-and-gambia" to ("Senegal & Gambia" to "SN"), "seychelles" to ("Seychelles" to "SC"),
-            "sierra-leone" to ("Sierra Leone" to "SL"), "somalia" to ("Somalia" to "SO"), "south-africa" to ("South Africa" to "ZA"), "south-sudan" to ("South Sudan" to "SS"),
+            "sao-tome-and-principe" to ("São Tomé & Príncipe" to "ST"), "senegal-and-gambia" to ("Sénégal et Gambie" to "SN"), "seychelles" to ("Seychelles" to "SC"),
+            "sierra-leone" to ("Sierra Leone" to "SL"), "somalia" to ("Somalia" to "SO"), "south-africa" to ("Afrique du Sud" to "ZA"), "south-sudan" to ("South Sudan" to "SS"),
             "sudan" to ("Sudan" to "SD"), "swaziland" to ("Eswatini" to "SZ"), "tanzania" to ("Tanzania" to "TZ"), "togo" to ("Togo" to "TG"),
-            "tunisia" to ("Tunisia" to "TN"), "uganda" to ("Uganda" to "UG"), "zambia" to ("Zambia" to "ZM"), "zimbabwe" to ("Zimbabwe" to "ZW"),
+            "tunisia" to ("Tunisie" to "TN"), "uganda" to ("Uganda" to "UG"), "zambia" to ("Zambia" to "ZM"), "zimbabwe" to ("Zimbabwe" to "ZW"),
         )
-        for ((p, nc) in africa) add(r("Africa", "africa/$p", nc.first, nc.second))
+        for ((p, nc) in africa) add(r("Afrique", "africa/$p", nc.first, nc.second))
         val oceania = listOf(
-            "australia" to ("Australia" to "AU"), "new-zealand" to ("New Zealand" to "NZ"), "american-oceania" to ("American Oceania (Guam, Samoa…)" to "GU"),
+            "australia" to ("Australie" to "AU"), "new-zealand" to ("Nouvelle-Zélande" to "NZ"), "american-oceania" to ("American Oceania (Guam, Samoa…)" to "GU"),
             "cook-islands" to ("Cook Islands" to "CK"), "fiji" to ("Fiji" to "FJ"), "kiribati" to ("Kiribati" to "KI"), "marshall-islands" to ("Marshall Islands" to "MH"),
-            "micronesia" to ("Micronesia" to "FM"), "nauru" to ("Nauru" to "NR"), "new-caledonia" to ("New Caledonia" to "NC"), "niue" to ("Niue" to "NU"),
-            "palau" to ("Palau" to "PW"), "papua-new-guinea" to ("Papua New Guinea" to "PG"), "polynesie-francaise" to ("French Polynesia" to "PF"),
+            "micronesia" to ("Micronesia" to "FM"), "nauru" to ("Nauru" to "NR"), "new-caledonia" to ("Nouvelle-Calédonie" to "NC"), "niue" to ("Niue" to "NU"),
+            "palau" to ("Palau" to "PW"), "papua-new-guinea" to ("Papua New Guinea" to "PG"), "polynesie-francaise" to ("Polynésie française" to "PF"),
             "samoa" to ("Samoa" to "WS"), "solomon-islands" to ("Solomon Islands" to "SB"), "tonga" to ("Tonga" to "TO"), "tuvalu" to ("Tuvalu" to "TV"),
-            "vanuatu" to ("Vanuatu" to "VU"), "wallis-et-futuna" to ("Wallis & Futuna" to "WF"),
+            "vanuatu" to ("Vanuatu" to "VU"), "wallis-et-futuna" to ("Wallis-et-Futuna" to "WF"),
         )
-        for ((p, nc) in oceania) add(r("Oceania", "australia-oceania/$p", nc.first, nc.second))
+        for ((p, nc) in oceania) add(r("Océanie", "australia-oceania/$p", nc.first, nc.second))
 
         // ---- regions inside big countries (Geofabrik's own smaller extracts): a much smaller download than the whole country ----
         fun sub(parentId: String, base: String, cc: String, list: List<Triple<String, String, List<String>>>) {
@@ -140,34 +140,34 @@ object PackRegions {
         }
         fun t(slug: String, name: String, vararg also: String) = Triple(slug, name, also.toList())
         sub("germany", "europe/germany", "DE", listOf(
-            t("baden-wuerttemberg", "Baden-Württemberg"), t("bayern", "Bavaria", "Bayern"), t("berlin", "Berlin"), t("brandenburg", "Brandenburg"),
+            t("baden-wuerttemberg", "Baden-Württemberg"), t("bayern", "Bavière", "Bavaria", "Bayern"), t("berlin", "Berlin"), t("brandenburg", "Brandenburg"),
             t("bremen", "Bremen"), t("hamburg", "Hamburg"), t("hessen", "Hesse", "Hessen"), t("mecklenburg-vorpommern", "Mecklenburg-Vorpommern", "Mecklenburg-Western Pomerania"),
             t("niedersachsen", "Lower Saxony", "Niedersachsen"), t("nordrhein-westfalen", "North Rhine-Westphalia", "Nordrhein-Westfalen"),
             t("rheinland-pfalz", "Rhineland-Palatinate", "Rheinland-Pfalz"), t("saarland", "Saarland"), t("sachsen", "Saxony", "Sachsen"),
             t("sachsen-anhalt", "Saxony-Anhalt", "Sachsen-Anhalt"), t("schleswig-holstein", "Schleswig-Holstein"), t("thueringen", "Thuringia", "Thüringen"),
         ))
         sub("france", "europe/france", "FR", listOf(
-            t("alsace", "Alsace"), t("aquitaine", "Aquitaine"), t("auvergne", "Auvergne"), t("basse-normandie", "Lower Normandy"), t("bourgogne", "Burgundy", "Bourgogne"),
-            t("bretagne", "Brittany", "Bretagne"), t("centre", "Centre-Val de Loire", "Centre"), t("champagne-ardenne", "Champagne-Ardenne"), t("corse", "Corsica", "Corse"),
-            t("franche-comte", "Franche-Comté"), t("haute-normandie", "Upper Normandy"), t("ile-de-france", "Île-de-France"), t("languedoc-roussillon", "Languedoc-Roussillon"),
+            t("alsace", "Alsace"), t("aquitaine", "Aquitaine"), t("auvergne", "Auvergne"), t("basse-normandie", "Basse-Normandie", "Lower Normandy"), t("bourgogne", "Bourgogne", "Burgundy"),
+            t("bretagne", "Bretagne", "Brittany"), t("centre", "Centre-Val de Loire", "Centre"), t("champagne-ardenne", "Champagne-Ardenne"), t("corse", "Corse", "Corsica"),
+            t("franche-comte", "Franche-Comté"), t("haute-normandie", "Haute-Normandie", "Upper Normandy"), t("ile-de-france", "Île-de-France"), t("languedoc-roussillon", "Languedoc-Roussillon"),
             t("limousin", "Limousin"), t("lorraine", "Lorraine"), t("midi-pyrenees", "Midi-Pyrénées"), t("nord-pas-de-calais", "Nord-Pas-de-Calais"),
-            t("pays-de-la-loire", "Pays de la Loire"), t("picardie", "Picardy", "Picardie"), t("poitou-charentes", "Poitou-Charentes"),
+            t("pays-de-la-loire", "Pays de la Loire"), t("picardie", "Picardie", "Picardy"), t("poitou-charentes", "Poitou-Charentes"),
             t("provence-alpes-cote-d-azur", "Provence-Alpes-Côte d'Azur"), t("rhone-alpes", "Rhône-Alpes"),
-            t("guadeloupe", "Guadeloupe"), t("guyane", "French Guiana", "Guyane"), t("martinique", "Martinique"), t("mayotte", "Mayotte"), t("reunion", "Réunion"),
+            t("guadeloupe", "Guadeloupe"), t("guyane", "Guyane", "French Guiana"), t("martinique", "Martinique"), t("mayotte", "Mayotte"), t("reunion", "Réunion"),
         ))
         sub("italy", "europe/italy", "IT", listOf(
             t("nord-ovest", "North-West Italy", "Piedmont", "Piemonte", "Aosta Valley", "Valle d'Aosta", "Liguria", "Lombardy", "Lombardia"),
             t("nord-est", "North-East Italy", "Trentino-Alto Adige", "Trentino-South Tyrol", "Veneto", "Friuli-Venezia Giulia", "Friuli Venezia Giulia", "Emilia-Romagna"),
             t("centro", "Central Italy", "Tuscany", "Toscana", "Umbria", "Marche", "Lazio"),
             t("sud", "Southern Italy", "Abruzzo", "Molise", "Campania", "Apulia", "Puglia", "Basilicata", "Calabria"),
-            t("isole", "Sicily & Sardinia", "Sicily", "Sicilia", "Sardinia", "Sardegna"),
+            t("isole", "Sicile et Sardaigne", "Sicily & Sardinia", "Sicily", "Sicilia", "Sardinia", "Sardegna"),
         ))
         sub("spain", "europe/spain", "ES", listOf(
-            t("andalucia", "Andalusia", "Andalucía"), t("aragon", "Aragon", "Aragón"), t("asturias", "Asturias"), t("cantabria", "Cantabria"),
-            t("castilla-la-mancha", "Castilla-La Mancha"), t("castilla-y-leon", "Castile and León", "Castilla y León"), t("cataluna", "Catalonia", "Cataluña", "Catalunya"),
+            t("andalucia", "Andalousie", "Andalusia", "Andalucía"), t("aragon", "Aragon", "Aragón"), t("asturias", "Asturias"), t("cantabria", "Cantabria"),
+            t("castilla-la-mancha", "Castilla-La Mancha"), t("castilla-y-leon", "Castile and León", "Castilla y León"), t("cataluna", "Catalogne", "Catalonia", "Cataluña", "Catalunya"),
             t("ceuta", "Ceuta"), t("extremadura", "Extremadura"), t("galicia", "Galicia"), t("islas-baleares", "Balearic Islands", "Illes Balears"),
             t("la-rioja", "La Rioja"), t("madrid", "Madrid", "Community of Madrid"), t("melilla", "Melilla"), t("murcia", "Murcia", "Region of Murcia"),
-            t("navarra", "Navarre", "Navarra"), t("pais-vasco", "Basque Country", "País Vasco", "Euskadi"), t("valencia", "Valencia", "Valencian Community"),
+            t("navarra", "Navarre", "Navarra"), t("pais-vasco", "Pays basque (Espagne)", "Basque Country", "País Vasco", "Euskadi"), t("valencia", "Valencia", "Valencian Community"),
         ))
         sub("poland", "europe/poland", "PL", listOf(
             t("dolnoslaskie", "Lower Silesia", "Lower Silesian"), t("kujawsko-pomorskie", "Kuyavia-Pomerania", "Kuyavian-Pomeranian"), t("lodzkie", "Łódź", "Lodz"),
@@ -256,7 +256,7 @@ object PackRegions {
 
     /** The area with this id; one that isn't in the list (built by hand) gets its id as its name. */
     fun byId(id0: String): PackRegion = (if (id0 == "gb") "great-britain" else id0).let { id -> all.firstOrNull { it.id == id }
-        ?: PackRegion(id, id.replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }, "Other", "", "") }
+        ?: PackRegion(id, id.replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }, "Autre", "", "") }
 
     /** The best guess at a pack for the country you're in (GB → England & Wales). */
     fun suggestFor(cc: String): PackRegion? = when (cc.uppercase()) {

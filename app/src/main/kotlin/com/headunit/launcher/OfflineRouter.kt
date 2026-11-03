@@ -158,8 +158,8 @@ object OfflineRouter {
         val total = c.contentLengthLong
         val dst = File(d, name)
         // already here (same size): kept, and marked as checked now, so the "new map data" check doesn't keep offering it
-        if (total > 0 && dst.exists() && dst.length() == total) { c.disconnect(); dst.setLastModified(System.currentTimeMillis()); progress("Already have $name"); return true }
-        progress("Downloading $name…")
+        if (total > 0 && dst.exists() && dst.length() == total) { c.disconnect(); dst.setLastModified(System.currentTimeMillis()); progress("Déjà présent : $name"); return true }
+        progress("Téléchargement de $name…")
         val tmp = File(d, "$name.part")
         c.inputStream.use { i ->
             tmp.outputStream().use { o ->
@@ -170,7 +170,7 @@ object OfflineRouter {
                     if (n < 0) break
                     o.write(buf, 0, n); done += n
                     val mb = done / 8_000_000
-                    if (mb != lastMb) { lastMb = mb; progress("Downloading $name… ${done / 1_048_576} MB" + if (total > 0) " of ${total / 1_048_576} MB" else "") }
+                    if (mb != lastMb) { lastMb = mb; progress("Téléchargement de $name… ${done / 1_048_576} Mo" + if (total > 0) " sur ${total / 1_048_576} Mo" else "") }
                 }
             }
         }
@@ -194,12 +194,12 @@ object OfflineRouter {
                 if (!ok) break
                 sum += len; k++
             }
-            if (k > 0 && sum == have.length()) { have.setLastModified(System.currentTimeMillis()); progress("Already have $name"); return true }
+            if (k > 0 && sum == have.length()) { have.setLastModified(System.currentTimeMillis()); progress("Déjà présent : $name"); return true }
         }
         var n = 0
         while (fetch(d, base, "$name.part%02d".format(n), progress)) n++
         if (n == 0) return false
-        progress("Joining $name…")
+        progress("Assemblage de $name…")
         val joined = File(d, "$name.joining")
         joined.outputStream().use { o ->
             for (i in 0 until n) {
@@ -221,23 +221,23 @@ object OfflineRouter {
         // updating the area in use: let go of its routing file while it's replaced
         if (d.path == dir(ctx).path) closeEngine()
         File(d, "bounds.txt").delete(); boundsCache.remove(id); invalidate()
-        for (name in listOf("valhalla.json", "admins.sqlite")) if (!fetch(d, base, name, progress)) throw java.io.IOException("$name not found at that address")
-        if (!fetchJoined(d, base, "tiles.tar", progress)) throw java.io.IOException("tiles.tar not found at that address")
-        if (!fetchJoined(d, base, "places.tsv", progress)) progress("No places.tsv: streets and shops will not be searchable offline")
+        for (name in listOf("valhalla.json", "admins.sqlite")) if (!fetch(d, base, name, progress)) throw java.io.IOException("$name introuvable à cette adresse")
+        if (!fetchJoined(d, base, "tiles.tar", progress)) throw java.io.IOException("tiles.tar introuvable à cette adresse")
+        if (!fetchJoined(d, base, "places.tsv", progress)) progress("Pas de places.tsv : rues et commerces introuvables hors ligne")
         if (fetchJoined(d, base, "fonts.zip", progress)) OfflineMap.unpackFonts(File(d, "fonts.zip"), File(d, "fonts"))
-        if (!fetchJoined(d, base, "map.pmtiles", progress)) progress("No map.pmtiles in this pack")
-        if (!fetchJoined(d, base, "postcodes.tsv", progress)) progress("No postcodes.tsv in this pack")
-        if (!fetchJoined(d, base, "addresses.tsv", progress)) progress("No addresses.tsv: house numbers will not be searchable offline")
-        if (fetchJoined(d, base, "names.idx", progress)) progress("Search index ready")
-        if (!fetchJoined(d, base, "lamps.tsv", progress)) progress("No lamps.tsv: night map will use estimated lamps")
-        if (!fetchJoined(d, base, "signals.tsv", progress)) progress("No signals.tsv: traffic lights will be fetched online instead")
+        if (!fetchJoined(d, base, "map.pmtiles", progress)) progress("Pas de map.pmtiles dans ce pack")
+        if (!fetchJoined(d, base, "postcodes.tsv", progress)) progress("Pas de postcodes.tsv dans ce pack")
+        if (!fetchJoined(d, base, "addresses.tsv", progress)) progress("Pas d'addresses.tsv : numéros de rue introuvables hors ligne")
+        if (fetchJoined(d, base, "names.idx", progress)) progress("Index de recherche prêt")
+        if (!fetchJoined(d, base, "lamps.tsv", progress)) progress("Pas de lamps.tsv : la carte de nuit utilisera des lampadaires estimés")
+        if (!fetchJoined(d, base, "signals.tsv", progress)) progress("Pas de signals.tsv : les feux seront cherchés en ligne")
         // speed limits and cameras (added to packs later, so they may live in a separate release for the older UK packs)
         for (name in listOf("limits.bin", "cameras.tsv")) {
             if (!fetch(d, extras, name, progress) && (extras == base || !fetch(d, base, name, progress)))
-                progress("No $name yet: ${if (name == "limits.bin") "speed limits" else "speed cameras"} will be looked up online")
+                progress("Pas encore de $name : ${if (name == "limits.bin") "les limitations" else "les radars"} seront cherchés en ligne")
         }
         invalidate()
-        progress("Download finished")
+        progress("Téléchargement terminé")
     }
 
     /** The build machine's valhalla.json points at its own folders: rewrite those paths for this device. */
@@ -852,7 +852,7 @@ object OfflineRouter {
             ra = try { routeIn(da, from, lerp(from, to, t), emptyList(), headingDeg) } catch (e: Exception) { null }
             t -= stepT
         }
-        if (ra == null) throw IllegalStateException("No offline route from here towards the border of the downloaded area")
+        if (ra == null) throw IllegalStateException("Pas d'itinéraire hors ligne d'ici vers la limite de la zone téléchargée")
         val lenA = ra.cum.last()
         for (back in doubleArrayOf(0.0, 1000.0, 3000.0, 6000.0, 12_000.0)) {
             val cut = lenA - back
@@ -894,13 +894,13 @@ object OfflineRouter {
 
     /** A route inside one downloaded area (the folder [pd]). */
     private fun routeIn(pd: File, from: LL, to: LL, via: List<LL>, headingDeg: Double): Route {
-        if (!installedIn(pd)) throw IllegalStateException("No offline pack installed")
+        if (!installedIn(pd)) throw IllegalStateException("Aucun pack hors ligne installé")
         val locs = org.json.JSONArray()
         locs.put(JSONObject().put("lat", from.lat).put("lon", from.lon).apply { if (headingDeg >= 0) { put("heading", headingDeg.toInt()); put("heading_tolerance", 60) } })
         for (v in via) locs.put(JSONObject().put("lat", v.lat).put("lon", v.lon).put("type", "through"))
         locs.put(JSONObject().put("lat", to.lat).put("lon", to.lon))
         val req = JSONObject().put("locations", locs).put("costing", "auto")
-            .put("directions_options", JSONObject().put("units", "kilometers").put("language", "en-GB"))
+            .put("directions_options", JSONObject().put("units", "kilometers").put("language", "fr-FR"))
         val ex = exclude
         if (ex.isNotEmpty()) {
             val polys = org.json.JSONArray()
@@ -937,7 +937,7 @@ object OfflineRouter {
             val ms = leg.optJSONArray("maneuvers")
             if (ms != null) for (i in 0 until ms.length()) mans += M(base, ms.getJSONObject(i))
         }
-        if (pts.size < 2) throw IllegalStateException("No offline route found")
+        if (pts.size < 2) throw IllegalStateException("Aucun itinéraire hors ligne trouvé")
         val cum = DoubleArray(pts.size)
         for (i in 1 until pts.size) cum[i] = cum[i - 1] + Geo.dist(pts[i - 1], pts[i])
         val steps = ArrayList<Step>()

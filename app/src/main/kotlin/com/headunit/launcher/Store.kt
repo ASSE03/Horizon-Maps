@@ -109,8 +109,8 @@ class PlaceStore(private val prefs: Prefs) {
         val toks = q.lowercase().split(' ', ',').filter { it.isNotBlank() }
         if (toks.isEmpty()) return emptyList()
         val pool = ArrayList<Place>()
-        slot("home")?.let { pool += Place("Home", it.name, it.pos) }
-        slot("work")?.let { pool += Place("Work", it.name, it.pos) }
+        slot("home")?.let { pool += Place("Domicile", it.name, it.pos) }
+        slot("work")?.let { pool += Place("Travail", it.name, it.pos) }
         for (c in customs()) pool += Place(c.label, c.place.name, c.place.pos)
         pool += favourites(); pool += recents(); pool += readList("places_seen")
         val uniq = ArrayList<Place>()

@@ -70,7 +70,7 @@ import java.util.TimeZone
  * estimate and the buttons. Search and places use Google's list and search screens (third-party navigation apps can't use their own).
  *
  * The car has its own engine and map, separate from the app on the phone's screen, so it works with the phone locked.
- * (Sideloaded copies only appear in Android Auto with its developer setting "Unknown sources" turned on.)
+ * (Sideloaded copies only appear in Android Auto with its developer setting "Sources inconnues" turned on.)
  */
 class CarNavService : CarAppService() {
     // any Android Auto host may connect: the app isn't distributed through Play, where Google would vouch for the host
@@ -128,11 +128,11 @@ class CarNavSession : Session() {
                 val p = t?.pos
                 val q = t?.query?.trim().orEmpty()
                 when {
-                    p != null -> e.startRoute(Place(t?.name ?: "Destination", "From Google Assistant", p))
+                    p != null -> e.startRoute(Place(t?.name ?: "Destination", "Depuis l'Assistant Google", p))
                     q.equals("home", true) && e.places.slot("home") != null -> e.startRoute(e.places.slot("home")!!)
                     q.equals("work", true) && e.places.slot("work") != null -> e.startRoute(e.places.slot("work")!!)
                     q.isNotEmpty() -> ms.screenManager.push(SearchScreen(carContext, holder, q))
-                    else -> try { androidx.car.app.CarToast.makeText(carContext, "Couldn't read a place from that", androidx.car.app.CarToast.LENGTH_LONG).show() } catch (x: Exception) { }
+                    else -> try { androidx.car.app.CarToast.makeText(carContext, "Impossible de lire un lieu dans ce message", androidx.car.app.CarToast.LENGTH_LONG).show() } catch (x: Exception) { }
                 }
             }
         }.apply { isDaemon = true; name = "car-nav-intent" }
@@ -211,8 +211,8 @@ class CarNavSession : Session() {
         engine.isCar = true
         ClusterLink.engine = engine
         // (the app's own short messages don't show on the car screen: a tapped number-plate camera says what it is with Android Auto's)
-        map.onAlprTap = { who -> try { androidx.car.app.CarToast.makeText(carContext, "Number-plate camera" + (if (who.isNotBlank()) " · $who" else ""), androidx.car.app.CarToast.LENGTH_SHORT).show() } catch (e: Exception) { } }
-        // back in the car: the "Your car" spot on the phone isn't needed any more
+        map.onAlprTap = { who -> try { androidx.car.app.CarToast.makeText(carContext, "Caméra de lecture de plaques" + (if (who.isNotBlank()) " · $who" else ""), androidx.car.app.CarToast.LENGTH_SHORT).show() } catch (e: Exception) { } }
+        // back in the car: the "Votre voiture" spot on the phone isn't needed any more
         try { prefs.put(PreferenceKeys.PARKED_SPOT, "") } catch (e: Exception) { }
         holder.map = map; holder.engine = engine
         surface.engine = engine
@@ -253,7 +253,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
                 overlay?.setContent { com.headunit.launcher.ui.CarOverlay(v, area, dark, uiScale, actions) }
             }
         }
-    /** What the app's own search bar and "Saved & recent" chip open (set by the map screen). */
+    /** What the app's own search bar and "Enregistrés et récents" chip open (set by the map screen). */
     var actions: com.headunit.launcher.ui.CarActions = object : com.headunit.launcher.ui.CarActions { override fun search() {}; override fun places() {}; override fun nearby(kind: String) {}; override fun settings() {} }
     /** How much larger the app's cards are drawn on the car screen than its own pixel density would make them (same as the map). */
     private val uiScale = androidx.compose.runtime.mutableStateOf(1.7f)
@@ -481,7 +481,7 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             try {
                 if (guiding) {
                     nav?.navigationStarted()
-                    try { NavService.start(holder.carContext.applicationContext, "Navigating to ${e.dest?.name ?: "your destination"}") } catch (x: Exception) { }
+                    try { NavService.start(holder.carContext.applicationContext, "Guidage vers ${e.dest?.name ?: "votre destination"}") } catch (x: Exception) { }
                 } else {
                     nav?.navigationEnded()
                     // (the phone may still be guiding a trip of its own: then its background GPS service stays on)
@@ -505,8 +505,8 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
 
     private fun icon(res: Int) = CarIcon.Builder(IconCompat.createWithResource(carContext, res)).build()
 
-    /** Report (police, crash, hazard...): opens the "Report here" screen. It has the Search button's place. */
-    private fun reportAction(): Action = Action.Builder().setTitle("Report")
+    /** Report (police, crash, hazard...): opens the "Signaler ici" screen. It has the Search button's place. */
+    private fun reportAction(): Action = Action.Builder().setTitle("Signaler")
         .setOnClickListener { screenManager.push(ReportScreen(carContext, holder)) }.build()
 
     override fun onGetTemplate(): Template {
@@ -516,11 +516,11 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
         val previewing = e != null && e.route != null && e.previewing
         if (previewing) {
             // the route choice (drawn by the app on the map): start, try the next route, or cancel
-            strip.addAction(Action.Builder().setTitle("Start").setOnClickListener { e?.beginNavigation(); invalidate() }.build())
-            if ((e?.routes?.size ?: 0) > 1) strip.addAction(Action.Builder().setTitle("Next route").setOnClickListener {
+            strip.addAction(Action.Builder().setTitle("Démarrer").setOnClickListener { e?.beginNavigation(); invalidate() }.build())
+            if ((e?.routes?.size ?: 0) > 1) strip.addAction(Action.Builder().setTitle("Autre itinéraire").setOnClickListener {
                 e?.let { en -> en.selectRoute((en.active + 1) % en.routes.size.coerceAtMost(3)) }; invalidate()
             }.build())
-            strip.addAction(Action.Builder().setTitle("Cancel").setOnClickListener { e?.endRoute(); invalidate() }.build())
+            strip.addAction(Action.Builder().setTitle("Annuler").setOnClickListener { e?.endRoute(); invalidate() }.build())
             return NavigationTemplate.Builder().setActionStrip(strip.build()).build()
         }
         val taps = carContext.carAppApiLevel >= 5
@@ -533,14 +533,14 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
         val fr = e?.faster
         if (guiding && fr != null) {
             // a faster route turned up: switch or keep (also on the map card, for cars that pass taps on)
-            strip.addAction(Action.Builder().setTitle("Switch −${fr.savedMin} min").setOnClickListener { e?.acceptFaster(); invalidate() }.build())
-            strip.addAction(Action.Builder().setTitle("Keep").setOnClickListener { e?.dismissFaster(); invalidate() }.build())
+            strip.addAction(Action.Builder().setTitle("Changer −${fr.savedMin} min").setOnClickListener { e?.acceptFaster(); invalidate() }.build())
+            strip.addAction(Action.Builder().setTitle("Garder").setOnClickListener { e?.dismissFaster(); invalidate() }.build())
             strip.addAction(sound)
         } else if (guiding) {
-            strip.addAction(Action.Builder().setTitle("Stop").setOnClickListener { e?.endRoute(); invalidate() }.build())
+            strip.addAction(Action.Builder().setTitle("Arrêter").setOnClickListener { e?.endRoute(); invalidate() }.build())
             // the demo drive (for trying it out parked; only with Demo switched on in Settings, as in the app): starts it, speeds it
             // up, stops it. Otherwise that space is the 2D / 3D button
-            if (demoOn) strip.addAction(Action.Builder().setTitle(when (e?.simMode ?: 0) { 0 -> "Demo"; 1 -> "Faster"; else -> "End demo" })
+            if (demoOn) strip.addAction(Action.Builder().setTitle(when (e?.simMode ?: 0) { 0 -> "Démo"; 1 -> "Plus vite"; else -> "Fin de la démo" })
                 .setOnClickListener { e?.cycleSim(); invalidate() }.build())
             else strip.addAction(view)
             strip.addAction(sound)
@@ -553,7 +553,7 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
         } else {
             // cars that don't pass taps on: Report has the Search button's place, and Search is the first row in Places
             strip.addAction(reportAction())
-            strip.addAction(Action.Builder().setTitle("Places").setOnClickListener { screenManager.push(PlacesScreen(carContext, holder)) }.build())
+            strip.addAction(Action.Builder().setTitle("Lieux").setOnClickListener { screenManager.push(PlacesScreen(carContext, holder)) }.build())
             strip.addAction(view)
             strip.addAction(Action.Builder().setIcon(icon(R.drawable.ic_car_settings)).setOnClickListener { openSettings() }.build())
         }
@@ -724,10 +724,10 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             val mb = Maneuver.Builder(type).setIcon(CarIcon.Builder(IconCompat.createWithResource(ctx, maneuverIcon(type))).build())
             if (type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW || type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW) mb.setRoundaboutExitNumber(t.exit.coerceAtLeast(1))
             val what = when {
-                type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW || type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW -> "Take exit ${t.exit}"
-                m.startsWith("ARRIVE") -> "Arrive"
+                type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW || type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW -> "Prenez la sortie ${t.exit}"
+                m.startsWith("ARRIVE") -> "Arrivée"
                 t.tag.isNotBlank() -> t.tag
-                else -> m.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+                else -> com.headunit.launcher.Geo.maneuverText(m, t.exit).replaceFirstChar { it.uppercase() }
             }
             val cue = if (t.street.isNotBlank()) "$what · ${t.street}" else what
             val sb = Step.Builder(cue).setManeuver(mb.build())
@@ -776,11 +776,11 @@ class PlacesScreen(carContext: CarContext, private val holder: CarHolder) : Scre
     override fun onGetTemplate(): Template {
         val e = holder.engine
         val limit = try { carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST) } catch (x: Exception) { 6 }
-        val list = ItemList.Builder().setNoItemsMessage(if (e == null) "Starting the map…" else "No saved or recent places yet")
+        val list = ItemList.Builder().setNoItemsMessage(if (e == null) "Démarrage de la carte…" else "Aucun lieu enregistré ou récent")
         // Search first: on cars that don't pass taps on to the map, this is the way in to it (the Search button is Report now)
         var shownRows = 0
         if (e != null) {
-            list.addItem(Row.Builder().setTitle("Search").addText("Type or say where to")
+            list.addItem(Row.Builder().setTitle("Recherche").addText("Tapez ou dites votre destination")
                 .setImage(rowIcon(carContext, R.drawable.ic_car_search, 0xFF9CA4BF.toInt()))
                 .setOnClickListener { screenManager.push(SearchScreen(carContext, holder)) }.build())
             shownRows = 1
@@ -788,8 +788,8 @@ class PlacesScreen(carContext: CarContext, private val holder: CarHolder) : Scre
         if (e != null) {
             // (label, place, icon, colour) in the app's colours: Home blue, Work amber, saved teal, favourites gold, recent grey
             val all = ArrayList<Triple<String, Place, Pair<Int, Int>>>()
-            e.places.slot("home")?.let { all += Triple("Home", it, R.drawable.ic_car_home to 0xFF4C8DFF.toInt()) }
-            e.places.slot("work")?.let { all += Triple("Work", it, R.drawable.ic_car_work to 0xFFF29900.toInt()) }
+            e.places.slot("home")?.let { all += Triple("Domicile", it, R.drawable.ic_car_home to 0xFF4C8DFF.toInt()) }
+            e.places.slot("work")?.let { all += Triple("Travail", it, R.drawable.ic_car_work to 0xFFF29900.toInt()) }
             for (c in e.places.customs()) all += Triple(c.label, c.place, R.drawable.ic_car_star to 0xFF12A4B4.toInt())
             for (p in e.places.favourites()) all += Triple(p.name, p, R.drawable.ic_car_star to 0xFFF2C230.toInt())
             for (p in e.places.recents()) all += Triple(p.name, p, R.drawable.ic_car_history to 0xFF9CA4BF.toInt())
@@ -806,7 +806,7 @@ class PlacesScreen(carContext: CarContext, private val holder: CarHolder) : Scre
                 list.addItem(r.build())
             }
         }
-        return ListTemplate.Builder().setTitle("Places").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
+        return ListTemplate.Builder().setTitle("Lieux").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
     }
 
     private fun go(e: NavEngine, p: Place) {
@@ -815,15 +815,15 @@ class PlacesScreen(carContext: CarContext, private val holder: CarHolder) : Scre
     }
 }
 
-/** "Report here": police, crash, hazard, broken down or mobile camera, saved where you are (the same reports as the phone's). */
+/** "Signaler ici": police, crash, hazard, broken down or mobile camera, saved where you are (the same reports as the phone's). */
 class ReportScreen(carContext: CarContext, private val holder: CarHolder) : Screen(carContext) {
     override fun onGetTemplate(): Template {
         val kinds = listOf(
             Triple("police", "Police", R.drawable.ic_car_police to 0xFF8AB4F8.toInt()),
-            Triple("accident", "Crash", R.drawable.ic_car_crash to 0xFFF28B82.toInt()),
-            Triple("hazard", "Hazard", R.drawable.ic_car_report to 0xFFFBBC04.toInt()),
-            Triple("breakdown", "Broken down", R.drawable.ic_car_breakdown to 0xFFFCAD70.toInt()),
-            Triple("mobilecam", "Mobile camera", R.drawable.ic_car_mobilecam to 0xFF8AB4F8.toInt()),
+            Triple("accident", "Accident", R.drawable.ic_car_crash to 0xFFF28B82.toInt()),
+            Triple("hazard", "Danger", R.drawable.ic_car_report to 0xFFFBBC04.toInt()),
+            Triple("breakdown", "En panne", R.drawable.ic_car_breakdown to 0xFFFCAD70.toInt()),
+            Triple("mobilecam", "Radar mobile", R.drawable.ic_car_mobilecam to 0xFF8AB4F8.toInt()),
         )
         val list = ItemList.Builder()
         for ((kind, label, ic) in kinds) list.addItem(
@@ -831,16 +831,16 @@ class ReportScreen(carContext: CarContext, private val holder: CarHolder) : Scre
                 .setOnClickListener { send(kind) }.build()
         )
         // Search here too: Report has the Search button's place, and this is the way to search while navigating (a stop on the way)
-        list.addItem(GridItem.Builder().setTitle("Search").setImage(rowIcon(carContext, R.drawable.ic_car_search, 0xFFE8EAED.toInt()), GridItem.IMAGE_TYPE_LARGE)
+        list.addItem(GridItem.Builder().setTitle("Recherche").setImage(rowIcon(carContext, R.drawable.ic_car_search, 0xFFE8EAED.toInt()), GridItem.IMAGE_TYPE_LARGE)
             .setOnClickListener { screenManager.push(SearchScreen(carContext, holder)) }.build())
-        return GridTemplate.Builder().setTitle("Report here").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
+        return GridTemplate.Builder().setTitle("Signaler ici").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
     }
 
     private fun send(kind: String) {
         val e = holder.engine
         val msg = when {
-            e == null -> "The map is still starting"
-            e.fix == null -> "Waiting for GPS"
+            e == null -> "La carte démarre encore"
+            e.fix == null -> "En attente du GPS"
             else -> null
         }
         if (msg != null || e == null) {
@@ -848,7 +848,7 @@ class ReportScreen(carContext: CarContext, private val holder: CarHolder) : Scre
             return
         }
         try { e.report(kind) } catch (x: Exception) { }
-        try { androidx.car.app.CarToast.makeText(carContext, "${e.reportName(kind)} report saved here", androidx.car.app.CarToast.LENGTH_SHORT).show() } catch (x: Exception) { }
+        try { androidx.car.app.CarToast.makeText(carContext, "Signalement enregistré ici : ${e.reportName(kind)}", androidx.car.app.CarToast.LENGTH_SHORT).show() } catch (x: Exception) { }
         screenManager.pop()
     }
 }
@@ -879,7 +879,7 @@ class SearchScreen(carContext: CarContext, private val holder: CarHolder, initia
     override fun onGetTemplate(): Template {
         val e = holder.engine
         val limit = try { carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST) } catch (x: Exception) { 6 }
-        val list = ItemList.Builder().setNoItemsMessage(if (query.length < 3) "Type a place, address or postcode" else "Searching…")
+        val list = ItemList.Builder().setNoItemsMessage(if (query.length < 3) "Tapez un lieu, une adresse ou un code postal" else "Recherche…")
         if (query.length >= 3) for (p in shown.take(limit.coerceIn(1, 12))) {
             // a red pin, the name, and how far it is with the address under it (as in the app's results)
             val r = Row.Builder().setTitle(p.name).setImage(rowIcon(carContext, R.drawable.ic_car_pin, 0xFFEA4335.toInt()))
@@ -896,7 +896,7 @@ class SearchScreen(carContext: CarContext, private val holder: CarHolder, initia
                 if (searchText.length >= 3) handler.postDelayed(typed, 500)
             }
             override fun onSearchSubmitted(searchText: String) { query = searchText; handler.removeCallbacks(typed); e?.search(searchText) }
-        }).setHeaderAction(Action.BACK).setSearchHint("Search for a place").setInitialSearchText(query)
+        }).setHeaderAction(Action.BACK).setSearchHint("Rechercher un lieu").setInitialSearchText(query)
             .setShowKeyboardByDefault(query.isEmpty()).setItemList(list.build()).build()
     }
 }
@@ -926,7 +926,7 @@ class NearbyScreen(carContext: CarContext, private val holder: CarHolder, privat
         })
     }
 
-    private val title = when (kind) { "fuel" -> "Fuel"; "charging" -> "Charging"; "food" -> "Food"; "coffee" -> "Coffee"; "parking" -> "Parking"; "toilets" -> "Toilets"; else -> "Nearby" }
+    private val title = when (kind) { "fuel" -> "Carburant"; "charging" -> "Recharge"; "food" -> "Restauration"; "coffee" -> "Café"; "parking" -> "Parking"; "toilets" -> "Toilettes"; else -> "À proximité" }
     private val iconRes = when (kind) { "fuel" -> R.drawable.ic_car_fuel; "charging" -> R.drawable.ic_car_charging; "food" -> R.drawable.ic_car_food; "coffee" -> R.drawable.ic_car_coffee; "parking" -> R.drawable.ic_car_parking; else -> R.drawable.ic_car_pin }
     private val tint = when (kind) { "fuel" -> 0xFFEA4335.toInt(); "charging" -> 0xFF34A853.toInt(); "food" -> 0xFFF29900.toInt(); "coffee" -> 0xFFA56BFF.toInt(); else -> 0xFF4C8DFF.toInt() }
 
@@ -937,7 +937,7 @@ class NearbyScreen(carContext: CarContext, private val holder: CarHolder, privat
         val b = ListTemplate.Builder().setTitle(title).setHeaderAction(Action.BACK)
         if (busy && items.isEmpty()) return b.setLoading(true).build()
         val limit = try { carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST) } catch (x: Exception) { 6 }
-        val list = ItemList.Builder().setNoItemsMessage("Nothing found nearby")
+        val list = ItemList.Builder().setNoItemsMessage("Rien trouvé à proximité")
         for (n in items.take(limit.coerceIn(1, 12))) {
             val r = Row.Builder().setTitle(n.place.name).setImage(rowIcon(carContext, iconRes, tint))
             val bits = ArrayList<String>()
@@ -978,13 +978,13 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
         val limit = try { carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST) } catch (x: Exception) { 6 }
         val rows = ArrayList<Row>()
         val sm = e?.soundMode ?: prefs.i(PreferenceKeys.SOUND_MODE, 0)
-        rows += Row.Builder().setTitle("Voice guidance")
-            .addText(listOf("All directions and alerts", "Alerts only (cameras, limits, hazards)", "Off")[sm.coerceIn(0, 2)])
+        rows += Row.Builder().setTitle("Guidage vocal")
+            .addText(listOf("Toutes les instructions et alertes", "Alertes seules (radars, limitations, dangers)", "Désactivé")[sm.coerceIn(0, 2)])
             .setImage(CarIcon.Builder(IconCompat.createWithResource(carContext, when (sm) { 0 -> R.drawable.ic_car_sound_on; 1 -> R.drawable.ic_car_sound_alerts; else -> R.drawable.ic_car_sound_off })).build())
             .setOnClickListener { if (e != null) e.cycleSound() else prefs.put(PreferenceKeys.SOUND_MODE, (sm + 1) % 3); invalidate() }.build()
         val th = prefs.s(PreferenceKeys.CARTHEME, "car")
-        rows += Row.Builder().setTitle("Day and night")
-            .addText(when (th) { "day" -> "Always day"; "night" -> "Always night"; else -> "Follows the car" })
+        rows += Row.Builder().setTitle("Jour et nuit")
+            .addText(when (th) { "day" -> "Toujours jour"; "night" -> "Toujours nuit"; else -> "Suit la voiture" })
             .setOnClickListener {
                 prefs.put(PreferenceKeys.CARTHEME, when (th) { "car" -> "day"; "day" -> "night"; else -> "car" })
                 onTheme(); invalidate()
@@ -992,8 +992,8 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
         // Android Auto's templated UI does not expose a native continuous slider here,
         // so these map-accessible controls step through sensible values on each tap.
         val uiScale = prefs.i(PreferenceKeys.CARSCALE, 100).coerceIn(40, 300)
-        rows += Row.Builder().setTitle("Map UI scale")
-            .addText("${uiScale}% · tap to cycle from 40% to 300%")
+        rows += Row.Builder().setTitle("Échelle de l'interface")
+            .addText("${uiScale} % · touchez pour varier de 40 % à 300 %")
             .setOnClickListener {
                 val levels = listOf(40, 60, 80, 100, 120, 140, 160, 180, 200, 225, 250, 275, 300)
                 val next = levels[(levels.indexOf(uiScale).takeIf { it >= 0 } ?: 3).let { (it + 1) % levels.size }]
@@ -1001,8 +1001,8 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
                 invalidate()
             }.build()
         val arrowScale = (prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240).coerceIn(100, 500)
-        rows += Row.Builder().setTitle("Locator arrow scale")
-            .addText("${arrowScale}% · tap to increase; resets after 300%")
+        rows += Row.Builder().setTitle("Taille de la flèche")
+            .addText("${arrowScale} % · touchez pour agrandir ; revient au début après 300 %")
             .setOnClickListener {
                 val next = when (arrowScale) { in 0..149 -> 150; in 150..199 -> 200; in 200..249 -> 250; in 250..299 -> 300; else -> 100 }
                 prefs.put(PreferenceKeys.ARROW_PERCENT, next)
@@ -1010,24 +1010,24 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
                 invalidate()
             }.build()
         val reroute: (Boolean) -> Unit = { holder.engine?.rerouteForSettings() }
-        rows += toggleRow("Avoid motorways", "avoid_motorway", false, null, reroute)
-        rows += toggleRow("Avoid toll roads", "avoid_toll", false, null, reroute)
-        rows += toggleRow("Speed cameras", "cameras", true, "Show and warn")
-        rows += toggleRow("Traffic lights", "signals", true, "On your route") { on -> try { holder.map?.signalsEnabled(on) } catch (x: Exception) { } }
-        rows += toggleRow("Avoid ferries", "avoid_ferry", false, null, reroute)
+        rows += toggleRow("Éviter les autoroutes", "avoid_motorway", false, null, reroute)
+        rows += toggleRow("Éviter les péages", "avoid_toll", false, null, reroute)
+        rows += toggleRow("Radars", "cameras", true, "Afficher et avertir")
+        rows += toggleRow("Feux tricolores", "signals", true, "Sur votre itinéraire") { on -> try { holder.map?.signalsEnabled(on) } catch (x: Exception) { } }
+        rows += toggleRow("Éviter les ferries", "avoid_ferry", false, null, reroute)
         // (at the end: some cars only show the first few rows while driving, and these are the least needed on the move)
         // 12 or 24-hour times (the same setting as the app's Settings > Units)
         val clock = prefs.s(PreferenceKeys.CLOCK, "auto")
-        rows += Row.Builder().setTitle("Clock")
-            .addText(when (clock) { "24" -> "24-hour"; "12" -> "12-hour"; else -> "Automatic (as the phone)" } + " · tap to change")
+        rows += Row.Builder().setTitle("Horloge")
+            .addText(when (clock) { "24" -> "24 h"; "12" -> "12 h"; else -> "Automatique (comme le téléphone)" } + " · touchez pour changer")
             .setOnClickListener { prefs.put(PreferenceKeys.CLOCK, when (clock) { "auto" -> "24"; "24" -> "12"; else -> "auto" }); invalidate() }.build()
         // the map on the screen behind the steering wheel, on cars that offer it (a second map for the phone to draw)
         val cluster = prefs.b(PreferenceKeys.CLUSTER_MAP, true)
-        rows += Row.Builder().setTitle("Map on the driver's display")
-            .addText(if (cluster) "On (on cars that offer it) · tap to turn off" else "Off · tap to turn on")
+        rows += Row.Builder().setTitle("Carte sur l'écran du conducteur")
+            .addText(if (cluster) "Activée (sur les voitures compatibles) · touchez pour désactiver" else "Désactivée · touchez pour activer")
             .setOnClickListener { prefs.put(PreferenceKeys.CLUSTER_MAP, !cluster); invalidate() }.build()
         val list = ItemList.Builder()
         for (r in rows.take(limit.coerceIn(1, 12))) list.addItem(r)
-        return ListTemplate.Builder().setTitle("Settings").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
+        return ListTemplate.Builder().setTitle("Réglages").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
     }
 }

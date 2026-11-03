@@ -50,7 +50,7 @@ internal fun openDonate(ctx: Context) {
     try {
         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DONATE_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (e: Exception) {
-        android.widget.Toast.makeText(ctx, "There's no web browser on this unit. Scan the code with your phone instead.", android.widget.Toast.LENGTH_LONG).show()
+        android.widget.Toast.makeText(ctx, "Pas de navigateur sur cet appareil. Scannez plutôt le code avec votre téléphone.", android.widget.Toast.LENGTH_LONG).show()
     }
 }
 
@@ -68,7 +68,7 @@ private fun qrBitmap(text: String, px: Int): ImageBitmap? = try {
 } catch (e: Throwable) { null }
 
 /**
- * The donate card: a short note, a QR code that opens PayPal on a phone, "Donate on this screen" and "Maybe later". Wide (two panes)
+ * The donate card: a short note, a QR code that opens PayPal on a phone, "Faire un don sur cet écran" and "Plus tard". Wide (two panes)
  * in landscape like the What's new card, one column in portrait. Either button closes it.
  */
 @Composable
@@ -90,19 +90,19 @@ internal fun DonateDialog(dark: Boolean, onClose: () -> Unit) {
                     Icon(Icons.Rounded.Favorite, null, tint = pink, modifier = Modifier.size(24.dp))
                 }
                 Text("HORIZON NAV", color = pink, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-                Text("Enjoying Horizon Nav?", color = v.text, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 29.sp)
-                Text("It's free, with no ads, made by one person in their spare time. If it's useful to you, a small donation helps keep it going.",
+                Text("Horizon Nav vous plaît ?", color = v.text, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 29.sp)
+                Text("Elle est gratuite, sans pub, faite par une seule personne sur son temps libre. Si elle vous est utile, un petit don aide à la faire vivre.",
                     color = headText, fontSize = 14.sp, lineHeight = 20.sp)
             }
         }
         val code: @Composable () -> Unit = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (qr != null) Box(Modifier.size(140.dp).clip(RoundedCornerShape(14.dp)).background(Color.White).padding(8.dp)) {
-                    Image(qr, "QR code for the PayPal donation page", Modifier.size(124.dp), filterQuality = FilterQuality.None)
+                    Image(qr, "QR code de la page de don PayPal", Modifier.size(124.dp), filterQuality = FilterQuality.None)
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Scan with your phone", color = v.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text("Opens PayPal on your phone", color = v.sub, fontSize = 14.sp)
+                    Text("Scannez avec votre téléphone", color = v.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text("Ouvre PayPal sur votre téléphone", color = v.sub, fontSize = 14.sp)
                     Text(DONATE_SHORT, color = v.sub, fontSize = 14.sp)
                 }
             }
@@ -111,11 +111,11 @@ internal fun DonateDialog(dark: Boolean, onClose: () -> Unit) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(onClick = { openDonate(ctx); onClose() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = pink, contentColor = if (dark) Color(0xFF3A0F28) else Color.White)) {
-                    Text("Donate on this screen", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
+                    Text("Faire un don sur cet écran", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
                 }
                 Button(onClick = onClose, modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = v.tile, contentColor = v.text)) {
-                    Text("Maybe later", modifier = Modifier.padding(vertical = 4.dp))
+                    Text("Plus tard", modifier = Modifier.padding(vertical = 4.dp))
                 }
             }
         }

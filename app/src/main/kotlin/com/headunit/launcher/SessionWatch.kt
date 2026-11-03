@@ -76,9 +76,9 @@ object SessionWatch {
 
     /**
      * The steps down, each on top of the one before:
-     *  1: the map is drawn into the app's own window instead of straight onto the screen ("Fast map drawing" off: the direct
+     *  1: the map is drawn into the app's own window instead of straight onto the screen ("Dessin rapide de la carte" off: the direct
      *     way is quicker, but on some built-in units it's what locks the screen up), 30 frames a second, no heavy 3D extras.
-     *  2: the Lite map at "Light" sharpness.
+     *  2: the Lite map at "Légère" sharpness.
      *  3: the Lightest map at the lowest sharpness.
      */
     private fun applyLevel(prefs: Prefs, level: Int) {
@@ -99,9 +99,9 @@ object SessionWatch {
 
     /** What to say once it has stepped down to [level]. */
     fun message(level: Int): String = when (level) {
-        1 -> "Your head unit restarted while Horizon Nav was open, twice. To be safe, the map now draws in a gentler way, at 30 frames a second, without the heaviest 3D extras. If it happens again, please send a feedback report from Settings > About & backup"
-        2 -> "Your head unit restarted again, so the map is now on Lite with a lower sharpness. Please send a feedback report from Settings > About & backup so this unit can be fixed"
-        else -> "Your head unit keeps restarting, so the map is now on its lightest setting. Please send a feedback report from Settings > About & backup so this unit can be fixed"
+        1 -> "Votre autoradio a redémarré deux fois pendant qu'Horizon Nav était ouverte. Par précaution, la carte est maintenant dessinée plus légèrement, à 30 images par seconde, sans les effets 3D les plus lourds. Si cela se reproduit, envoyez un rapport depuis Réglages > À propos et sauvegarde"
+        2 -> "Votre autoradio a encore redémarré, la carte est donc en mode Allégée avec une netteté réduite. Envoyez un rapport depuis Réglages > À propos et sauvegarde pour que cet appareil soit pris en charge"
+        else -> "Votre autoradio redémarre sans cesse, la carte est donc sur son réglage le plus léger. Envoyez un rapport depuis Réglages > À propos et sauvegarde pour que cet appareil soit pris en charge"
     }
 
     /** The app is on screen: start the 10-second notes. */

@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.Dp
 import com.headunit.launcher.NavEngine
 import com.headunit.launcher.PreferenceKeys
 
-/** Deep teal of the turn card (and a darker shade for its lane and "then" rows). */
+/** Deep teal of the turn card (and a darker shade for its lane and "puis" rows). */
 val GmGreen = Color(0xFF127A6C)
 val GmGreenDeep = Color(0xFF0C5C52)
 

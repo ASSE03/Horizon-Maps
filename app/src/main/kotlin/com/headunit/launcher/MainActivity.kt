@@ -101,17 +101,17 @@ class MainActivity : ComponentActivity() {
         SessionWatch.resumed(applicationContext)
         if (sessionStep > 0) window.decorView.postDelayed({ try { engine.toast(SessionWatch.message(sessionStep), 12_000) } catch (e: Throwable) { } }, 5000L)
         if (safeLevel > 0) window.decorView.postDelayed({
-            try { engine.toast(if (safeLevel >= 2) "Horizon Nav had trouble starting, so the map is on Lightest. You can change it in Settings > Map look" else "Horizon Nav had trouble starting, so the heaviest 3D map features are off. You can turn them back on in Settings > Map look and On the map", 10_000) } catch (e: Throwable) { }
+            try { engine.toast(if (safeLevel >= 2) "Horizon Nav a eu du mal à démarrer, la carte est donc en mode Minimale. Modifiable dans Réglages > Aspect de la carte" else "Horizon Nav a eu du mal à démarrer, les fonctions 3D les plus lourdes sont donc désactivées. Réactivables dans Réglages > Aspect de la carte et Sur la carte", 10_000) } catch (e: Throwable) { }
         }, 4000L)
 
         setContent { App(prefs, engine, map) }
 
         // while a route runs, a foreground service keeps GPS and voice going in the background; it stops when the route ends
         lifecycleScope.launch {
-            snapshotFlow { if (guiding()) (engine.dest?.name ?: "your destination") else null }
+            snapshotFlow { if (guiding()) (engine.dest?.name ?: "votre destination") else null }
                 .distinctUntilChanged()
                 .collect { to ->
-                    if (to != null && hasLocation()) NavService.start(applicationContext, "Navigating to $to")
+                    if (to != null && hasLocation()) NavService.start(applicationContext, "Guidage vers $to")
                     else if (to == null) {
                         NavService.stop(applicationContext)
                         // the route ended (arrived or cancelled) while another app was in front: GPS can rest too
@@ -166,7 +166,7 @@ class MainActivity : ComponentActivity() {
             // wait (briefly) for a first position so the route can start from where you are
             var n = 0
             while (t?.pos != null && engine.fix == null && n < 20) { kotlinx.coroutines.delay(500); n++ }
-            if (t != null) engine.openShared(t) else engine.toast("Couldn't read a place from that", 3500)
+            if (t != null) engine.openShared(t) else engine.toast("Impossible de lire un lieu dans ce message", 3500)
         }
     }
 
@@ -220,9 +220,9 @@ private fun NoGlesPage(gl: Int) {
         androidx.compose.ui.Modifier.fillMaxSize().background(bg).verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(32.dp),
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp),
     ) {
-        androidx.compose.material3.Text("This head unit can't draw the Mapbox map", color = fg, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-        androidx.compose.material3.Text("Horizon Nav needs OpenGL ES 3.0 graphics, and this unit has version ${gl shr 16}.${gl and 0xFFFF}. " +
-            "Versions of Horizon Nav from before the Mapbox map work on older graphics, if you still have one.", color = fg.copy(alpha = 0.8f), fontSize = 16.sp)
+        androidx.compose.material3.Text("Cet autoradio ne peut pas afficher la carte Mapbox", color = fg, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        androidx.compose.material3.Text("Horizon Nav nécessite OpenGL ES 3.0, et cet appareil a la version ${gl shr 16}.${gl and 0xFFFF}. " +
+            "Les versions d'Horizon Nav antérieures à la carte Mapbox fonctionnent avec des puces graphiques plus anciennes, si vous en avez encore une.", color = fg.copy(alpha = 0.8f), fontSize = 16.sp)
     }
 }
 
@@ -256,20 +256,20 @@ private fun StartupCrashPage(report: String, onRetry: () -> Unit) {
         androidx.compose.ui.Modifier.fillMaxSize().background(bg).verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(32.dp),
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp),
     ) {
-        androidx.compose.material3.Text("Horizon Nav keeps closing while it starts", color = fg, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-        androidx.compose.material3.Text("Sorry about that. Sending the report below lets it be fixed for this head unit. Nothing personal is in it.", color = fg.copy(alpha = 0.75f), fontSize = 15.sp)
+        androidx.compose.material3.Text("Horizon Nav se ferme au démarrage", color = fg, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        androidx.compose.material3.Text("Désolé. Envoyer le rapport ci-dessous permet de corriger le problème pour cet autoradio. Il ne contient rien de personnel.", color = fg.copy(alpha = 0.75f), fontSize = 15.sp)
         androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
             androidx.compose.material3.Button({
                 val url = "https://github.com/${BuildConfig.UPDATE_REPO}/issues/new?title=" + android.net.Uri.encode("Crash on start: ${Build.MANUFACTURER} ${Build.MODEL}") + "&body=" + android.net.Uri.encode(report.take(5000))
                 try { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                catch (e: Exception) { android.widget.Toast.makeText(ctx, "No browser on this unit: use Copy instead", android.widget.Toast.LENGTH_LONG).show() }
-            }) { androidx.compose.material3.Text("Send on GitHub") }
+                catch (e: Exception) { android.widget.Toast.makeText(ctx, "Pas de navigateur sur cet appareil : utilisez Copier", android.widget.Toast.LENGTH_LONG).show() }
+            }) { androidx.compose.material3.Text("Envoyer sur GitHub") }
             androidx.compose.material3.Button({
                 val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
                 cm?.setPrimaryClip(android.content.ClipData.newPlainText("Horizon Nav crash", report))
-                android.widget.Toast.makeText(ctx, "Copied: paste it into a message or a Reddit comment", android.widget.Toast.LENGTH_LONG).show()
-            }) { androidx.compose.material3.Text("Copy") }
-            androidx.compose.material3.OutlinedButton(onRetry) { androidx.compose.material3.Text("Try again", color = fg) }
+                android.widget.Toast.makeText(ctx, "Copié : collez-le dans un message ou un commentaire Reddit", android.widget.Toast.LENGTH_LONG).show()
+            }) { androidx.compose.material3.Text("Copier") }
+            androidx.compose.material3.OutlinedButton(onRetry) { androidx.compose.material3.Text("Réessayer", color = fg) }
         }
         androidx.compose.material3.Text(report, color = fg.copy(alpha = 0.6f), fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
     }

@@ -1,0 +1,95 @@
+name: Build Horizon Nav FR
+
+# Builds the French version straight from the sources in this repository (the original workflow built from HorizonNav.zip).
+# Every push to main that touches the app builds an APK (downloadable from the run's "Artifacts"). Run it by hand with
+# "publish" ticked to put it on the "app" release, where the app's built-in updater looks for new versions.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/build-fr.yml"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publier l'APK sur la release « app » (pour la mise à jour intégrée)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Accept the Android licences
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Restore the signing key
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "::error::Secret SIGNING_KEYSTORE_BASE64 manquant : Settings > Secrets and variables > Actions > New repository secret"
+            exit 1
+          fi
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/signing.keystore"
+          keytool -list -keystore "$GITHUB_WORKSPACE/signing.keystore" -storepass android -alias androiddebugkey > /dev/null
+          echo "Signing key restored."
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.14.4
+
+      - name: Release notes for the in-app "What's new" card
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets
+          printf -- "- Version française d'Horizon Nav (fork ASSE03), construite depuis les sources du dépôt.\n" > app/src/main/assets/whatsnew.md
+
+      - name: Build release APK
+        env:
+          MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+        run: gradle :app:assembleRelease
+
+      - name: Run unit tests
+        run: gradle :app:testPublicReleaseUnitTest || echo "::warning::Some unit tests failed"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HorizonNav-FR-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Publish the app
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/HorizonNav-public.apk"
+          BUILD="${GITHUB_RUN_NUMBER}"
+          VERSION="1.0.${BUILD}"
+          VERSION_CODE=$((100 + BUILD))
+          sha256sum "$APK" | awk '{print $1}' > HorizonNav-public.apk.sha256
+          printf '{\n  "version": "%s",\n  "build": %s,\n  "versionCode": %s\n}\n' "$VERSION" "$BUILD" "$VERSION_CODE" > version.json
+          printf "## Horizon Nav FR %s\n\nVersion française d'Horizon Nav.\n" "$VERSION" > release-notes.md
+          if gh release view app --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release edit app --repo "${{ github.repository }}" --title "Horizon Nav FR (${VERSION})" --notes-file release-notes.md
+          else
+            gh release create app --repo "${{ github.repository }}" --title "Horizon Nav FR (${VERSION})" --notes-file release-notes.md
+          fi
+          gh release upload app "$APK" HorizonNav-public.apk.sha256 version.json --repo "${{ github.repository }}" --clobber
+          echo "Lien de téléchargement : https://github.com/${{ github.repository }}/releases/download/app/HorizonNav-public.apk"

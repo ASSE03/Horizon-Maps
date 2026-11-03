@@ -70,21 +70,21 @@ private fun alertColor(kind: String): Color = when (kind) {
 }
 
 private fun alertLabel(kind: String): String = when (kind) {
-    "camera" -> "SPEED CAMERA"
-    "limit" -> "SPEED LIMIT"
-    "incident" -> "HAZARD AHEAD"
-    "rain" -> "WEATHER"
-    "break" -> "TAKE A BREAK"
-    "avg" -> "AVERAGE SPEED CHECK"
-    "bump" -> "SPEED BUMP"
-    "rail" -> "LEVEL CROSSING"
-    "ford" -> "FORD"
-    "school" -> "SCHOOL"
-    "zone" -> "CLEAN AIR ZONE"
-    "report" -> "REPORTED AHEAD"
-    "wrongway" -> "WRONG WAY"
-    "plan" -> "PLANNED TRIP"
-    else -> "ALERT"
+    "camera" -> "RADAR"
+    "limit" -> "LIMITATION"
+    "incident" -> "DANGER DEVANT"
+    "rain" -> "MÉTÉO"
+    "break" -> "FAITES UNE PAUSE"
+    "avg" -> "RADAR TRONÇON"
+    "bump" -> "RALENTISSEUR"
+    "rail" -> "PASSAGE À NIVEAU"
+    "ford" -> "GUÉ"
+    "school" -> "ÉCOLE"
+    "zone" -> "ZONE À FAIBLES ÉMISSIONS"
+    "report" -> "SIGNALÉ DEVANT"
+    "wrongway" -> "CONTRESENS"
+    "plan" -> "TRAJET PRÉVU"
+    else -> "ALERTE"
 }
 
 private fun alertIcon(a: AlertInfo): ImageVector {
@@ -278,7 +278,7 @@ fun SpeedLimitSign(engine: NavEngine, size: Dp, modifier: Modifier = Modifier, o
 }
 
 /**
- * The North American speed limit sign: a white upright board with a black border, "SPEED LIMIT" (US) or "MAXIMUM" (Canada)
+ * The North American speed limit sign: a white upright board with a black border, "LIMITATION" (US) or "MAXIMUM" (Canada)
  * across the top and the number large below. It turns pink when you're over, like the roundel.
  */
 @Composable

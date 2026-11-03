@@ -21,7 +21,7 @@ android {
         val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
         versionCode = 100 + run
         versionName = "1.0.$run"
-        resValue("string", "app_name", "Horizon Nav")
+        resValue("string", "app_name", "Horizon Nav FR")
         // only the chips head units and phones use (the Mapbox map comes with a copy for each, so this keeps the APK much smaller)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -56,13 +56,14 @@ android {
     productFlavors {
         create("public") {
             dimension = "key"
-            applicationIdSuffix = ".public"
+            // French fork: its own package ID so it installs next to the official app (it is signed with a different key)
+            applicationIdSuffix = ".public.fr"
             // No TomTom key is ever built into the app: anyone can pull it out of a shared APK and run up the bill on it.
             // People paste their own in Settings > Data (or the app uses Mapbox).
             buildConfigField("String", "TOMTOM_API_KEY", "\"\"")
             buildConfigField("String", "DEFAULT_MAP", "\"mapbox\"")
             // where the build's "publish" option puts new versions (the "app" release); the app checks it for updates
-            buildConfigField("String", "UPDATE_REPO", "\"benbishop028-arch/Horizon-Maps\"")
+            buildConfigField("String", "UPDATE_REPO", "\"ASSE03/Horizon-Maps\"")
             // the APK file the updater looks for in that release
             buildConfigField("String", "UPDATE_APK", "\"HorizonNav-public.apk\"")
         }

@@ -450,8 +450,8 @@ object Overpass {
     }
 
     fun kindLabel(kind: String): String = when (kind) {
-        "fuel" -> "Fuel station"; "fuel_e85" -> "E85 station"; "charging" -> "Charging point"; "food" -> "Food"; "coffee" -> "Coffee"
-        "toilets" -> "Toilets"; "services" -> "Services"; else -> "Car park"
+        "fuel" -> "Station-service"; "fuel_e85" -> "Station E85"; "charging" -> "Borne de recharge"; "food" -> "Restauration"; "coffee" -> "Café"
+        "toilets" -> "Toilettes"; "services" -> "Aires"; else -> "Parking"
     }
 
     /** kind: "fuel", "charging", "parking", "food", "coffee", "toilets" or "services". */
@@ -497,21 +497,21 @@ object Overpass {
                         }
                     }
                     if (sockets.isNotEmpty()) extra += sockets.take(3).joinToString(", ")
-                    tags.optString("capacity").takeIf { it.isNotBlank() }?.let { extra += "$it points" }
+                    tags.optString("capacity").takeIf { it.isNotBlank() }?.let { extra += "$it points de charge" }
                     tags.optString("operator").takeIf { it.isNotBlank() && it != name }?.let { extra += it }
                 }
                 "parking" -> {
-                    when (tags.optString("fee")) { "yes" -> extra += "Paid"; "no" -> extra += "Free" }
-                    tags.optString("capacity").takeIf { it.isNotBlank() }?.let { extra += "$it spaces" }
-                    when (tags.optString("parking")) { "multi-storey" -> extra += "Multi-storey"; "underground" -> extra += "Underground" }
+                    when (tags.optString("fee")) { "yes" -> extra += "Payant"; "no" -> extra += "Gratuit" }
+                    tags.optString("capacity").takeIf { it.isNotBlank() }?.let { extra += "$it places" }
+                    when (tags.optString("parking")) { "multi-storey" -> extra += "Parking à étages"; "underground" -> extra += "Souterrain" }
                 }
                 "food", "coffee" -> {
                     tags.optString("cuisine").takeIf { it.isNotBlank() }?.let { extra += it.replace("_", " ").replace(";", ", ") }
                     tags.optString("opening_hours").takeIf { it.isNotBlank() }?.let { extra += it }
                 }
                 "toilets" -> {
-                    when (tags.optString("fee")) { "yes" -> extra += "Paid"; "no" -> extra += "Free" }
-                    if (tags.optString("wheelchair") == "yes") extra += "Accessible"
+                    when (tags.optString("fee")) { "yes" -> extra += "Payantes"; "no" -> extra += "Gratuites" }
+                    if (tags.optString("wheelchair") == "yes") extra += "Accessibles PMR"
                 }
                 else -> {
                     tags.optString("operator").takeIf { it.isNotBlank() && it != name }?.let { extra += it }

@@ -107,7 +107,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     var tripMax by mutableDoubleStateOf(0.0)
     var tripMoving by mutableDoubleStateOf(0.0)
     var tripStart by mutableStateOf(System.currentTimeMillis())
-    /** Where the trip being driven started (for "Route back" on the arrival card). */
+    /** Where the trip being driven started (for "Itinéraire retour" on the arrival card). */
     var tripFrom: LL? = null
     /** A short, quiet piece of advice for the conditions ("Heavy rain · take it steady"), or null. */
     var advice by mutableStateOf<String?>(null)
@@ -129,7 +129,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     fun routeBack() {
         val from = tripFrom ?: return
         val home = places.slot("home")
-        val name = if (home != null && Geo.dist(home.pos, from) < 250.0) home.name.ifBlank { "Home" } else "Where you started"
+        val name = if (home != null && Geo.dist(home.pos, from) < 250.0) home.name.ifBlank { "Domicile" } else "Point de départ"
         dismissArrival()
         startRoute(Place(name, "", if (home != null && Geo.dist(home.pos, from) < 250.0) home.pos else from))
     }
@@ -255,7 +255,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     fun cycleSound() {
         val n = (soundMode + 1) % 3
         prefs.put(PreferenceKeys.SOUND_MODE, n)
-        toast(listOf("Sound: all", "Sound: alerts only", "Sound: off")[n], 1800)
+        toast(listOf("Son : tout", "Son : alertes seules", "Son : coupé")[n], 1800)
     }
 
     /** Miles in the UK and US (and the few others that use them), kilometres everywhere else; before the country is known, miles. */
@@ -321,7 +321,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val wait = if (m.contains("401") || m.contains("403") || m.contains("accept") || m.contains("limit") || m.contains("too many")) 3_600_000L else 600_000L
             if (p == "tomtom") ttDownUntil = System.currentTimeMillis() + wait else mbDownUntil = System.currentTimeMillis() + wait
             val name = if (p == "tomtom") "TomTom" else "Mapbox"
-            scope.launch { toast("$name isn't working right now, so ${if (backup == "tomtom") "TomTom" else "Mapbox"} is being used instead", 4500) }
+            scope.launch { toast("$name ne répond pas pour l'instant, ${if (backup == "tomtom") "TomTom" else "Mapbox"} prend le relais", 4500) }
             return call(backup)
         }
     }
@@ -365,19 +365,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (mbRetryFor != t) { mbRetryFor = t; mbRetries = 0 }
                 if (mbRetries < 3) {
                     mbRetries++
-                    toast("Mapbox refused the map for a moment, but your token is fine" + (if (user.isNotBlank()) " (account $user)" else "") + ". Trying again…", 5000)
+                    toast("Mapbox a refusé la carte un instant, mais votre jeton est valide" + (if (user.isNotBlank()) " (compte $user)" else "") + ". Nouvel essai…", 5000)
                     delay(4000L * mbRetries)
                     if (t == mbToken) try { applyStyle(lastDark) } catch (e: Exception) { }
-                } else toast("Mapbox accepts your token but keeps refusing the map. Sign in at account.mapbox.com and look for a notice about your account.", 10_000)
+                } else toast("Mapbox accepte votre jeton mais refuse toujours la carte. Connectez-vous sur account.mapbox.com et cherchez un message concernant votre compte.", 10_000)
                 return@launch
             }
             refusedMb = t
             mbRefusedWhy = when (code) {
-                "TokenMalformed" -> "Mapbox says that isn't a whole token: part of it is missing or mistyped. Copy it again with the copy button at account.mapbox.com › Tokens (typing it in by hand rarely works)."
-                "TokenInvalid" -> "Mapbox says that token has a mistake in it. Copy it again with the copy button at account.mapbox.com › Tokens rather than typing it."
-                "TokenRevoked" -> "Mapbox says that token has been deleted or replaced. Copy one that's still listed at account.mapbox.com › Tokens" + (if (user.isNotBlank()) " (account $user)." else ".")
-                "TokenExpired" -> "That's a temporary token and it has run out. Copy your Default public token (it starts pk.) at account.mapbox.com › Tokens."
-                else -> "Mapbox didn't accept your access token (401). Copy it again with the copy button at account.mapbox.com › Tokens."
+                "TokenMalformed" -> "Selon Mapbox, ce jeton est incomplet : une partie manque ou est mal saisie. Recopiez-le avec le bouton de copie sur account.mapbox.com › Tokens (le taper à la main marche rarement)."
+                "TokenInvalid" -> "Selon Mapbox, ce jeton contient une erreur. Recopiez-le avec le bouton de copie sur account.mapbox.com › Tokens plutôt que de le taper."
+                "TokenRevoked" -> "Selon Mapbox, ce jeton a été supprimé ou remplacé. Copiez-en un qui figure encore sur account.mapbox.com › Tokens" + (if (user.isNotBlank()) " (compte $user)." else ".")
+                "TokenExpired" -> "C'est un jeton temporaire et il a expiré. Copiez votre « Default public token » (il commence par pk.) sur account.mapbox.com › Tokens."
+                else -> "Mapbox n'a pas accepté votre jeton d'accès (401). Recopiez-le avec le bouton de copie sur account.mapbox.com › Tokens."
             }
             toast(mbRefusedWhy, 9000)
         }
@@ -471,7 +471,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         if (hasMapbox) {
             val r = MapboxRest.geocode(mbToken, country, q, near)
-            if (r.isEmpty()) MapboxRest.lastError?.let { err -> scope.launch { toast("Mapbox search didn't work: ${err.take(120)}", 6000) } }
+            if (r.isEmpty()) MapboxRest.lastError?.let { err -> scope.launch { toast("La recherche Mapbox n'a pas marché : ${err.take(120)}", 6000) } }
             return r
         }
         // no key or token: OpenStreetMap's free search
@@ -575,7 +575,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     while (fix == null && n < 40) { delay(500); n++ }
                     if (route != null) return@launch
                     via = stops
-                    toast("Carrying on to ${d.name}", 3500)
+                    toast("Reprise du trajet vers ${d.name}", 3500)
                     startRoute(d, 0, keepVia = true, startNow = true)
                 }
             } else if (o.has("la") && age < 15 * 60_000L)
@@ -585,15 +585,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         tts = TextToSpeech(ctx) { status ->
             if (status != TextToSpeech.SUCCESS) {
                 // no working text-to-speech on this unit: the beeps still sound, but nothing can be said (this used to fail silently)
-                scope.launch { toast("No voice for directions: install or turn on a text-to-speech engine (Settings > Sound & voice > Voice and language)", 9000) }
+                scope.launch { toast("Pas de voix pour le guidage : installez ou activez un moteur de synthèse vocale (Paramètres Android > Son et voix > Voix et langue)", 9000) }
             }
             if (status == TextToSpeech.SUCCESS) {
                 ttsReady = true
-                val r = tts?.setLanguage(Locale.getDefault())
+                // French build: always speak French (many head units are left in English), the system language next, English last
+                var r = tts?.setLanguage(Locale.FRANCE)
+                if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) r = tts?.setLanguage(Locale.getDefault())
                 if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
                     val r2 = tts?.setLanguage(Locale.UK)
                     if (r2 == TextToSpeech.LANG_MISSING_DATA || r2 == TextToSpeech.LANG_NOT_SUPPORTED)
-                        scope.launch { toast("The text-to-speech voice has no language installed, so directions can't be spoken. Add one in Settings > Sound & voice > Voice and language", 9000) }
+                        scope.launch { toast("La synthèse vocale n'a aucune langue installée, le guidage ne peut pas être prononcé. Ajoutez le français dans Paramètres Android > Son et voix > Voix et langue", 9000) }
                 }
                 voiceChan = prefs.s(PreferenceKeys.VOICE_CHANNEL, "nav")
                 tts?.setAudioAttributes(speechAttrs)
@@ -609,11 +611,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         map.onLongPress = { p ->
             val t = tappedPoi
             val place = if (t != null && Geo.dist(t.second, p) < 60.0 && android.os.SystemClock.uptimeMillis() - tappedAt < 120_000L) { tappedPoi = null; Place(t.first, "", t.second) }
-                else Place("Dropped pin", "", p)
+                else Place("Repère posé", "", p)
             if (route != null && !previewing && dest != null) addStop(place) else startRoute(place)
         }
-        map.onAlprTap = { who -> toast("Number-plate camera" + (if (who.isNotBlank()) " · $who" else ""), 3500) }
-        map.onPoiTap = { name, p -> tappedPoi = name to p; tappedAt = android.os.SystemClock.uptimeMillis(); toast(if (route != null && !previewing) "$name: hold on it to add it as a stop" else "$name: hold on it to go there", 3000) }
+        map.onAlprTap = { who -> toast("Caméra de lecture de plaques" + (if (who.isNotBlank()) " · $who" else ""), 3500) }
+        map.onPoiTap = { name, p -> tappedPoi = name to p; tappedAt = android.os.SystemClock.uptimeMillis(); toast(if (route != null && !previewing) "$name : appui long pour l'ajouter comme étape" else "$name : appui long pour y aller", 3000) }
         map.onUserGesture = { if (following) { following = false }; scheduleRecentre(12_000) }
         map.onAltTap = { i -> switchToAlt(i) }
         // the parked-car spot is no longer used (the app lives in the car): drop any old one
@@ -676,8 +678,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Plays a sample alert (chime, banner and voice) so the sound can be checked. */
     fun testAlert() {
         chime(android.media.ToneGenerator.TONE_PROP_PROMPT)
-        raiseAlert("camera", "Test alert: speed camera ahead")
-        speak("Speed camera ahead", true)
+        raiseAlert("camera", "Alerte de test : radar devant")
+        speak("Radar devant", true)
     }
 
     fun shutdown() {
@@ -717,7 +719,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         else -> detectedCountry.isNotBlank() && detectedCountry.uppercase() !in KEEP_LEFT
     }
 
-    /** The speed limit sign to draw: the white "SPEED LIMIT" board in the US, "MAXIMUM" in Canada, the red roundel elsewhere. */
+    /** The speed limit sign to draw: the white "LIMITATION" board in the US, "MAXIMUM" in Canada, the red roundel elsewhere. */
     val limitSignStyle: String get() = when (detectedCountry.uppercase()) { "US", "PR", "GU", "VI", "AS", "MP" -> "us"; "CA" -> "ca"; else -> "round" }
 
     fun countryCode(): String { val v = prefs.s(PreferenceKeys.COUNTRY, "auto"); return if (v == "auto") detectedCountry else v }
@@ -762,15 +764,15 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun downloadPack(url: String, id: String, extrasUrl: String = url, onDone: () -> Unit = {}) {
         if (packBusy || url.isBlank()) return
-        packBusy = true; packStatus = "Starting…"; packDownloading = id
+        packBusy = true; packStatus = "Démarrage…"; packDownloading = id
         scope.launch {
             try {
                 withContext(Dispatchers.IO) { OfflineRouter.download(ctx, url, id, extrasUrl) { packStatus = it } }
                 onDone()
-                packStatus = "Pack ready"
-                toast("Offline pack ready", 3000)
+                packStatus = "Pack prêt"
+                toast("Pack hors ligne prêt", 3000)
             } catch (e: Throwable) {
-                packStatus = "Download failed: ${e.message ?: e.javaClass.simpleName}. Tap Download again to carry on."
+                packStatus = "Échec du téléchargement : ${e.message ?: e.javaClass.simpleName}. Touchez Télécharger pour reprendre."
             } finally { packBusy = false; packDownloading = null; packRev++; restyle() }
         }
     }
@@ -824,7 +826,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // Mapbox turned the token away: say so (the map can't show without a working token)
         if (m.contains("401") || m.contains("403") || m.contains("unauthor") || m.contains("forbidden") || m.contains("access token")) {
             if (m.contains("403") || m.contains("forbidden"))
-                toast("Mapbox won't let this token show the map (403). At account.mapbox.com › Tokens, edit it: tick all the public scopes and remove any URL restrictions.", 9000)
+                toast("Mapbox refuse d'afficher la carte avec ce jeton (403). Sur account.mapbox.com › Tokens, modifiez-le : cochez tous les « public scopes » et retirez les restrictions d'URL.", 9000)
             // 401: Mapbox is asked what's wrong with the token first (it says so itself if it's mistyped, deleted or out of date)
             else onMbUnauthorised(true)
             return
@@ -832,13 +834,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // a secure connection refused: almost always the head unit's clock being wrong
         if (m.contains("certificate") || m.contains("ssl") || m.contains("handshake") || m.contains("chain validation")) {
             NetHealth.tlsFailAt = System.currentTimeMillis()
-            toast("The map couldn't make a secure connection. Check the head unit's date and time are right.", 9000)
+            toast("La carte n'a pas pu établir de connexion sécurisée. Vérifiez la date et l'heure de l'autoradio.", 9000)
             return
         }
         val network = m.contains("resolve") || m.contains("host") || m.contains("timeout") || m.contains("timed out") || m.contains("connect") || m.contains("network") || m.contains("unreachable")
-        if (!network) { toast("Map: $msg", 5000); return }
+        if (!network) { toast("Carte : $msg", 5000); return }
         styleRetry++
-        if (styleRetry == 1) toast("No signal for the map: trying again…" + NetHealth.clockHint(), if (NetHealth.clockHint().isEmpty()) 3000 else 8000)
+        if (styleRetry == 1) toast("Pas de réseau pour la carte : nouvel essai…" + NetHealth.clockHint(), if (NetHealth.clockHint().isEmpty()) 3000 else 8000)
         // still no signal: the downloaded pack's own map meanwhile
         if (styleRetry == 2 && OfflineMap.installed(ctx) && OfflineMap.hasFonts(ctx) && prefs.s(PreferenceKeys.OFF_MAP, "auto") != "never") {
             try { map.setStyleUrl(OfflineServer.styleJson(ctx, lastDark)) } catch (e: Exception) { }
@@ -891,7 +893,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /**
      * Standard's light for now: dawn and dusk around sunrise and sunset, otherwise day or night (the app's own day / night choice).
-     * "Day" or "Night" picked in Settings is kept as it is.
+     * "Jour" or "Nuit" picked in Settings is kept as it is.
      */
     /**
      * The map's light is dim (dusk, dawn or night). Around sunset the light follows the sun while the car may still say it's day,
@@ -941,17 +943,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val now = System.currentTimeMillis()
             if (refusedMb != mbToken && now - noTokenToldAt > 60_000L) {
                 noTokenToldAt = now
-                toast("Add your Mapbox access token (it starts pk.) in Settings > Keys & accounts to show the map", 8000)
+                toast("Ajoutez votre jeton d'accès Mapbox (il commence par pk.) dans Réglages > Clés et comptes pour afficher la carte", 8000)
             }
             return
         }
         map.setToken(mbToken)
         map.keepBaseLook = false
         map.recolourBase = false
-        // no signal (or "Downloaded" chosen): the pack's own map, served from the phone. Satellite is Mapbox's photos, so it
-        // wins while there's a connection (with "Downloaded" chosen, switching satellite on used to do nothing at all)
+        // no signal (or "Téléchargée" chosen): the pack's own map, served from the phone. Satellite is Mapbox's photos, so it
+        // wins while there's a connection (with "Téléchargée" chosen, switching satellite on used to do nothing at all)
         if (useOfflineMap() && !(map.isSatellite && online())) {
-            if (map.isSatellite) toast("Satellite view needs a connection: showing the downloaded map until it's back", 5000)
+            if (map.isSatellite) toast("La vue satellite demande une connexion : carte téléchargée affichée en attendant", 5000)
             try { map.setStyleUrl(OfflineServer.styleJson(ctx, dark)); return } catch (e: Exception) { android.util.Log.w("NavEngine", "offline map", e) }
         }
         OfflineServer.stop()
@@ -964,7 +966,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     map.recolourBase = true
                     map.setStyleUrl(TomTomRest.styleUrl(apiKey, dark, prefs.b(PreferenceKeys.TRAFFIC, true)))
                 } else {
-                    toast(if (hasKey) "TomTom turned down the key for its map, so Mapbox's map is showing" else "Add a TomTom key in Settings > Keys & accounts for TomTom's map. Showing Mapbox's map", 5000)
+                    toast(if (hasKey) "TomTom a refusé la clé pour sa carte, la carte Mapbox est affichée" else "Ajoutez une clé TomTom dans Réglages > Clés et comptes pour la carte TomTom. Carte Mapbox affichée", 5000)
                     map.setStyleUrl(map.baseStyle())
                 }
             }
@@ -987,7 +989,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 ?.let { handleLocation(it, true) }
         } catch (e: SecurityException) {
             lm = null
-            toast("Location permission is needed for navigation")
+            toast("L'autorisation de localisation est nécessaire pour la navigation")
         } catch (e: Exception) {
             lm = null
             android.util.Log.w("NavEngine", "startLocation failed", e)
@@ -1067,7 +1069,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val h = f.hours.getOrNull(idx) ?: return@launch
             val wet = h.code in 51..67 || h.code in 80..82 || h.code in 95..99
             val snow = h.code in 71..77 || h.code in 85..86
-            if (h.rain >= 50 || wet || snow) destRain = (if (snow) "Snow" else "Rain") + " likely at arrival (${h.rain}%)"
+            if (h.rain >= 50 || wet || snow) destRain = (if (snow) "Neige" else "Pluie") + " probable à l'arrivée (${h.rain} %)"
         }
     }
 
@@ -1111,8 +1113,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (candidateHits >= 2 && (fix?.speed ?: 0.0) > 3.0) {
             announcedLimit = n; candidateHits = 0; limitCandidate = -1
             chime()
-            raiseAlert("limit", "Speed limit $n")
-            speak("Speed limit $n", true)
+            raiseAlert("limit", "Limitation $n")
+            speak("Limitation à $n", true)
             limitPulse = true
             scope.launch { delay(3500); limitPulse = false }
         }
@@ -1123,7 +1125,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         via = via + p
         stopMode = false
         clearNearby()
-        toast("Stop added: ${p.name}", 2500)
+        toast("Étape ajoutée : ${p.name}", 2500)
         startRoute(d, departMin, true, startNow = route != null && !previewing)
     }
 
@@ -1205,7 +1207,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     fun parkAt(n: Nearby) {
         val d = dest
         parkingNear = emptyList()
-        startRoute(Place(n.place.name, "Car park" + (if (d != null) " near ${d.name}" else ""), n.place.pos), startNow = true)
+        startRoute(Place(n.place.name, "Parking" + (if (d != null) " près de ${d.name}" else ""), n.place.pos), startNow = true)
         parkingFor = route
     }
 
@@ -1227,8 +1229,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (s.off <= prog + 4) return@forEachIndexed
             val arriving = s.maneuver.uppercase().startsWith("ARRIVE")
             val road = s.street.ifBlank { s.sign }
-            val text = if (arriving) "Arrive at " + (dest?.name ?: "your destination")
-                       else Geo.maneuverText(s.maneuver, s.roundExit).replaceFirstChar { it.uppercase() } + (if (road.isNotBlank()) " onto $road" else "")
+            val text = if (arriving) "Arrivée à " + (dest?.name ?: "votre destination")
+                       else Geo.maneuverText(s.maneuver, s.roundExit).replaceFirstChar { it.uppercase() } + (if (road.isNotBlank()) " sur $road" else "")
             val d = s.off - prog
             out += ItinRow(i, s.maneuver, text, Geo.stepTag(s), d, fmt.format(Date(now + (secs * d / left * 1000).toLong())), s.off, if (arriving) "" else road, s.roundExit)
         }
@@ -1254,7 +1256,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val next = r.steps.getOrNull(row.index + 1)?.off ?: r.len
         val p0 = row.off + 40.0
         val p1 = min(next - 40.0, p0 + 3000.0)
-        if (p1 <= p0) { toast("That stretch is too short to avoid", 2500); return }
+        if (p1 <= p0) { toast("Ce tronçon est trop court pour être évité", 2500); return }
         itineraryOpen = false
         avoidStretch(r, p0, p1)
     }
@@ -1263,7 +1265,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     fun avoidRoadAhead() {
         val r = route ?: return
         if (previewing || dest == null) return
-        if (fix == null) { toast("No GPS fix yet"); return }
+        if (fix == null) { toast("Pas encore de position GPS"); return }
         val p0 = curProgress + 60.0
         val toTurn = turn?.dist ?: 1500.0
         val p1 = p0 + toTurn.coerceIn(300.0, 3000.0)
@@ -1279,10 +1281,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         for (q in inside) {
             minLat = min(minLat, q.lat); maxLat = max(maxLat, q.lat); minLon = min(minLon, q.lon); maxLon = max(maxLon, q.lon)
         }
-        if (minLat > maxLat) { toast("Nothing to avoid ahead", 2500); return }
+        if (minLat > maxLat) { toast("Rien à éviter devant", 2500); return }
         val pad = 0.0004
         sessionAvoid += LL(minLat - pad, minLon - pad) to LL(maxLat + pad, maxLon + pad)
-        toast("Looking for a way round…", 2500)
+        toast("Recherche d'un itinéraire de contournement…", 2500)
         startRoute(d, 0, true, startNow = true)
     }
 
@@ -1352,18 +1354,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (!Updater.enabled || updateBusy || updateCheckInFlight) return
         val now = System.currentTimeMillis()
         if (!manual) {
-            // "Look for updates by itself" switched off in Settings: only the Check button looks
+            // "Chercher les mises à jour automatiquement" switched off in Settings: only the Check button looks
             if (!prefs.b(PreferenceKeys.UPDCHECK, true)) return
             if (now - lastAutoUpdateCheck < autoCheckGapMs) return
             lastAutoUpdateCheck = now
         }
         updateCheckInFlight = true
-        if (manual) updateStatus = "Checking…"
+        if (manual) updateStatus = "Vérification…"
         scope.launch {
-            val u = try { withContext(Dispatchers.IO) { Updater.check() } } catch (e: Exception) { if (manual) updateStatus = "Couldn't check: no connection"; return@launch } finally { updateCheckInFlight = false }
+            val u = try { withContext(Dispatchers.IO) { Updater.check() } } catch (e: Exception) { if (manual) updateStatus = "Vérification impossible : pas de connexion"; return@launch } finally { updateCheckInFlight = false }
             prefs.put(PreferenceKeys.UPDATE_LAST_CHECK, now.toString())
-            if (u == null) { if (manual) updateStatus = "You have the latest version"; return@launch }
-            if (manual) updateStatus = "Version ${u.version} is available"
+            if (u == null) { if (manual) updateStatus = "Vous avez la dernière version"; return@launch }
+            if (manual) updateStatus = "La version ${u.version} est disponible"
             // "later" keeps the card away for a few days, unless you check by hand
             val snoozed = (prefs.s(PreferenceKeys.UPDSNOOZE, "0").toLongOrNull() ?: 0L) > now
             if (manual || !snoozed) appUpdate = u
@@ -1404,33 +1406,33 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val u = appUpdate ?: return
         if (updateBusy) return
         if (!Updater.canInstall(ctx)) {
-            toast("Allow Horizon Nav to install updates, then tap Update again", 6000)
+            toast("Autorisez Horizon Nav à installer des mises à jour, puis touchez à nouveau Mettre à jour", 6000)
             try { Updater.openInstallSetting(ctx) } catch (e: Exception) { }
             return
         }
-        updateBusy = true; updateStatus = "Starting the download…"
+        updateBusy = true; updateStatus = "Lancement du téléchargement…"
         // installed with AAEnabler: the update is saved to Downloads for AAEnabler to install, so it stays in Android Auto
         val forAaTool = Updater.installedViaAaTool(ctx) && android.os.Build.VERSION.SDK_INT >= 29
         scope.launch {
             try {
                 withContext(Dispatchers.IO) { Updater.downloadAndInstall(ctx, u, toDownloads = forAaTool) { updateStatus = it } }
-                updateStatus = if (forAaTool) "Saved to Downloads as HorizonNav-${u.version}.apk. Install it with AAEnabler to keep it in Android Auto"
-                    else "Follow the installer to finish"
+                updateStatus = if (forAaTool) "Enregistré dans Téléchargements sous HorizonNav-${u.version}.apk. Installez-le avec AAEnabler pour le garder dans Android Auto"
+                    else "Suivez l'installateur pour terminer"
             } catch (e: Exception) {
                 // Never bypass checksum verification by opening the APK URL after a failed download.
                 // Browser fallback is reserved for devices that genuinely lack DownloadManager.
                 val message = e.message.orEmpty()
                 if (message.contains("No download service", ignoreCase = true)) {
-                    updateStatus = "Download service unavailable; opening the download in your browser…"
+                    updateStatus = "Service de téléchargement indisponible ; ouverture dans le navigateur…"
                     try { Updater.openInBrowser(ctx, u) }
-                    catch (_: Exception) { updateStatus = "Couldn't open the download. Please try again." }
+                    catch (_: Exception) { updateStatus = "Impossible d'ouvrir le téléchargement. Réessayez." }
                 } else {
                     updateStatus = when {
-                        message.contains("checksum", ignoreCase = true) -> "Verification failed. The downloaded file was removed; please try again."
-                        message.contains("timed out", ignoreCase = true) -> "Download timed out. Please try again."
-                        message.contains("cancelled", ignoreCase = true) -> "Download cancelled. Please try again."
+                        message.contains("checksum", ignoreCase = true) -> "Échec de la vérification. Le fichier téléchargé a été supprimé ; réessayez."
+                        message.contains("timed out", ignoreCase = true) -> "Le téléchargement a expiré. Réessayez."
+                        message.contains("cancelled", ignoreCase = true) -> "Téléchargement annulé. Réessayez."
                         message.isNotBlank() -> message.take(140)
-                        else -> "Update failed. Please try again."
+                        else -> "Échec de la mise à jour. Réessayez."
                     }
                 }
             } finally { updateBusy = false }
@@ -1474,12 +1476,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      */
     fun downloadRegion(r: PackRegion) {
         if (packBusy) return
-        packBusy = true; packStatus = "Checking the ${r.name} pack…"
+        packBusy = true; packStatus = "Vérification du pack ${r.name}…"
         scope.launch {
             val ok = withContext(Dispatchers.IO) { PackRegions.available(r) }
             when (ok) {
-                false -> { packBusy = false; packStatus = "The ${r.name} pack isn't available yet. It appears here once it has been built."; return@launch }
-                null -> { packBusy = false; packStatus = "Couldn't reach the download. Check the connection and try again."; return@launch }
+                false -> { packBusy = false; packStatus = "Le pack ${r.name} n'est pas encore disponible. Il apparaîtra ici une fois créé."; return@launch }
+                null -> { packBusy = false; packStatus = "Téléchargement injoignable. Vérifiez la connexion et réessayez."; return@launch }
                 true -> {}
             }
             packBusy = false
@@ -1537,9 +1539,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (!online()) {
                 val local = offlineMatches(q, near)
                 results = local
-                if (local.isEmpty()) toast(if (OfflinePlaces.installed(ctx) || OfflineRouter.hasPlaces(ctx) || OfflineRouter.hasAddresses(ctx)) "No signal, and nothing saved or downloaded matches" else "No signal. Download the offline pack or place names in Settings > Offline maps to search with no signal", 4500)
-                if (NetHealth.clockLooksWrong()) toast("The head unit's date and time look wrong. Set them right in its settings: until then, maps, search and routes can't connect even with signal.", 8000)
-                else toast("No signal: showing saved places and offline towns", 3000)
+                if (local.isEmpty()) toast(if (OfflinePlaces.installed(ctx) || OfflineRouter.hasPlaces(ctx) || OfflineRouter.hasAddresses(ctx)) "Pas de réseau, et rien d'enregistré ou de téléchargé ne correspond" else "Pas de réseau. Téléchargez le pack hors ligne ou les noms de lieux in Settings > Offline maps to search with no signal", 4500)
+                if (NetHealth.clockLooksWrong()) toast("La date et l'heure de l'autoradio semblent fausses. Corrigez-les dans ses réglages : sinon carte, recherche et itinéraires ne peuvent pas se connecter, même avec du réseau.", 8000)
+                else toast("Pas de réseau : lieux enregistrés et villes hors ligne affichés", 3000)
                 return@launch
             }
             // the online search and the saved / downloaded places run at the same time, and their results are merged
@@ -1554,8 +1556,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             val merged = rankResults(q, near, net ?: emptyList(), local)
             results = merged
-            if (merged.isEmpty()) toast(if (net == null) "Search failed: weak or no signal" else "No matches. Try adding a town or postcode.", 3500)
-            else if (net == null) toast("Weak signal: showing saved places and offline towns", 3500)
+            if (merged.isEmpty()) toast(if (net == null) "Échec de la recherche : réseau faible ou absent" else "Aucun résultat. Essayez d'ajouter une ville ou un code postal.", 3500)
+            else if (net == null) toast("Réseau faible : lieux enregistrés et villes hors ligne affichés", 3500)
         }
     }
 
@@ -1596,7 +1598,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             places.setSlot(slot, p)
             pendingSave = null
             results = emptyList()
-            toast("${if (slot == "home") "Home" else "Work"} saved: ${p.name}", 3500)
+            toast("${if (slot == "home") "Domicile" else "Travail"} enregistré : ${p.name}", 3500)
         } else startRoute(p)
     }
 
@@ -1637,7 +1639,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             String.format(java.util.Locale.US, "&vehicleEngineType=electric&constantSpeedConsumptionInkWhPerHundredkm=50,%.1f:90,%.1f:130,%.1f&currentChargeInkWh=%.1f&maxChargeInkWh=%.1f",
                 k * 0.7, k, k * 1.45, now, batt)
         } else ""
-        // tolls avoided only in chosen countries (when "Avoid toll roads" itself is off)
+        // tolls avoided only in chosen countries (when "Éviter les péages" itself is off)
         MapboxRest.tollCountries = if (prefs.b(PreferenceKeys.AVOID_TOLL, false)) emptySet()
             else prefs.s(PreferenceKeys.AVOID_TOLL_COUNTRIES, "").split(',').map { it.trim().uppercase() }.filter { it.length == 2 }.toSet()
     }
@@ -1646,9 +1648,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         syncRoutePrefs(fix?.pos ?: map.center(), to.pos)
         resume = null
         if (!keepVia) via = emptyList()
-        if (!hasOnline && !OfflineRouter.installed(ctx)) { toast("To plan routes, add a free TomTom key or Mapbox token in Settings > Keys & accounts, or download the offline pack", 7000); return }
+        if (!hasOnline && !OfflineRouter.installed(ctx)) { toast("Pour calculer des itinéraires, ajoutez une clé TomTom ou un jeton Mapbox gratuits dans Réglages > Clés et comptes, ou téléchargez le pack hors ligne", 7000); return }
         val from = fix?.pos ?: map.center() ?: return
-        if (fix == null) toast("No GPS fix yet: routing from the map centre. Use the demo drive to simulate.", 5000)
+        if (fix == null) toast("Pas encore de position GPS : itinéraire depuis le centre de la carte. Utilisez la démo pour simuler.", 5000)
         busy = true
         scope.launch {
             try {
@@ -1664,13 +1666,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 }
                 if (rs.isEmpty()) throw IllegalStateException("No route found")
                 shortRoute = usedOffline && OfflineRouter.endsShort
-                if (shortRoute) toast("Your downloaded map ends before ${to.name}: the route goes to the edge of it for now, and the rest is planned as soon as there's signal", 8000)
-                else if (usedOffline) toast("Offline route: no traffic or live data", 4000)
-                if (rs[0].steps.isEmpty()) toast(if (provider == "mapbox") "Mapbox returned no turn instructions for this route" else "This key returned no turn instructions. Check it has TomTom Routing API access", 6000)
-                if (departInMin > 0 && !usedOffline && !departApplied) toast("Departure time not supported here: showing live traffic", 4000)
+                if (shortRoute) toast("Votre carte téléchargée s'arrête avant ${to.name} : l'itinéraire va jusqu'à sa limite pour l'instant, la suite sera calculée dès qu'il y aura du réseau", 8000)
+                else if (usedOffline) toast("Itinéraire hors ligne : ni trafic ni données en direct", 4000)
+                if (rs[0].steps.isEmpty()) toast(if (provider == "mapbox") "Mapbox n'a renvoyé aucune instruction pour cet itinéraire" else "Cette clé n'a renvoyé aucune instruction. Vérifiez qu'elle a accès à l'API TomTom Routing", 6000)
+                if (departInMin > 0 && !usedOffline && !departApplied) toast("Heure de départ non prise en charge ici : trafic en direct affiché", 4000)
                 departMin = departInMin
                 departAtMs = if (!usedOffline && departApplied) departMs else 0L
-                if (to.name != "Dropped pin") places.addRecent(to)
+                if (to.name != "Repère posé") places.addRecent(to)
                 if (!keepVia) habits.record(to)
                 loadRain(to, rs[0].time)
                 loadRouteWeather(rs[0])
@@ -1680,7 +1682,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 clearNearby()
                 results = emptyList()
                 stopSim()
-                if (TomTomRest.avoidDropped && !usedOffline) toast("Couldn't find a way round the areas you're avoiding, so the route goes through them", 5000)
+                if (TomTomRest.avoidDropped && !usedOffline) toast("Impossible de contourner les zones à éviter, l'itinéraire les traverse", 5000)
                 dest = to; routes = rs; active = 0
                 prediction = null; predictionAt = 0L
                 updateRouteZones()
@@ -1705,9 +1707,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             } catch (e: Exception) {
                 val m = e.message ?: ""
                 if (m.contains("signal")) {
-                    toast("No signal: this route will start by itself as soon as there is a connection", 6000)
+                    toast("Pas de réseau : cet itinéraire démarrera tout seul dès qu'il y aura une connexion", 6000)
                     if (waitingFor !== to) waitForSignal(to, departInMin, keepVia)
-                } else toast("Route failed: $m", 6000)
+                } else toast("Échec du calcul d'itinéraire : $m", 6000)
             } finally { busy = false }
         }
     }
@@ -1725,7 +1727,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** A name for the map strip of the current route: "Southampton → Bristol" style, from where you are to the destination. */
     fun offlineRouteName(): String {
         val to = dest?.name?.takeIf { it.isNotBlank() } ?: "destination"
-        val from = onRoad.takeIf { it.isNotBlank() } ?: "here"
+        val from = onRoad.takeIf { it.isNotBlank() } ?: "ici"
         return "$from → $to"
     }
 
@@ -1733,7 +1735,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (!previewing) return
         map.stopFly()
         previewing = false
-        // where this trip started, for "Route back" when you arrive
+        // where this trip started, for "Itinéraire retour" when you arrive
         tripFrom = fix?.pos
         // the other screen (phone or car) follows onto the same trip
         dest?.let { d -> try { RouteSync.started(this, d, via) } catch (e: Exception) { } }
@@ -1746,12 +1748,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         try { route?.let { r -> MapboxOffline.autoSaveRoute(ctx, prefs, offlineRouteName(), r.pts, onWifi()) } } catch (e: Throwable) { }
         routeWx.firstOrNull { it.code in 51..67 || it.code in 80..82 || it.code in 95..99 || it.code in 71..77 || it.code in 85..86 || it.rain >= 70 }?.let {
             val snow = it.code in 71..77 || it.code in 85..86
-            raiseAlert("rain", (if (snow) "Snow" else "Rain") + " expected in about ${it.minutes} min on your route", 6000)
-            speak((if (snow) "Snow" else "Rain") + " expected in about ${it.minutes} minutes on your route", true)
+            raiseAlert("rain", (if (snow) "Neige" else "Pluie") + " prévue dans environ ${it.minutes} min sur votre trajet", 6000)
+            speak((if (snow) "Neige" else "Pluie") + " prévue dans environ ${it.minutes} minutes sur votre trajet", true)
         }
         val f = fix
         if (f != null) onPosition(f, true)
-        else { updateGuidance(0.0); toast("No GPS fix yet. Use the play button for a demo drive.", 5000) }
+        else { updateGuidance(0.0); toast("Pas encore de position GPS. Utilisez le bouton lecture pour une démo.", 5000) }
         cardsForStartAlts()
     }
 
@@ -1762,7 +1764,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     fun cycleRoute() {
-        if (routes.size < 2) { toast("No alternative routes. Switch on 'Alternatives' first."); return }
+        if (routes.size < 2) { toast("Pas d'itinéraire alternatif. Activez d'abord « Alternatives »."); return }
         active = (active + 1) % routes.size
         said.clear(); lastIdx = 0
         drawRoutes()
@@ -1771,7 +1773,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun toggleAlternatives() {
         alternatives = !alternatives
-        toast(if (alternatives) "Alternative routes on" else "Alternative routes off", 2500)
+        toast(if (alternatives) "Itinéraires alternatifs activés" else "Itinéraires alternatifs désactivés", 2500)
         val d = dest
         if (d != null) startRoute(d, 0, true)
     }
@@ -1801,7 +1803,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         lastReroute = System.currentTimeMillis()
         rerouting = true
         syncRoutePrefs(fix?.pos, d.pos); faster = null
-        toast("Rerouting…", 2500)
+        toast("Recalcul…", 2500)
         scope.launch {
             var err: String? = null
             try {
@@ -1826,7 +1828,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 }
             } finally { rerouting = false; lastReroute = System.currentTimeMillis() }
             // it keeps trying on its own while you are still off the route, so this is only a heads-up
-            if (err != null) toast(if (err.contains("signal")) "Rerouting: weak signal, still trying…" + NetHealth.clockHint() else "Reroute failed ($err), trying again…", 3500)
+            if (err != null) toast(if (err.contains("signal")) "Recalcul : réseau faible, nouvel essai…" + NetHealth.clockHint() else "Échec du recalcul ($err), nouvel essai…", 3500)
         }
     }
 
@@ -1874,7 +1876,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         zoomOffset = if (resetZoom) 0.0 else savedFreeZoom()
         if (route == null && resetZoom) rememberFreeZoom()
         val f = fix
-        if (f != null) onPosition(f, true) else toast("No GPS fix yet")
+        if (f != null) onPosition(f, true) else toast("Pas encore de position GPS")
     }
 
     private var recentreToken = 0
@@ -1994,7 +1996,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     /**
-     * Shows a looked-up limit. A guess from the road type is only shown when "Show estimated limits" is on (a blank sign is better
+     * Shows a looked-up limit. A guess from the road type is only shown when "Afficher les limitations estimées" is on (a blank sign is better
      * than a confidently wrong one). A change only shows straight away when the road was matched closely; otherwise it has to be
      * seen twice, so passing a side road at a junction doesn't flash its limit.
      */
@@ -2135,7 +2137,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         cameraDist = if (best != null) bestD.toInt() else null
         if (best != null) {
             if (camAlerted.size > 100) camAlerted.clear()
-            if (camAlerted.add(best)) { chime(android.media.ToneGenerator.TONE_PROP_PROMPT); raiseAlert("camera", "Speed camera ahead"); speak("Speed camera ahead", true) }
+            if (camAlerted.add(best)) { chime(android.media.ToneGenerator.TONE_PROP_PROMPT); raiseAlert("camera", "Radar devant"); speak("Radar devant", true) }
         }
     }
 
@@ -2157,8 +2159,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (tripMoveSec >= breakNext && prefs.b(PreferenceKeys.BREAKREMIND, true)) {
                 val hrs = breakNext / 3600
                 breakNext += 7200
-                raiseAlert("break", "You have been driving for $hrs hours. Time for a break?", 8000)
-                speak("You have been driving for $hrs hours. Consider taking a break.", true)
+                raiseAlert("break", "Vous roulez depuis $hrs heures. Une pause ?", 8000)
+                speak("Vous roulez depuis $hrs heures. Pensez à faire une pause.", true)
                 if (route == null) loadNearby("fuel", false)
             }
         } else if (p.speed > 3.0) {
@@ -2182,12 +2184,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Finds [q] and starts routing there (used for calendar appointments). */
     fun routeToText(q: String, then: () -> Unit) {
-        if (!online()) { toast("No signal to search for that", 4000); return }
+        if (!online()) { toast("Pas de réseau pour cette recherche", 4000); return }
         scope.launch {
             try {
                 val p = withContext(Dispatchers.IO) { netGeocode(countryCode(), q, fix?.pos ?: map.center()) }.firstOrNull()
-                if (p == null) toast("Could not find \"$q\"", 3500) else { then(); startRoute(p) }
-            } catch (e: Exception) { toast("Search failed: ${e.message}", 4000) }
+                if (p == null) toast("Introuvable : « $q »", 3500) else { then(); startRoute(p) }
+            } catch (e: Exception) { toast("Échec de la recherche : ${e.message}", 4000) }
         }
     }
 
@@ -2223,7 +2225,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     fun addBestStop(kind: String) { loadNearby(kind, false, pickBest = true) }
 
     fun loadNearby(kind: String, nearDest: Boolean, pickBest: Boolean = false) {
-        val centre = (if (nearDest) dest?.pos else null) ?: fix?.pos ?: map.center() ?: run { toast("No position yet"); return }
+        val centre = (if (nearDest) dest?.pos else null) ?: fix?.pos ?: map.center() ?: run { toast("Pas encore de position"); return }
         val origin = fix?.pos ?: centre
         val rt = route
         val alongRoute = rt != null && !nearDest && kind != "parking"
@@ -2322,18 +2324,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     } else Overpass.nearby(kind, centre, radius).map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
                 }
                 val list = kotlinx.coroutines.withTimeoutOrNull(30_000L) { work.await() }
-                if (list == null) { work.cancel(); toast("Search took too long. Check the signal and try again.", 4000); clearNearby(); return@launch }
+                if (list == null) { work.cancel(); toast("La recherche a pris trop de temps. Vérifiez le réseau et réessayez.", 4000); clearNearby(); return@launch }
                 if (pickBest) {
                     val ahead = list.filter { it.ahead || route == null }
                     val best = if (ahead.any { it.price != null }) ahead.filter { it.price != null && it.detourMin in 0..10 }.minByOrNull { (it.price ?: 999.0) + it.detourMin }
                         else ahead.filter { it.detourMin >= 0 }.minByOrNull { it.detourMin * 1000.0 + it.dist / 100.0 } ?: ahead.minByOrNull { it.dist }
                     nearbyBusy = false
-                    if (best == null) { toast("Nothing found along the route ahead", 3000); clearNearby() }
+                    if (best == null) { toast("Rien trouvé sur l'itinéraire devant", 3000); clearNearby() }
                     else { clearNearby(); addStop(best.place) }
                     return@launch
                 }
                 nearby = sortNearby(list).take(15)
-                if (nearby.isEmpty()) toast(if (alongRoute) "Nothing found along the route ahead" else "Nothing found nearby", 3000)
+                if (nearby.isEmpty()) toast(if (alongRoute) "Rien trouvé sur l'itinéraire devant" else "Rien trouvé à proximité", 3000)
             } catch (e: Exception) { toast(searchFailText(e), 4500) }
             finally { nearbyBusy = false }
         }
@@ -2358,19 +2360,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         zoomOffset = 0.0
         rememberFreeZoom()
         fix?.let { onPosition(it, true) }
-        toast("This is now your default zoom. Change or reset it in Settings > Map look", 4500)
+        toast("C'est maintenant votre zoom par défaut. Modifiez-le ou réinitialisez-le dans Réglages > Aspect de la carte", 4500)
     }
 
     /** Phone: sends [p] to the paired head unit, which offers to start it (next time it's on, within 12 hours). */
     fun sendToCar(p: Place) {
         val code = prefs.s(PreferenceKeys.LINK_CODE, "")
-        if (code.isBlank()) { toast("Pair with your car first: Settings > Places & trips", 4000); return }
+        if (code.isBlank()) { toast("Associez d'abord votre voiture : Réglages > Lieux et trajets", 4000); return }
         scope.launch {
             try {
                 withContext(Dispatchers.IO) { CarLink.send(code, p) }
-                toast("Sent to your car: ${p.name}", 3500)
+                toast("Envoyé à votre voiture : ${p.name}", 3500)
                 if (previewing) endRoute()
-            } catch (e: Exception) { toast("Couldn't send it: " + (e.message ?: "no signal"), 4500) }
+            } catch (e: Exception) { toast("Envoi impossible : " + (e.message ?: "pas de réseau"), 4500) }
         }
     }
 
@@ -2386,18 +2388,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         NetHealth.note(e)
         val m = (e.message ?: "").lowercase()
         return when {
-            m.contains("no signal") || m.contains("unable to resolve") || m.contains("failed to connect") -> "No signal, so the search couldn't run. Try again in a moment." + NetHealth.clockHint()
+            m.contains("no signal") || m.contains("unable to resolve") || m.contains("failed to connect") -> "Pas de réseau, la recherche n'a pas pu se faire. Réessayez dans un instant." + NetHealth.clockHint()
             m.contains("certificate") || m.contains("ssl") || m.contains("handshake") || m.contains("chain validation") ->
-                "Couldn't make a secure connection. Check the head unit's date and time are right, then try again."
+                "Connexion sécurisée impossible. Vérifiez la date et l'heure de l'autoradio, puis réessayez."
             m.contains("429") || m.contains("502") || m.contains("503") || m.contains("504") || m.contains("busy") || m.contains("timeout") || m.contains("timed out") ->
-                "The free map servers are busy right now. Try again in a minute." + (if (!hasMapbox) " Add a Mapbox key in Settings > Keys & accounts for more reliable searches." else "")
-            m.contains("mapbox") -> e.message ?: "Search failed"
-            else -> "Search failed. Try again in a moment."
+                "Les serveurs de cartes gratuits sont saturés. Réessayez dans une minute." + (if (!hasMapbox) " Ajoutez une clé Mapbox dans Réglages > Clés et comptes pour des recherches plus fiables." else "")
+            m.contains("mapbox") -> e.message ?: "Échec de la recherche"
+            else -> "Échec de la recherche. Réessayez dans un instant."
         }
     }
 
     private fun priceExtra(p: FuelFinder.Price?, motorway: Boolean): String =
-        listOfNotNull(p?.let { FuelFinder.ageText(it.updated).let { a -> if (a.isNotBlank()) "updated $a" else null } }, if (motorway) "Motorway services" else null).joinToString(" · ")
+        listOfNotNull(p?.let { FuelFinder.ageText(it.updated).let { a -> if (a.isNotBlank()) "mis à jour $a" else null } }, if (motorway) "Aire d'autoroute" else null).joinToString(" · ")
 
     /** Rough extra minutes to call somewhere [off] metres from the route: there and back at town speed, plus a minute. */
     private fun detour(off: Double): Int = Math.round((2.0 * off / 11.0 + 60.0) / 60.0).toInt()
@@ -2412,7 +2414,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         externalTick++
         val p = t.pos
         if (p != null) {
-            val pl = Place(t.name, "Shared from another app", p)
+            val pl = Place(t.name, "Partagé depuis une autre appli", p)
             startRoute(pl)
             try { RouteSync.offerToCar(this, pl) } catch (e: Exception) { }
         }
@@ -3058,8 +3060,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     private fun incidentLabel(i: Incident): String = when (i.cat) {
-        "roadWorks" -> "Roadworks"; "roadClosed" -> "Road closed"; "accident" -> "Accident"
-        "jam" -> "Traffic jam"; "laneClosed" -> "Lane closed"; "danger" -> "Hazard"
+        "roadWorks" -> "Travaux"; "roadClosed" -> "Route fermée"; "accident" -> "Accident"
+        "jam" -> "Bouchon"; "laneClosed" -> "Voie fermée"; "danger" -> "Danger"
         else -> i.text.ifBlank { "Incident" }
     }
 
@@ -3082,7 +3084,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (name == null || !prefs.b(PreferenceKeys.CAMERA_WARNINGS, true) || !prefs.b(PreferenceKeys.CAMBANOBEY, true)) { if (name == null) banNoted = ""; return }
         if (banNoted == cc) return
         banNoted = cc
-        toast("Speed camera alerts are off in $name, where they aren't allowed. You can change this in Settings > Alerts.", 7000)
+        toast("Les alertes radar sont désactivées en $name, où elles sont interdites. Modifiable dans Réglages > Alertes.", 7000)
     }
 
     /** False when the camera is known to check only the other direction (or a road crossing yours), judged against [heading]. */
@@ -3226,7 +3228,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** How long each kind of report lasts, its map icon, and what is said when you come up to it. */
     private fun reportLife(k: String) = when (k) { "hazard" -> 3_600_000L; "accident", "breakdown" -> 2 * 3_600_000L; "mobilecam" -> 4 * 3_600_000L; else -> 3 * 3_600_000L }
     private fun reportIcon(k: String) = when (k) { "accident" -> 4; "hazard" -> 5; "breakdown" -> 6; "mobilecam" -> 7; else -> 3 }
-    fun reportName(k: String) = when (k) { "accident" -> "Accident"; "hazard" -> "Hazard"; "breakdown" -> "Broken-down vehicle"; "mobilecam" -> "Mobile speed camera"; else -> "Police" }
+    fun reportName(k: String) = when (k) { "accident" -> "Accident"; "hazard" -> "Danger"; "breakdown" -> "Véhicule en panne"; "mobilecam" -> "Radar mobile"; else -> "Police" }
 
     /** Reports still in force (older police-only reports are read too). */
     fun reportsActive(): List<Report> {
@@ -3248,18 +3250,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun report(kind: String) {
         val p = fix?.pos
-        if (p == null) { toast("Waiting for GPS", 2500); return }
+        if (p == null) { toast("En attente du GPS", 2500); return }
         val keep = reportsActive().takeLast(29)
         val list = keep + Report(kind, p, System.currentTimeMillis())
         prefs.put(PreferenceKeys.REPORTS, list.joinToString(";") { "${it.kind},${it.pos.lat},${it.pos.lon},${it.t}" })
         prefs.put(PreferenceKeys.POLICEREP, "")
-        toast("${reportName(kind)} report saved here", 3000)
+        toast("Signalement enregistré ici : ${reportName(kind)}", 3000)
         pushHazards(hzProgress)
     }
 
     fun reportPolice() = report("police")
 
-    /** Electric car with "Show petrol stations too" off: the Fuel button gives way to Charging (and Toilets fills the gap). */
+    /** Electric car with "Afficher aussi les stations-service" off: the Fuel button gives way to Charging (and Toilets fills the gap). */
     val hideFuel: Boolean get() = prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV" && !prefs.b(PreferenceKeys.EV_SHOW_FUEL, false)
 
     /** What the driver's display shows (Android Auto's instrument cluster): where your arrow is, the way the map faces, the route. */
@@ -3294,7 +3296,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
-    fun clearReports() { prefs.put(PreferenceKeys.REPORTS, ""); prefs.put(PreferenceKeys.POLICEREP, ""); pushHazards(hzProgress); toast("Reports cleared", 2000) }
+    fun clearReports() { prefs.put(PreferenceKeys.REPORTS, ""); prefs.put(PreferenceKeys.POLICEREP, ""); pushHazards(hzProgress); toast("Signalements effacés", 2000) }
 
     /** Refreshes the map icons when reports change or expire, and warns when one is just ahead. */
     private fun checkPolice(p: Fix) {
@@ -3309,8 +3311,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val diff = abs(((Geo.bearing(p.pos, r.pos) - p.heading + 540.0) % 360.0) - 180.0)
             if (diff < 50 && policeAlerted.add(r.t)) {
                 chime(android.media.ToneGenerator.TONE_PROP_PROMPT)
-                raiseAlert(if (r.kind == "mobilecam") "camera" else "report", "${reportName(r.kind)} reported ahead")
-                speak("${reportName(r.kind)} reported ahead", true)
+                raiseAlert(if (r.kind == "mobilecam") "camera" else "report", "${reportName(r.kind)} signalé devant")
+                speak("${reportName(r.kind)} signalé devant", true)
             }
         }
     }
@@ -3379,9 +3381,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         incidentAhead = IncidentAhead(next.third, d, next.first.delaySec)
         if (d < 8000 && incAlerted.add(next.first.id)) {
             val mins = next.first.delaySec / 60
-            val extra = if (mins >= 2) ", about $mins minutes delay" else ""
-            raiseAlert("incident", "${next.third} ahead, ${Geo.fmtDist(d, imperial)}$extra", 7000)
-            speak("${next.third} ahead in ${Geo.spoken(d, imperial)}$extra", true)
+            val extra = if (mins >= 2) ", environ $mins minutes de retard" else ""
+            raiseAlert("incident", "${next.third} devant, ${Geo.fmtDist(d, imperial)}$extra", 7000)
+            speak("${next.third} dans ${Geo.spoken(d, imperial)}$extra", true)
         }
     }
 
@@ -3450,14 +3452,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     liveAlts = list
                     map.setLiveAlts(list.map { it.line() }, list.map { it.bubble }, list.map { it.diffMin }, list.map { it.traffic })
                     val best = list.minByOrNull { it.diffMin }
-                    if (best != null && best.diffMin <= -3 && liveSaid.add(best.diffMin / 2)) speak("A faster route is available, saving ${-best.diffMin} minutes. Tap it on the map to switch.", true)
+                    if (best != null && best.diffMin <= -3 && liveSaid.add(best.diffMin / 2)) speak("Un itinéraire plus rapide est disponible, ${-best.diffMin} minutes de gagnées. Touchez-le sur la carte pour en changer.", true)
                     return@launch
                 }
                 val best = rs.filter { it !== same && overlap(it) < 0.8 }.minByOrNull { it.time } ?: return@launch
                 val saved = ((same.time - best.time) / 60.0).toInt()
                 if (saved >= 3 && best.time < same.time * 0.95) {
                     faster = FasterRoute(best, saved)
-                    speak("A faster route is available, saving $saved minutes", true)
+                    speak("Un itinéraire plus rapide est disponible, $saved minutes de gagnées", true)
                     val shown = faster
                     delay(25_000)
                     if (faster === shown) { faster = null; lastFasterCheck = System.currentTimeMillis() + 300_000L }
@@ -3525,7 +3527,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0
         faster = null
         drawRoutes()
-        toast("Switched to the faster route", 2500)
+        toast("Passage à l'itinéraire plus rapide", 2500)
     }
 
     fun dismissFaster() { faster = null; lastFasterCheck = System.currentTimeMillis() + 300_000L }
@@ -3560,7 +3562,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         lastFasterCheck = System.currentTimeMillis()
         drawRoutes()
         updateRouteZones()
-        toast(if (a.diffMin < 0) "Switched: about ${-a.diffMin} min quicker" else if (a.diffMin > 0) "Switched: about ${a.diffMin} min longer" else "Switched route", 3000)
+        toast(if (a.diffMin < 0) "Itinéraire changé : environ ${-a.diffMin} min de moins" else if (a.diffMin > 0) "Itinéraire changé : environ ${a.diffMin} min de plus" else "Itinéraire changé", 3000)
         fix?.let { onPosition(it, true) }
         // the way you were going stays on the map as an alternative, with its card (the other way round: slower becomes faster)
         if (old != null && old !== a.route && prefs.b(PreferenceKeys.LIVE_ALTERNATIVES, true)) {
@@ -3640,7 +3642,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val frac = if (r.len > 0) rem / r.len else 0.0
         if (!light) {
             try { checkIncidents(r, progress) } catch (e: Exception) { }
-            fix?.let { f -> if (via.isNotEmpty() && Geo.dist(f.pos, via[0].pos) < 80) { toast("Stop reached: ${via[0].name}", 3000); via = via.drop(1) } }
+            fix?.let { f -> if (via.isNotEmpty() && Geo.dist(f.pos, via[0].pos) < 80) { toast("Étape atteinte : ${via[0].name}", 3000); via = via.drop(1) } }
             if (via.isEmpty()) checkParking(r, rem)
             curProgress = progress
             // time left = what the rest of the road takes with no traffic + the delays that are still ahead of you
@@ -3669,7 +3671,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val arriving = cur.maneuver.uppercase().startsWith("ARRIVE")
             val side = if (arriving) arrivalSide(r, cur.maneuver) else ""
             val nxt = ins.getOrNull(k + 1)
-            val street = if (arriving) (dest?.name ?: "Destination") + (if (side.isNotEmpty()) " · on the $side" else "") else cur.street.ifBlank { Geo.maneuverText(cur.maneuver, cur.roundExit).replaceFirstChar { it.uppercase() } }
+            val street = if (arriving) (dest?.name ?: "Destination") + (if (side.isNotEmpty()) " · ${Geo.sideFr(side)}" else "") else cur.street.ifBlank { Geo.maneuverText(cur.maneuver, cur.roundExit).replaceFirstChar { it.uppercase() } }
             // several lane sections can touch one junction (the road often widens on the approach): use the one with the most lanes, then the nearest to the junction
             // on motorways and dual carriageways the lanes are looked at (and shown, and spoken) much earlier, as there's further to move over
             val fastRoad = cur.exitNo.isNotBlank() || (fix?.let { f -> try { map.roadAt(f.pos, f.heading)?.cls } catch (e: Throwable) { null } }?.let { it.startsWith("motorway") || it.startsWith("trunk") } == true)
@@ -3680,8 +3682,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // the early lane call on fast roads, about a mile out (once per junction): "In about a mile, move into the left two lanes"
             if (fastRoad && laneAdv != null && d in 1250.0..1850.0 && earlyLaneFor != cur.off) {
                 earlyLaneFor = cur.off
-                val dist = if (imperial) "In about a mile" else "In about one and a half kilometres"
-                speak(dist + ", " + laneAdv.replaceFirst("Use the", "move into the").replaceFirst("Use lane", "move into lane"))
+                val dist = if (imperial) "Dans environ un mile" else "Dans environ un kilomètre et demi"
+                speak(dist + ", " + laneAdv.replaceFirst("Utilisez", "placez-vous sur"))
             }
             updateLaneMarks(r, cur, laneSec, d)
             updateTurnArrow(r, k, cur, d, arriving)
@@ -3698,7 +3700,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             val newTurn = TurnInfo(
                 d, street, cur.maneuver, if (thenOn) nxt?.maneuver else null,
-                if (thenOn && nxt != null) "Then " + Geo.maneuverText(nxt.maneuver, nxt.roundExit) + (if (nxt.street.isNotBlank()) " onto ${nxt.street}" else "") else "",
+                if (thenOn && nxt != null) "Puis " + Geo.maneuverText(nxt.maneuver, nxt.roundExit) + (if (nxt.street.isNotBlank()) " sur ${nxt.street}" else "") else "",
                 laneSec, Geo.stepTag(cur), laneAdv, cur.roundExit, cur.sign,
                 exitNo = cur.exitNo, rbIn = cur.rbIn, rbOut = cur.rbOut, rbExits = cur.rbExits, thenGap = if (thenOn) gap else 0.0, thenExit = if (thenOn) (nxt?.roundExit ?: 0) else 0,
             )
@@ -3707,7 +3709,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (ot == null || ot.maneuver != newTurn.maneuver || ot.street != newTurn.street || ot.lanes !== newTurn.lanes || ot.thenText != newTurn.thenText || abs(ot.dist - newTurn.dist) >= 3.0 || newTurn.dist < 30.0) turn = newTurn
             val word = Geo.maneuverText(cur.maneuver, cur.roundExit)
             // (Settings > Sound > Say road names off: just the direction, "In 200 metres, turn left")
-            val tail = if (arriving || cur.street.isBlank() || !prefs.b(PreferenceKeys.VOICE_ROADS, true)) "" else " onto ${cur.street}"
+            val tail = if (arriving || cur.street.isBlank() || !prefs.b(PreferenceKeys.VOICE_ROADS, true)) "" else " sur ${cur.street}"
             val lane = if (laneAdv != null) ". $laneAdv" else ""
             if (onRoad.isNotBlank()) tripRoads.add(onRoad)
             // smarter voice: junction numbers, sign destinations and the next move when it follows quickly
@@ -3717,11 +3719,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val fFrom = if (familiar) 330.0 else 520.0
             // a heads-up well ahead on fast roads, then the main call-out, then the final one at the junction
             if (!familiar && d <= 1700 && d > 1100 && p0Speed() > 18.0 && !arriving && said.add("${k}e"))
-                speak("In ${Geo.spoken(d, imperial)}, $phrase")
+                speak("Dans ${Geo.spoken(d, imperial)}, $phrase")
             if (d <= fFrom && d > 200 && said.add("${k}f"))
-                speak(if (arriving) "In ${Geo.spoken(d, imperial)}, you will arrive" + (if (side.isNotEmpty()) ". Your destination is on the $side" else "") else "In ${Geo.spoken(d, imperial)}, $phrase$lane")
+                speak(if (arriving) "Dans ${Geo.spoken(d, imperial)}, vous serez arrivé" + (if (side.isNotEmpty()) ". Votre destination est ${Geo.sideFr(side)}" else "") else "Dans ${Geo.spoken(d, imperial)}, $phrase$lane")
             if (d <= 120 && said.add("${k}n"))
-                speak(if (arriving) (if (side.isNotEmpty()) "Your destination is on the $side" else "You have arrived") else phrase.replaceFirstChar { it.uppercase() })
+                speak(if (arriving) (if (side.isNotEmpty()) "Votre destination est ${Geo.sideFr(side)}" else "Vous êtes arrivé") else phrase.replaceFirstChar { it.uppercase() })
         }
         // a route that stops short of the destination (the downloaded map ran out): at its end, plan on from here instead
         if (shortRoute && rem < 200) {
@@ -3736,7 +3738,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // arrived: at the end of the route and really there (not just level with the end of the route on another road)
         val atEnd = rem < 25 && fix.let { f -> f == null || Geo.dist(f.pos, dest?.pos ?: r.pts.last()) < 120.0 || Geo.dist(f.pos, r.pts.last()) < 120.0 }
         if (atEnd && said.add("end")) {
-            toast("You have arrived", 5000)
+            toast("Vous êtes arrivé", 5000)
             if (navStartMs > 0) {
                 val secsT = (System.currentTimeMillis() - navStartMs) / 1000.0
                 val dd = max(0.0, tripDist - navStartDist)
@@ -3780,7 +3782,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     } catch (e: Exception) { null }
                 }
                 if (url != null) map.setRadar(url)
-                else if (!warned) { warned = true; toast("Rain radar isn't available right now (needs signal)", 3500) }
+                else if (!warned) { warned = true; toast("Radar de pluie indisponible pour l'instant (réseau nécessaire)", 3500) }
                 delay(if (url != null) 600_000L else 120_000L)
             }
         }
@@ -3808,8 +3810,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val pl = cand
         if (pl == null || Geo.dist(here, pl.pos) < 800) { prediction = null; return }
         val title = when {
-            home != null && Geo.dist(home.pos, pl.pos) < 150 -> "Home"
-            work != null && Geo.dist(work.pos, pl.pos) < 150 -> "Work"
+            home != null && Geo.dist(home.pos, pl.pos) < 150 -> "Domicile"
+            work != null && Geo.dist(work.pos, pl.pos) < 150 -> "Travail"
             else -> pl.name
         }
         scope.launch {
@@ -3826,7 +3828,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (route != null) return@launch
             val mins = r?.let { Math.round(it.time / 60.0).toInt() } ?: -1
             val dmin = if (live && r != null) Math.round(r.delay / 60.0).toInt() else 0
-            val note = when { r == null || !live -> ""; dmin >= 10 -> "heavy traffic"; dmin >= 3 -> "some traffic"; else -> "light traffic" }
+            val note = when { r == null || !live -> ""; dmin >= 10 -> "trafic dense"; dmin >= 3 -> "un peu de trafic"; else -> "trafic fluide" }
             prediction = Prediction(pl, title, mins, dmin, note)
         }
     }
@@ -3908,18 +3910,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val reach = 3219.0
         val out = ArrayList<RadarItem>()
         fun add(kind: String, off: Double, label: String) { val d = off - progress; if (d in -5.0..reach) out += RadarItem(kind, max(0.0, d), label) }
-        if (camerasOn()) for ((_, off) in routeCams) add("camera", off, "Speed camera")
+        if (camerasOn()) for ((_, off) in routeCams) add("camera", off, "Radar")
         for ((inc, off, _) in incMatches) add(if (inc.cat.contains("work", true)) "works" else "incident", off, incidentLabel(inc))
         if (prefs.b(PreferenceKeys.AVGZONES, true)) for (a in pl.avg) add("avg", a.start, "Average speed check")
         val school = RouteExtras.schoolTime(System.currentTimeMillis())
         for (h in pl.hz) when (h.poi.kind) {
             "bump" -> if (prefs.b(PreferenceKeys.BUMPS, true)) add("bump", h.off, "Speed bump")
             "school" -> if (prefs.b(PreferenceKeys.SCHOOLS, true)) add("school", h.off, if (school) "School · school run" else "School")
-            "crossing" -> add("crossing", h.off, "Crossing")
+            "crossing" -> add("crossing", h.off, "Passage piéton")
             "rail" -> if (prefs.b(PreferenceKeys.RAILFORD, true)) add("rail", h.off, "Level crossing")
             "ford" -> if (prefs.b(PreferenceKeys.RAILFORD, true)) add("ford", h.off, "Ford")
         }
-        for ((o, dir) in bends) add("bend", o, if (dir < 0) "Bend left" else "Bend right")
+        for ((o, dir) in bends) add("bend", o, if (dir < 0) "Virage à gauche" else "Virage à droite")
         out.sortBy { it.dist }
         val shown = out.take(14)
         var sig = shown.size
@@ -3943,24 +3945,24 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val m = cur.maneuver.uppercase()
         val exitLike = m.contains("EXIT") || m.contains("KEEP") || m.contains("BEAR") || m.contains("RAMP")
         // "junction 9" is how it's said in the UK and Ireland; everywhere else it's "exit 9"
-        val jWord = if (detectedCountry.ifBlank { "GB" }.uppercase() in setOf("GB", "IE", "IM", "JE", "GG")) "junction" else "exit"
-        var main = if (cur.exitNo.isNotBlank() && exitLike) "take $jWord ${cur.exitNo}" else word
+        val jWord = if (detectedCountry.ifBlank { "GB" }.uppercase() in setOf("GB", "IE", "IM", "JE", "GG")) "l'échangeur" else "la sortie"
+        var main = if (cur.exitNo.isNotBlank() && exitLike) "prenez $jWord ${cur.exitNo}" else word
         val dests = signDests(cur.sign)
         val refs = signRefs(cur.sign)
         main += when {
             !sayRoads -> tail
-            dests.isNotEmpty() -> (if (refs.isNotEmpty() && cur.exitNo.isNotBlank()) " for the ${refs[0]}" else "") + " towards " + dests.take(2).joinToString(" and ")
-            refs.isNotEmpty() && exitLike -> " for the ${refs[0]}"
+            dests.isNotEmpty() -> (if (refs.isNotEmpty() && cur.exitNo.isNotBlank()) " vers la ${refs[0]}" else "") + " direction " + dests.take(2).joinToString(" et ")
+            refs.isNotEmpty() && exitLike -> " vers la ${refs[0]}"
             else -> tail
         }
         if (nxt != null && nxt.off - cur.off in 1.0..450.0 && !nxt.maneuver.uppercase().startsWith("ARRIVE")) {
             val target = signRefs(nxt.sign).firstOrNull() ?: nxt.street
             val forWhat = when {
                 target.isBlank() || !sayRoads -> ""
-                refRx.matches(target) -> " for the $target"
-                else -> " onto $target"
+                refRx.matches(target) -> " vers la $target"
+                else -> " sur $target"
             }
-            main += ", then " + Geo.maneuverText(nxt.maneuver, nxt.roundExit) + forWhat
+            main += ", puis " + Geo.maneuverText(nxt.maneuver, nxt.roundExit) + forWhat
         }
         return main
     }
@@ -4035,7 +4037,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // back to the map, where the planned card shows the leave time
             if (previewing) endRoute()
             val f = Clock.format()
-            toast(if (leave <= System.currentTimeMillis()) "Leave now to arrive by ${f.format(Date(arriveMs))}" else "Leave by ${f.format(Date(leave))} to arrive by ${f.format(Date(arriveMs))}. I'll remind you.", 5000)
+            toast(if (leave <= System.currentTimeMillis()) "Partez maintenant pour arriver à ${f.format(Date(arriveMs))}" else "Partez avant ${f.format(Date(leave))} pour arriver à ${f.format(Date(arriveMs))}. Je vous le rappellerai.", 5000)
             watchPlanned()
         }
     }
@@ -4071,14 +4073,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val busyDriving = route != null && !previewing
                 if (!busyDriving && !warned10 && now >= cur.leaveBy - 10 * 60_000L && now < cur.leaveBy) {
                     warned10 = true
-                    raiseAlert("plan", "Leave in 10 minutes for ${cur.dest.name}", 7000)
-                    speak("Leave in about 10 minutes for ${cur.dest.name}", true)
+                    raiseAlert("plan", "Départ dans 10 minutes pour ${cur.dest.name}", 7000)
+                    speak("Départ dans environ 10 minutes pour ${cur.dest.name}", true)
                 }
                 if (!busyDriving && !warned0 && now >= cur.leaveBy) {
                     warned0 = true
                     chime(android.media.ToneGenerator.TONE_PROP_PROMPT)
-                    raiseAlert("plan", "Time to leave for ${cur.dest.name}", 8000)
-                    speak("It's time to leave for ${cur.dest.name}", true)
+                    raiseAlert("plan", "C'est l'heure de partir pour ${cur.dest.name}", 8000)
+                    speak("C'est l'heure de partir pour ${cur.dest.name}", true)
                 }
                 delay(30_000)
             }
@@ -4141,7 +4143,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         out.filter { it.detourMin >= 0 }.minByOrNull { it.detourMin }?.let { n ->
                             val arr = Math.round(startPct - n.dist / 1000.0 * cons / batt * 100.0).toInt().coerceAtLeast(0)
                             val mins = Math.round((80 - arr).coerceAtLeast(10) / 100.0 * batt / 50.0 * 60.0).toInt()
-                            n.copy(extra = "arrive about $arr% · charge to 80%, about $mins min")
+                            n.copy(extra = "arrivée vers $arr % · charge à 80 %, environ $mins min")
                         }
                     } catch (e: Exception) { null }
                 }
@@ -4162,7 +4164,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                             val pr = RouteExtras.project(r, s0.pos, 1200.0) ?: continue
                             if (pr.first !in a..b) continue
                             val price = FuelFinder.priceOf(ctx, s0.id, fuel) ?: continue
-                            out += Nearby(Place(s0.name, s0.brand, s0.pos), pr.first, if (s0.motorway) "Motorway services" else "", price.pence, detour(pr.second), true)
+                            out += Nearby(Place(s0.name, s0.brand, s0.pos), pr.first, if (s0.motorway) "Aire d'autoroute" else "", price.pence, detour(pr.second), true)
                         }
                     }
                     // outside the UK: the country's own price service, at a few points along the middle of the trip
@@ -4210,8 +4212,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (wrongCount >= 3 && now - wrongAt > 60_000L) {
             wrongAt = now
             chime(android.media.ToneGenerator.TONE_PROP_BEEP2)
-            raiseAlert("wrongway", "Wrong way! This is a one-way road", 7000)
-            speak("Warning. You may be going the wrong way on a one-way road.", true)
+            raiseAlert("wrongway", "Contresens ! Cette route est à sens unique", 7000)
+            speak("Attention. Vous roulez peut-être à contresens sur une route à sens unique.", true)
         }
     }
 
@@ -4226,57 +4228,61 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val f = Clock.format()
         fun say(s: String) { toast(s, 3500); speak(s, true) }
         // places you have saved
-        if (Regex("^(go|take me|navigate|drive|directions|head)( back)?( to)? ?home$").matches(t) || t == "home") {
-            val h = places.slot("home"); if (h != null) { say("Going home"); startRoute(h) } else say("Home isn't set yet"); return ""
+        if (Regex("^(go|take me|navigate|drive|directions|head)( back)?( to)? ?home$").matches(t) || t == "home" ||
+            Regex("^((on )?rentre|rentrer|ramène-moi|ramene-moi|emmène-moi|emmene-moi|va|aller|direction|guide-moi)?( à| a| au)? ?(la )?(maison|domicile)$").matches(t)) {
+            val h = places.slot("home"); if (h != null) { say("Direction la maison"); startRoute(h) } else say("Le domicile n'est pas encore défini"); return ""
         }
-        if (Regex("^(go|take me|navigate|drive|directions|head)( to)? ?work$").matches(t) || t == "work") {
-            val w = places.slot("work"); if (w != null) { say("Going to work"); startRoute(w) } else say("Work isn't set yet"); return ""
+        if (Regex("^(go|take me|navigate|drive|directions|head)( to)? ?work$").matches(t) || t == "work" ||
+            Regex("^(emmène-moi|emmene-moi|va|aller|direction|guide-moi)?( à| a| au)? ?(mon )?(travail|boulot|bureau)$").matches(t)) {
+            val w = places.slot("work"); if (w != null) { say("Direction le travail"); startRoute(w) } else say("Le travail n'est pas encore défini"); return ""
         }
         // reports
-        if (t.startsWith("report")) {
-            val k = when { has("police", "cop") -> "police"; has("accident", "crash") -> "accident"; has("breakdown", "broken") -> "breakdown"; has("camera") -> "mobilecam"; else -> "hazard" }
+        if (t.startsWith("report") || t.startsWith("signale")) {
+            val k = when { has("police", "cop", "flic", "gendarme") -> "police"; has("accident", "crash") -> "accident"; has("breakdown", "broken", "panne") -> "breakdown"; has("camera", "caméra", "radar") -> "mobilecam"; else -> "hazard" }
             report(k); return ""
         }
         // finding things
         val kind = when {
-            has("fuel", "petrol", "diesel", "filling station", "gas station") -> "fuel"
-            has("charg") -> "charging"; has("toilet", "loo", "bathroom") -> "toilets"; has("coffee", "cafe", "café") -> "coffee"
-            has("food", "eat", "restaurant", "hungry") -> "food"; has("services", "rest stop", "rest area") -> "services"
-            has("parking", "car park", "somewhere to park") -> "parking"; else -> null
+            has("fuel", "petrol", "diesel", "filling station", "gas station", "carburant", "essence", "gazole", "gasoil", "station-service", "station service", "pompe") -> "fuel"
+            has("charg", "borne") -> "charging"; has("toilet", "loo", "bathroom", "wc") -> "toilets"; has("coffee", "cafe", "café") -> "coffee"
+            has("food", "eat", "restaurant", "hungry", "manger", "faim") -> "food"; has("services", "rest stop", "rest area", "aire de repos", "aire de service", "aire d'autoroute") -> "services"
+            has("parking", "car park", "somewhere to park", "me garer", "se garer", "stationner") -> "parking"; else -> null
         }
-        if (kind != null && has("find", "nearest", "look for", "search for", "where", "any ", "need", "show", "cheap", "stop for", "add a stop", "add stop", "near")) {
-            nearbySort = if (has("cheap")) "cheap" else "near"
-            if (has("stop") && route != null) stopMode = true
-            loadNearby(kind, has("destination", "when i get there"))
-            say("Looking for " + Overpass.kindLabel(kind).lowercase() + if (route != null) " along your route" else " nearby")
+        if (kind != null && has("find", "nearest", "look for", "search for", "where", "any ", "need", "show", "cheap", "stop for", "add a stop", "add stop", "near",
+                "trouve", "cherche", "plus proche", "où", "besoin", "montre", "moins cher", "pas cher", "étape", "arrêt", "proche", "il y a")) {
+            nearbySort = if (has("cheap", "moins cher", "pas cher")) "cheap" else "near"
+            if (has("stop", "étape", "arrêt") && route != null) stopMode = true
+            loadNearby(kind, has("destination", "when i get there", "à l'arrivée", "en arrivant"))
+            say("Recherche : " + Overpass.kindLabel(kind).lowercase() + if (route != null) " sur votre itinéraire" else " à proximité")
             return ""
         }
         // route preferences
-        if (has("avoid toll")) { prefs.put(PreferenceKeys.AVOID_TOLL, true); say("Avoiding toll roads"); dest?.let { startRoute(it, departMin, true, startNow = route != null && !previewing) }; return "" }
-        if (has("avoid motorway")) { prefs.put(PreferenceKeys.AVOID_MOTORWAY, true); say("Avoiding motorways"); dest?.let { startRoute(it, departMin, true, startNow = route != null && !previewing) }; return "" }
-        if (has("avoid this road", "avoid the road")) { if (route != null) { say("Looking for a way round"); avoidRoadAhead() } else say("There's no route to change"); return "" }
+        if (has("avoid toll", "éviter les péages", "évite les péages", "sans péage")) { prefs.put(PreferenceKeys.AVOID_TOLL, true); say("Péages évités"); dest?.let { startRoute(it, departMin, true, startNow = route != null && !previewing) }; return "" }
+        if (has("avoid motorway", "éviter les autoroutes", "évite les autoroutes", "sans autoroute")) { prefs.put(PreferenceKeys.AVOID_MOTORWAY, true); say("Autoroutes évitées"); dest?.let { startRoute(it, departMin, true, startNow = route != null && !previewing) }; return "" }
+        if (has("avoid this road", "avoid the road", "éviter cette route", "évite cette route")) { if (route != null) { say("Recherche d'un contournement"); avoidRoadAhead() } else say("Il n'y a pas d'itinéraire à modifier"); return "" }
         // trip info
-        if (has("eta", "arrive", "how long", "how far", "time left", "when will i")) {
+        if (has("eta", "arrive", "how long", "how far", "time left", "when will i", "combien de temps", "à quelle heure", "a quelle heure", "temps restant", "reste-t-il", "reste il")) {
             val e = eta
-            if (e == null) say("There's no route at the moment")
-            else say("You'll arrive at ${e.arrive}, in ${Geo.fmtDur(e.secs)}. ${Geo.spoken(e.dist, imperial)} to go." + if (e.delayMin >= 1) " ${e.delayMin} minutes of traffic." else "")
+            if (e == null) say("Aucun itinéraire pour le moment")
+            else say("Arrivée à ${e.arrive}, dans ${Geo.fmtDur(e.secs)}. Encore ${Geo.spoken(e.dist, imperial)}." + if (e.delayMin >= 1) " ${e.delayMin} minutes de bouchons." else "")
             return ""
         }
-        if (has("share")) return "share"
+        if (has("share", "partage")) return "share"
         // sound
-        if (has("unmute", "sound on", "turn the voice on", "voice on")) { prefs.put(PreferenceKeys.SOUND_MODE, 0); say("Voice guidance on"); return "" }
-        if (has("alerts only")) { prefs.put(PreferenceKeys.SOUND_MODE, 1); say("Alerts only"); return "" }
-        if (has("mute", "be quiet", "quiet", "stop talking", "silence", "voice off")) { say("Voice off"); prefs.put(PreferenceKeys.SOUND_MODE, 2); return "" }
+        if (has("unmute", "sound on", "turn the voice on", "voice on", "active la voix", "remets la voix", "rallume la voix", "remets le son")) { prefs.put(PreferenceKeys.SOUND_MODE, 0); say("Guidage vocal activé"); return "" }
+        if (has("alerts only", "alertes seulement", "alertes uniquement", "seulement les alertes")) { prefs.put(PreferenceKeys.SOUND_MODE, 1); say("Alertes seulement"); return "" }
+        if (has("mute", "be quiet", "quiet", "stop talking", "silence", "voice off", "coupe la voix", "coupe le son", "tais-toi", "tais toi", "désactive la voix")) { say("Voix coupée"); prefs.put(PreferenceKeys.SOUND_MODE, 2); return "" }
         // the map
-        if (has("stop navigation", "end route", "end navigation", "cancel route", "cancel navigation", "stop the route", "stop route")) { endRoute(); say("Route ended"); return "" }
-        if (has("overview", "show the route", "show route", "whole route")) { overview(); return "" }
-        if (has("zoom in")) { zoom(1.0); return "" }
-        if (has("zoom out")) { zoom(-1.0); return "" }
-        if (has("north up")) { if (!northUp) toggleNorthUp(); return "" }
-        if (t == "3d" || t == "2d" || has("three d", "two d")) { if ((t.contains("3") || t.contains("three")) != tilt3d) toggleTilt(); return "" }
-        if (has("what time")) { say("It's ${f.format(Date())}"); return "" }
+        if (has("stop navigation", "end route", "end navigation", "cancel route", "cancel navigation", "stop the route", "stop route",
+                "arrête la navigation", "arrête le guidage", "annule l'itinéraire", "annuler l'itinéraire", "fin du guidage", "arrête l'itinéraire", "stop guidage")) { endRoute(); say("Itinéraire terminé"); return "" }
+        if (has("overview", "show the route", "show route", "whole route", "vue d'ensemble", "montre l'itinéraire", "tout l'itinéraire")) { overview(); return "" }
+        if (has("zoom in", "zoome", "agrandis", "zoom avant")) { zoom(1.0); return "" }
+        if (has("zoom out", "dézoome", "dezoome", "zoom arrière")) { zoom(-1.0); return "" }
+        if (has("north up", "nord en haut")) { if (!northUp) toggleNorthUp(); return "" }
+        if (t == "3d" || t == "2d" || has("three d", "two d", "trois d", "deux d")) { if ((t.contains("3") || t.contains("three") || t.contains("trois")) != tilt3d) toggleTilt(); return "" }
+        if (has("what time", "quelle heure")) { say("Il est ${f.format(Date())}"); return "" }
         // "take me to …", "navigate to …"
-        Regex("^(?:go to|take me to|navigate to|drive to|directions to|head to|find|search for|show me)\\s+(.+)$").find(t)?.let { return "search:" + it.groupValues[1] }
+        Regex("^(?:go to|take me to|navigate to|drive to|directions to|head to|find|search for|show me|emmène-moi à|emmene-moi a|emmène-moi au|va à|aller à|direction|guide-moi vers|navigue vers|itinéraire vers|cherche|trouve|montre-moi)\\s+(.+)$").find(t)?.let { return "search:" + it.groupValues[1] }
         return null
     }
 
@@ -4361,7 +4367,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                             val st = FuelFinder.stations(ctx)
                             for (s in svc) {
                                 val near = st.filter { Geo.dist(it.pos, s.poi.pos) < 700.0 }.minByOrNull { Geo.dist(it.pos, s.poi.pos) } ?: continue
-                                FuelFinder.priceOf(ctx, near.id, fuel)?.let { fuelText[s.poi] = String.format(java.util.Locale.UK, "%s %.1fp", if (fuel == "B7") "Diesel" else fuel, it.pence) }
+                                FuelFinder.priceOf(ctx, near.id, fuel)?.let { fuelText[s.poi] = String.format(java.util.Locale.UK, "%s %.1fp", if (fuel == "B7") "Gazole" else fuel, it.pence) }
                             }
                         }
                         val hzOn = hz.mapNotNull { poi -> RouteExtras.project(r, poi.pos, if (poi.kind == "school") 90.0 else if (poi.kind == "crossing") 12.0 else 15.0)?.let { (o, side) -> PoiOnRoute(poi, o, side) } }
@@ -4392,8 +4398,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     avgIn = cur; avgEnterAt = now; avgEnterProg = progress; avgOverWarned = false
                     if (avgAlerted.add(cur.def.id)) {
                         chime(android.media.ToneGenerator.TONE_PROP_PROMPT)
-                        raiseAlert("avg", "Average speed check for ${Geo.fmtDist(cur.end - progress, imperial)}", 6000)
-                        speak("Average speed check for ${Geo.spoken(cur.end - progress, imperial)}", true)
+                        raiseAlert("avg", "Radar tronçon sur ${Geo.fmtDist(cur.end - progress, imperial)}", 6000)
+                        speak("Radar tronçon sur ${Geo.spoken(cur.end - progress, imperial)}", true)
                     }
                 }
                 val secs = (now - avgEnterAt) / 1000.0
@@ -4403,7 +4409,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (over && !avgOverWarned) {
                     avgOverWarned = true
                     chime(android.media.ToneGenerator.TONE_PROP_BEEP2)
-                    speak("Your average speed is over the limit", true)
+                    speak("Votre vitesse moyenne dépasse la limite", true)
                 } else if (!over && lim != null && avg < lim - 0.5) avgOverWarned = false
                 // the speed you can do for the rest of the zone and still average under the limit: the time the whole zone may take
                 // at the limit, less the time used so far, spread over what's left
@@ -4414,13 +4420,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 } else null
                 avgInfo = AvgInfo(avg, lim, left, over, false, 0.0, safe)
             } else {
-                if (avgIn != null) { avgIn = null; toast("End of average speed check", 2500) }
+                if (avgIn != null) { avgIn = null; toast("Fin du radar tronçon", 2500) }
                 val next = pl.avg.filter { it.start > progress && it.start - progress < 1200.0 }.minByOrNull { it.start }
                 avgInfo = next?.let { AvgInfo(0.0, it.def.limit ?: speedLimit, it.end - it.start, false, true, it.start - progress) }
                 if (next != null && next.start - progress < 500.0 && avgAlerted.add(next.def.id)) {
                     chime(android.media.ToneGenerator.TONE_PROP_PROMPT)
-                    raiseAlert("avg", "Average speed check ahead, ${Geo.fmtDist(next.end - next.start, imperial)} long", 6000)
-                    speak("Average speed check ahead", true)
+                    raiseAlert("avg", "Radar tronçon devant, sur ${Geo.fmtDist(next.end - next.start, imperial)}", 6000)
+                    speak("Radar tronçon devant", true)
                 }
             }
         } else if (avgInfo != null) avgInfo = null
@@ -4432,18 +4438,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val code = weather?.code
             val lim = speedLimit
             val what = when (code) {
-                45, 48 -> "Fog"
-                63, 65, 81, 82 -> "Heavy rain"
-                in 95..99 -> "Thunderstorms"
-                56, 57, 66, 67 -> "Freezing rain"
-                in 71..77, 85, 86 -> "Snow"
+                45, 48 -> "Brouillard"
+                63, 65, 81, 82 -> "Forte pluie"
+                in 95..99 -> "Orages"
+                56, 57, 66, 67 -> "Pluie verglaçante"
+                in 71..77, 85, 86 -> "Neige"
                 else -> null
             }
             val nowMs = System.currentTimeMillis()
             if (prefs.b(PreferenceKeys.WXADVICE, true) && what != null && lim != null && sp > lim * 0.85 && nowMs - adviceAt > 600_000L) {
                 adviceAt = nowMs
                 val k = if (imperial) 2.23694 else 3.6
-                advice = "$what · take it steady, ${Math.round(lim * k / 5.0) * 5} limit"
+                advice = "$what · roulez prudemment, ${Math.round(lim * k / 5.0) * 5} max"
                 scope.launch { delay(9000); advice = null }
             }
         }
@@ -4456,7 +4462,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val key = "stop${Math.round(h.poi.pos.lat * 1e5)},${Math.round(h.poi.pos.lon * 1e5)}"
             if (!hzAlerted.add(key)) continue
             chime(android.media.ToneGenerator.TONE_PROP_ACK)
-            raiseAlert("stop", "Stop sign ahead", 4000)
+            raiseAlert("stop", "Stop devant", 4000)
         }
 
         // level crossings and fords just ahead: a sign and a spoken warning
@@ -4466,8 +4472,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (ahead < 0.0 || ahead > max(220.0, sp * 9.0)) continue
             val key = "${h.poi.kind}${Math.round(h.poi.pos.lat * 1e5)},${Math.round(h.poi.pos.lon * 1e5)}"
             if (!hzAlerted.add(key)) continue
-            if (h.poi.kind == "rail") { raiseAlert("rail", "Level crossing ahead", 6000); speak("Level crossing ahead", true) }
-            else { raiseAlert("ford", "Ford ahead: the road may be flooded", 7000); speak("Ford ahead. The road may be flooded", true) }
+            if (h.poi.kind == "rail") { raiseAlert("rail", "Passage à niveau devant", 6000); speak("Passage à niveau devant", true) }
+            else { raiseAlert("ford", "Gué devant : la route peut être inondée", 7000); speak("Gué devant. La route peut être inondée", true) }
         }
 
         // speed bumps and schools just ahead
@@ -4479,11 +4485,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (prefs.b(PreferenceKeys.BUMPS, true) && sp > 6.7 && ahead < max(70.0, sp * 6.0) && now - lastBumpAt > 25_000L && hzAlerted.add(key)) {
                     lastBumpAt = now
                     chime(android.media.ToneGenerator.TONE_PROP_ACK)
-                    raiseAlert("bump", "Speed bump ahead", 3500)
+                    raiseAlert("bump", "Ralentisseur devant", 3500)
                 }
             } else if (prefs.b(PreferenceKeys.SCHOOLS, true) && ahead < 300.0 && RouteExtras.schoolTime(now) && hzAlerted.add(key)) {
-                raiseAlert("school", "School ahead: ${h.poi.name}", 5000)
-                speak("School ahead", true)
+                raiseAlert("school", "École devant : ${h.poi.name}", 5000)
+                speak("École devant", true)
             }
         }
 
@@ -4491,8 +4497,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (prefs.b(PreferenceKeys.ZONEWARN, true)) for ((name, off) in pl.zones) {
             val ahead = off - progress
             if (ahead in -50.0..1500.0 && zoneAlerted.add(name)) {
-                raiseAlert("zone", if (ahead <= 0) "You are in $name" else "Entering $name in ${Geo.fmtDist(ahead, imperial)}", 7000)
-                speak(if (ahead <= 0) "You are in $name. A charge may apply." else "You are about to enter $name. A charge may apply.", true)
+                raiseAlert("zone", if (ahead <= 0) "Vous êtes dans : $name" else "Entrée dans $name dans ${Geo.fmtDist(ahead, imperial)}", 7000)
+                speak(if (ahead <= 0) "Vous êtes dans $name. Un péage peut s'appliquer." else "Vous allez entrer dans $name. Un péage peut s'appliquer.", true)
             }
         }
 
@@ -4584,7 +4590,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     // ---- demo drive ----
     fun cycleSim() {
         val r = route
-        if (r == null) { toast("Pick a destination first, then start the demo drive"); return }
+        if (r == null) { toast("Choisissez d'abord une destination, puis lancez la démo"); return }
         when (simMode) {
             0 -> { simMode = 1; startSim(r) }
             1 -> simMode = 4

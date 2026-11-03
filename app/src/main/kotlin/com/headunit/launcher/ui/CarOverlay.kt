@@ -87,7 +87,7 @@ fun CarOverlay(engine: NavEngine, area: State<android.graphics.Rect?>, dark: Sta
     val textScale = engine.prefs.i(PreferenceKeys.CAR_TEXT_SIZE, 100).coerceIn(75, 150) / 100f
     CompositionLocalProvider(LocalDensity provides Density(base.density * scale.value * user, base.fontScale * textScale)) {
         // dark cards when the car says it's night, or when the map's light has gone dim (dusk) before the car switches
-        // (not with "Always day" picked in the car's settings)
+        // (not with "Toujours jour" picked in the car's settings)
         VwTheme(dark.value || (engine.mapLooksDark && engine.prefs.s(PreferenceKeys.CARTHEME, "car") == "car")) { CarScreen(engine, area.value, actions, onCover) }
     }
 }
@@ -218,13 +218,13 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
             .onSizeChanged { turnH = it.height }.onGloballyPositioned { if (topShown) report(0, it.boundsInRoot()) }) {
             // the turn card, with the junction sign or roundabout diagram under it and any advice for the conditions, as on the head unit
             Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
-                // (the car's "Navigation arrow size" is the arrow on the map, as on the phone: CarNav applies it there)
+                // (the car's "Taille de la flèche de navigation" is the arrow on the map, as on the phone: CarNav applies it there)
                 CompositionLocalProvider(LocalDensity provides Density(dens.density * cardScale, dens.fontScale)) {
                     ImmTurnCard(engine, t, compact = compact, car = true, slim = slimHold[0],
                         footer = {
                             if (incShown || camShown) Column(Modifier.fillMaxWidth().background(GmGreenDeep).padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (incShown && inc != null) CarHazardLine("incident", inc.label, Geo.fmtDist(inc.dist, engine.imperial))
-                                if (camShown && cam != null) CarHazardLine("camera", "Speed camera", Geo.fmtDist(cam.toDouble(), engine.imperial))
+                                if (camShown && cam != null) CarHazardLine("camera", "Radar", Geo.fmtDist(cam.toDouble(), engine.imperial))
                             }
                         })
                 }
@@ -244,7 +244,7 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
                 // so it has a tap area of its own
                 Row(Modifier.weight(1f).fillMaxHeight().carTap("search") { actions.search() }.padding(start = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Search, null, tint = c.sub)
-                    Text("Where to?", color = c.sub, fontSize = 18.sp, modifier = Modifier.padding(start = 12.dp))
+                    Text("Où allez-vous ?", color = c.sub, fontSize = 18.sp, modifier = Modifier.padding(start = 12.dp))
                 }
                 val open = engine.prefs.b(PreferenceKeys.QUICKLIST, true)
                 Box(Modifier.padding(end = 4.dp).size(44.dp).clip(androidx.compose.foundation.shape.CircleShape).carTap("fold") { engine.prefs.put(PreferenceKeys.QUICKLIST, !open) }, contentAlignment = Alignment.Center) {
@@ -269,7 +269,7 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
                 // (only when there's no turn card to carry them)
                 if (!showTurn && (incShown || camShown)) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (incShown && inc != null) HazardBadge("incident", inc.label, Geo.fmtDist(inc.dist, engine.imperial))
-                    if (camShown && cam != null) HazardBadge("camera", "Speed camera", Geo.fmtDist(cam.toDouble(), engine.imperial))
+                    if (camShown && cam != null) HazardBadge("camera", "Radar", Geo.fmtDist(cam.toDouble(), engine.imperial))
                 }
             }
             if (portrait) {
@@ -366,11 +366,11 @@ private fun FasterCard(engine: NavEngine, modifier: Modifier) {
             androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Route, null, tint = Good, modifier = Modifier.size(24.dp))
         }
         Column(Modifier.weight(1f, fill = false)) {
-            Text("Faster route found", color = c.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Saves about ${fr.savedMin} min", color = Good, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text("Itinéraire plus rapide trouvé", color = c.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Environ ${fr.savedMin} min de gagnées", color = Good, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
-        Box(Modifier.carTap("faster-yes") { engine.acceptFaster() }) { ImmPill("Switch", {}, filled = true) }
-        Box(Modifier.carTap("faster-no") { engine.dismissFaster() }) { ImmPill("Keep", {}) }
+        Box(Modifier.carTap("faster-yes") { engine.acceptFaster() }) { ImmPill("Changer", {}, filled = true) }
+        Box(Modifier.carTap("faster-no") { engine.dismissFaster() }) { ImmPill("Garder", {}) }
     }
 }
 
@@ -390,7 +390,7 @@ private fun SoundPill(engine: NavEngine) {
                 null, tint = tint, modifier = Modifier.size(18.dp),
             )
         }
-        Text(when (sm) { 0 -> "Sound on"; 1 -> "Alerts only"; else -> "Muted" }, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 8.dp))
+        Text(when (sm) { 0 -> "Son activé"; 1 -> "Alertes seules"; else -> "Muet" }, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 8.dp))
     }
 }
 
@@ -427,10 +427,10 @@ private fun TripCard(engine: NavEngine, fill: Boolean) {
             }
         }
         val stats: @Composable () -> Unit = {
-            CarStat(Geo.fmtDur(e.secs), if (e.delayMin >= 1) "+${e.delayMin} min" else "left", dc)
-            CarStat(e.arrive, "arrive", c.text)
-            CarStat(Geo.fmtDist(e.dist, engine.imperial), "to go", c.text)
-            engine.evArrivalPct()?.let { p -> CarStat("$p%", "battery", if (p < 10) Bad else if (p < 20) Warn else Good) }
+            CarStat(Geo.fmtDur(e.secs), if (e.delayMin >= 1) "+${e.delayMin} min" else "restant", dc)
+            CarStat(e.arrive, "arrivée", c.text)
+            CarStat(Geo.fmtDist(e.dist, engine.imperial), "restants", c.text)
+            engine.evArrivalPct()?.let { p -> CarStat("$p%", "batterie", if (p < 10) Bad else if (p < 20) Warn else Good) }
         }
         if (fill) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 10.dp, top = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { stats() }
@@ -459,7 +459,7 @@ private fun CarStat(value: String, label: String, color: Color) {
 private fun CarHazardLine(kind: String, label: String, dist: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         AlertSign(com.headunit.launcher.AlertInfo(kind, label), 22.dp)
-        Text("$label in $dist", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+        Text("$label dans $dist", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
     }
 }
@@ -507,14 +507,14 @@ private fun CarRoutePreview(engine: NavEngine) {
     val cards: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
         rs.forEachIndexed { i, r ->
             val sel = i == engine.active
-            val label = if (i == fastest) "Fastest" else if (i == shortest) "Shortest" else "Alternative"
+            val label = if (i == fastest) "Le plus rapide" else if (i == shortest) "Le plus court" else "Alternatif"
             Column(Modifier.weight(1f).inset(18.dp, if (sel) c.accent else null).carTap("route-$i") { engine.selectRoute(i) }.padding(horizontal = 12.dp, vertical = 9.dp)) {
                 Text(label.uppercase(), color = if (sel) c.accent else c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1)
                 Text(Geo.fmtDur(r.time), color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                Text("${Geo.fmtDist(r.len, engine.imperial)} · arrive ${fmt.format(java.util.Date(baseMs + (r.time * 1000).toLong()))}", color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${Geo.fmtDist(r.len, engine.imperial)} · arrivée ${fmt.format(java.util.Date(baseMs + (r.time * 1000).toLong()))}", color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val via = viaOf(r)
                 val delayMin = Math.round(r.delay / 60.0).toInt()
-                Text(if (delayMin >= 1) "+$delayMin min traffic" else if (via.isNotEmpty()) "via $via" else "No delays",
+                Text(if (delayMin >= 1) "+$delayMin min de trafic" else if (via.isNotEmpty()) "via $via" else "Aucun retard",
                     color = if (delayMin >= 10) Bad else if (delayMin >= 1) Warn else c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -523,8 +523,8 @@ private fun CarRoutePreview(engine: NavEngine) {
         Box(m.height(72.dp).clip(RoundedCornerShape(36.dp)).background(c.accent.copy(alpha = 0.30f)).carTap("start") { engine.beginNavigation() }, contentAlignment = Alignment.Center) {
             Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(progress.value).background(c.accent))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Start navigation", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                if (autoStart) Text("Starting in ${kotlin.math.ceil((1f - progress.value) * countdownSeconds).toInt()} s", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp) else Text("Tap to start", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                Text("Démarrer le guidage", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                if (autoStart) Text("Départ dans ${kotlin.math.ceil((1f - progress.value) * countdownSeconds).toInt()} s", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp) else Text("Touchez pour démarrer", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
             }
         }
     }
@@ -557,7 +557,7 @@ private fun CarRoutePreview(engine: NavEngine) {
 
 /**
  * Not navigating, under the search bar, as in the app: Home and Work as two tiles with the drive time, five round buttons to find
- * things nearby (they open a list to pick from), then Saved & recent with the first few places ([rows], as many as fit) and "All" for
+ * things nearby (they open a list to pick from), then Saved & recent with the first few places ([rows], as many as fit) and "Tout" for
  * the rest. Every part works by touch on cars that pass taps on.
  */
 @Composable
@@ -569,8 +569,8 @@ private fun CarChips(engine: NavEngine, actions: CarActions, rows: Int) {
     val here = engine.fix?.pos
     @Composable fun tile(id: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, label: String, place: com.headunit.launcher.Place?, mins: Int?, m: Modifier) {
         val sub = when {
-            place == null -> "Tap to set"
-            mins == 0 -> "You're here"
+            place == null -> "Touchez pour définir"
+            mins == 0 -> "Vous y êtes"
             mins != null && mins > 0 -> Geo.fmtDur(mins * 60.0)
             here != null -> Geo.fmtDist(Geo.dist(here, place.pos), engine.imperial)
             else -> place.sub
@@ -581,7 +581,7 @@ private fun CarChips(engine: NavEngine, actions: CarActions, rows: Int) {
                 androidx.compose.material3.Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
             }
             Column(Modifier.padding(start = 10.dp).weight(1f)) {
-                Text(if (place == null) "Set ${label.lowercase()}" else label, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (place == null) "Définir : ${label.lowercase()}" else label, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(sub, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -593,8 +593,8 @@ private fun CarChips(engine: NavEngine, actions: CarActions, rows: Int) {
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            tile("home", androidx.compose.material.icons.Icons.Rounded.Home, Color(0xFF4C8DFF), "Home", home, engine.slotMins["home"], Modifier.weight(1f))
-            tile("work", androidx.compose.material.icons.Icons.Rounded.Work, Color(0xFFF29900), "Work", work, engine.slotMins["work"], Modifier.weight(1f))
+            tile("home", androidx.compose.material.icons.Icons.Rounded.Home, Color(0xFF4C8DFF), "Domicile", home, engine.slotMins["home"], Modifier.weight(1f))
+            tile("work", androidx.compose.material.icons.Icons.Rounded.Work, Color(0xFFF29900), "Travail", work, engine.slotMins["work"], Modifier.weight(1f))
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             // (an electric car: Charging first, and Toilets where Fuel was, unless petrol stations are wanted too)
@@ -617,8 +617,8 @@ private fun CarChips(engine: NavEngine, actions: CarActions, rows: Int) {
         // (folded away with the arrow in the search bar)
         if (engine.prefs.b(PreferenceKeys.QUICKLIST, true)) Column(Modifier.fillMaxWidth().panel(10.dp, RoundedCornerShape(24.dp), c.surface).padding(vertical = 2.dp)) {
             Row(Modifier.fillMaxWidth().carTap("saved") { actions.places() }.padding(start = 16.dp, end = 14.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("SAVED & RECENT", color = c.sub, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f))
-                Text(if (saved.size > rows) "All ${saved.size}" else "Open", color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("ENREGISTRÉS ET RÉCENTS", color = c.sub, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f))
+                Text(if (saved.size > rows) "Tous (${saved.size})" else "Ouvrir", color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
             for ((i, tr) in saved.take(rows).withIndex()) {
                 val (p, fav, label) = tr

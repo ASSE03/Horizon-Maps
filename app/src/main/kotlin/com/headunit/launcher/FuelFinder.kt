@@ -126,7 +126,7 @@ object FuelFinder {
                     val la = loc.optDouble("latitude", Double.NaN); val lo = loc.optDouble("longitude", Double.NaN)
                     if (la.isNaN() || lo.isNaN() || la == 0.0) continue
                     val id = o.optString("node_id"); if (id.isBlank()) continue
-                    val name = clean(o.optString("trading_name").ifBlank { o.optString("brand_name") }.ifBlank { "Fuel station" })
+                    val name = clean(o.optString("trading_name").ifBlank { o.optString("brand_name") }.ifBlank { "Station-service" })
                     sb.append(id).append('\t').append(name).append('\t').append(clean(o.optString("brand_name"))).append('\t')
                         .append(la).append('\t').append(lo).append('\t').append(if (o.optBoolean("is_motorway_service_station", false)) "1" else "0").append('\t')
                         .append(clean(loc.optString("postcode"))).append('\n')
@@ -161,10 +161,10 @@ object FuelFinder {
                 for ((id, m) in cur) for ((t, p) in m) sb.append(id).append('\t').append(t).append('\t').append(p.pence).append('\t').append(clean(p.updated)).append('\n')
                 if (cur.isNotEmpty()) { pf.writeText(sb.toString()); priceCache = null }
             }
-            status = "Prices updated " + Clock.format().format(java.util.Date(pricesFile(ctx).lastModified())) +
+            status = "Prix mis à jour " + Clock.format().format(java.util.Date(pricesFile(ctx).lastModified())) +
                 " · ${stations(ctx).size} stations"
         } catch (e: Exception) {
-            status = "Fuel prices failed: " + (e.message ?: e.javaClass.simpleName).take(160)
+            status = "Échec des prix carburant : " + (e.message ?: e.javaClass.simpleName).take(160)
             throw e
         }
     }
@@ -221,9 +221,9 @@ object FuelFinder {
             f.timeZone = java.util.TimeZone.getTimeZone("UTC")
             val ms = System.currentTimeMillis() - (f.parse(t)?.time ?: return "")
             val h = ms / 3_600_000L
-            if (h < 1) "just now" else if (h < 48) "${h} h ago" else "${h / 24} days ago"
+            if (h < 1) "à l'instant" else if (h < 48) "il y a ${h} h" else "il y a ${h / 24} jours"
         } catch (e: Exception) { "" }
     }
 
-    fun fuelName(fuel: String) = when (fuel) { "E5" -> "Super unleaded"; "B7" -> "Diesel"; "E85" -> "Bioethanol (E85)"; "EV" -> "Electric"; else -> "Unleaded" }
+    fun fuelName(fuel: String) = when (fuel) { "E5" -> "SP98"; "B7" -> "Gazole"; "E85" -> "Superéthanol (E85)"; "EV" -> "Électrique"; else -> "SP95-E10" }
 }

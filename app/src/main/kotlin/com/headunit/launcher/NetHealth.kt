@@ -27,6 +27,6 @@ object NetHealth {
     /** A sentence to add to a "no signal" message when the clock is the likely cause, or "" when it isn't. */
     fun clockHint(): String =
         if (clockLooksWrong() || (tlsFailAt > 0L && System.currentTimeMillis() - tlsFailAt < 15 * 60_000L))
-            " If there is signal, check the head unit's date and time: when they're wrong, secure connections fail and it looks like no signal."
+            " S'il y a du réseau, vérifiez la date et l'heure de l'autoradio : si elles sont fausses, les connexions sécurisées échouent comme s'il n'y avait pas de réseau."
         else ""
 }

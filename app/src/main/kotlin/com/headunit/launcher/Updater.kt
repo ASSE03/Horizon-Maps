@@ -270,7 +270,7 @@ object Updater {
             .setDestinationInExternalFilesDir(ctx, null, name)
         val id = dm.enqueue(req)
         val startedAt = android.os.SystemClock.elapsedRealtime()
-        progress("Downloading…")
+        progress("Téléchargement…")
         try {
           while (true) {
             if (Thread.currentThread().isInterrupted) throw InterruptedException("Update download interrupted")
@@ -289,7 +289,7 @@ object Updater {
                         val uri = dm.getUriForDownloadedFile(id) ?: throw IllegalStateException("Download missing")
                         // the name Android actually saved it under (it can differ from the one asked for)
                         val savedAs = try { cur.getString(cur.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))?.let { Uri.parse(it).lastPathSegment } } catch (e: Exception) { null }
-                        progress("Verifying download…")
+                        progress("Vérification du téléchargement…")
                         val digest = java.security.MessageDigest.getInstance("SHA-256")
                         var bytesRead = 0L
                         ctx.contentResolver.openInputStream(uri)?.use { input ->
@@ -313,16 +313,16 @@ object Updater {
                         // installed with AAEnabler: the checked file goes to Downloads for AAEnabler to install, so the app stays in
                         // Android Auto (installing it here would take it out)
                         if (toDownloads && android.os.Build.VERSION.SDK_INT >= 29) {
-                            progress("Saving to Downloads…")
+                            progress("Enregistrement dans Téléchargements…")
                             saveToDownloads(ctx, uri, name)
                             return
                         }
-                        progress("Opening the installer…")
+                        progress("Ouverture de l'installateur…")
                         val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                         // Explicit ClipData helps the package installer receive the content-URI read grant
                         // consistently across Android versions and installer implementations.
-                        i.clipData = android.content.ClipData.newRawUri("Horizon Nav update", uri)
+                        i.clipData = android.content.ClipData.newRawUri("Mise à jour d'Horizon Nav", uri)
                         ctx.startActivity(i)
                         return
                     }
@@ -331,9 +331,9 @@ object Updater {
                         val percent = (done * 100 / total).coerceIn(0, 100)
                         val doneMb = done / (1024.0 * 1024.0)
                         val totalMb = total / (1024.0 * 1024.0)
-                        progress("Downloading… $percent% (${"%.1f".format(java.util.Locale.UK, doneMb)} / ${"%.1f".format(java.util.Locale.UK, totalMb)} MB)")
+                        progress("Téléchargement… $percent % (${"%.1f".format(java.util.Locale.UK, doneMb)} / ${"%.1f".format(java.util.Locale.UK, totalMb)} Mo)")
                     } else if (done > 0) {
-                        progress("Downloading… ${"%.1f".format(java.util.Locale.UK, done / (1024.0 * 1024.0))} MB")
+                        progress("Téléchargement… ${"%.1f".format(java.util.Locale.UK, done / (1024.0 * 1024.0))} Mo")
                     }
                 }
             }
@@ -350,7 +350,7 @@ object Updater {
     }
 
     /**
-     * Horizon Nav isn't on Google Play, so "installed by Google Play" means a tool like AAEnabler installed it, to get it into
+     * Horizon Nav isn't on Google Play, so "installée par Google Play" means a tool like AAEnabler installed it, to get it into
      * Android Auto. Android Auto drops an app that then updates itself.
      */
     fun installedViaAaTool(ctx: Context): Boolean = try {

@@ -19,7 +19,7 @@ class HabitStore(private val prefs: Prefs) {
     }
 
     fun record(p: Place) {
-        if (p.name == "Dropped pin" || p.name == "My car") return
+        if (p.name == "Repère posé" || p.name == "Ma voiture") return
         val list = (all() + Rec(p.name, p.sub, p.pos.lat, p.pos.lon, System.currentTimeMillis())).takeLast(250)
         val a = JSONArray()
         list.forEach { a.put(JSONObject().put("n", it.name).put("s", it.sub).put("a", it.lat).put("o", it.lon).put("t", it.t)) }
@@ -38,6 +38,6 @@ class HabitStore(private val prefs: Prefs) {
         if (best.size < 3) return null
         val r = best.last()
         val avg = best.map { minutes(it.t) }.average().toInt()
-        return Place(r.name, "Usually around " + Clock.hm(Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, avg / 60); set(Calendar.MINUTE, avg % 60) }.timeInMillis), LL(r.lat, r.lon))
+        return Place(r.name, "En général vers " + Clock.hm(Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, avg / 60); set(Calendar.MINUTE, avg % 60) }.timeInMillis), LL(r.lat, r.lon))
     }
 }

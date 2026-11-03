@@ -67,11 +67,11 @@ import kotlinx.coroutines.delay
 private class SetupStep(val title: String, val sub: String, val icon: ImageVector)
 
 private val setupSteps = listOf(
-    SetupStep("Welcome to Horizon Nav", "A few quick steps and you're ready to drive", Icons.Rounded.Navigation),
-    SetupStep("Map keys", "Mapbox for the map and routes, TomTom for search", Icons.Rounded.VpnKey),
-    SetupStep("Home and work", "One tap to either from the map", Icons.Rounded.Home),
-    SetupStep("Offline pack", "Routes and search with no signal", Icons.Rounded.CloudDownload),
-    SetupStep("Permissions", "Your position and the guidance notification", Icons.Rounded.Shield),
+    SetupStep("Bienvenue dans Horizon Nav", "Quelques étapes rapides et c'est parti", Icons.Rounded.Navigation),
+    SetupStep("Clés de carte", "Mapbox pour la carte et les itinéraires, TomTom pour la recherche", Icons.Rounded.VpnKey),
+    SetupStep("Domicile et travail", "Un seul appui depuis la carte pour y aller", Icons.Rounded.Home),
+    SetupStep("Pack hors ligne", "Itinéraires et recherche sans réseau", Icons.Rounded.CloudDownload),
+    SetupStep("Autorisations", "Votre position et la notification de guidage", Icons.Rounded.Shield),
 )
 
 /** First-run setup: map key, home and work, the offline pack and permissions, one step at a time. Every step can be skipped. */
@@ -100,7 +100,7 @@ private fun SetupBody(prefs: Prefs, engine: NavEngine, onDone: () -> Unit) {
                     Box(Modifier.height(8.dp).width(w).clip(RoundedCornerShape(50)).background(if (i <= step) c.accent else c.tile))
                 }
                 Box(Modifier.weight(1f))
-                if (step < last) Text("Skip setup", color = c.sub, fontSize = 14.sp, modifier = Modifier.clip(RoundedCornerShape(50)).clickable { finish() }.padding(horizontal = 12.dp, vertical = 6.dp))
+                if (step < last) Text("Passer la configuration", color = c.sub, fontSize = 14.sp, modifier = Modifier.clip(RoundedCornerShape(50)).clickable { finish() }.padding(horizontal = 12.dp, vertical = 6.dp))
             }
             androidx.compose.animation.AnimatedContent(
                 targetState = step,
@@ -132,10 +132,10 @@ private fun SetupBody(prefs: Prefs, engine: NavEngine, onDone: () -> Unit) {
                 }
             }
             Row(Modifier.fillMaxWidth().padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (step > 0) SButton("Back") { engine.results = emptyList(); step-- }
+                if (step > 0) SButton("Retour") { engine.results = emptyList(); step-- }
                 Box(Modifier.weight(1f))
-                if (step < last) SButton(if (step == 0) "Get started" else "Next", primary = true) { engine.results = emptyList(); step++ }
-                else SButton("Start driving", primary = true) { finish() }
+                if (step < last) SButton(if (step == 0) "Commencer" else "Suivant", primary = true) { engine.results = emptyList(); step++ }
+                else SButton("En route", primary = true) { finish() }
             }
         }
     }
@@ -153,36 +153,36 @@ private fun SetupPoint(text: String) {
 @Composable
 private fun WelcomeStep() {
     val c = LocalVw.current
-    Text("Horizon Nav is built for the car: big, clear guidance on Mapbox's 3D map, with live traffic, UK speed limits and cameras, and routes and search that keep working with no signal.", color = c.text, fontSize = 16.sp)
-    SetupPoint("Live traffic and faster routes as you drive")
-    SetupPoint("Lane guidance, junction signs and speed warnings")
-    SetupPoint("Offline routes and search for when signal drops")
-    Text("Everything here can be changed later in Settings.", color = c.sub, fontSize = 13.sp)
+    Text("Horizon Nav est faite pour la voiture : un guidage grand et clair sur la carte 3D de Mapbox, avec trafic en direct, limitations de vitesse et radars, et des itinéraires et une recherche qui marchent même sans réseau.", color = c.text, fontSize = 16.sp)
+    SetupPoint("Trafic en direct et itinéraires plus rapides en route")
+    SetupPoint("Guidage par voie, panneaux de direction et alertes de vitesse")
+    SetupPoint("Itinéraires et recherche hors ligne quand le réseau tombe")
+    Text("Tout peut être modifié plus tard dans Réglages.", color = c.sub, fontSize = 13.sp)
 }
 
 @Composable
 private fun KeyStep(prefs: Prefs, engine: NavEngine) {
     val c = LocalVw.current
-    Text("Horizon Nav uses Mapbox for the map, live traffic, search and routes. It needs your own free Mapbox access token, so the map runs on your Mapbox account (it's free for personal use).", color = c.text, fontSize = 15.sp)
-    Text("1. Go to account.mapbox.com and sign up or log in\n2. Open Tokens and copy your Default public token (it starts pk.)\n3. Paste it here", color = c.sub, fontSize = 14.sp)
+    Text("Horizon Nav utilise Mapbox pour la carte, le trafic en direct, la recherche et les itinéraires. Il faut votre propre jeton d'accès Mapbox gratuit : la carte tourne sur votre compte Mapbox (gratuit pour un usage personnel).", color = c.text, fontSize = 15.sp)
+    Text("1. Allez sur account.mapbox.com et créez un compte ou connectez-vous\n2. Ouvrez Tokens et copiez votre « Default public token » (il commence par pk.)\n3. Collez-le ici", color = c.sub, fontSize = 14.sp)
     var k by remember { mutableStateOf(prefs.s(PreferenceKeys.MAPBOX_TOKEN, "")) }
-    SField(k, { k = it; prefs.put(PreferenceKeys.MAPBOX_TOKEN, com.headunit.launcher.MapboxRest.clean(it)) }, placeholder = "Mapbox access token (pk.…)", width = 560.dp, fill = true)
+    SField(k, { k = it; prefs.put(PreferenceKeys.MAPBOX_TOKEN, com.headunit.launcher.MapboxRest.clean(it)) }, placeholder = "Jeton d'accès Mapbox (pk.…)", width = 560.dp, fill = true)
     val t = k.trim()
     when {
-        t.isEmpty() -> Text("Without a token the map stays blank; routes can still come from the offline pack.", color = c.sub, fontSize = 13.sp)
-        t.startsWith("sk.") -> Text("That's a secret token: use the public one (pk.) here.", color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        !com.headunit.launcher.MapboxRest.looksValid(t) -> Text("That doesn't look like a whole token yet: it's a long code starting pk.", color = Warn, fontSize = 13.sp)
-        !com.headunit.launcher.MapboxRest.looksWhole(com.headunit.launcher.MapboxRest.clean(t)) -> Text("Part of that token looks missing or mistyped. Copy it again with the copy button at account.mapbox.com › Tokens.", color = Warn, fontSize = 13.sp)
-        else -> SetupPoint("Token added: the map shows as soon as you finish setup")
+        t.isEmpty() -> Text("Sans jeton la carte reste vide ; les itinéraires peuvent quand même venir du pack hors ligne.", color = c.sub, fontSize = 13.sp)
+        t.startsWith("sk.") -> Text("C'est un jeton secret : utilisez ici le jeton public (pk.).", color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        !com.headunit.launcher.MapboxRest.looksValid(t) -> Text("Ce jeton semble incomplet : c'est un long code qui commence par pk.", color = Warn, fontSize = 13.sp)
+        !com.headunit.launcher.MapboxRest.looksWhole(com.headunit.launcher.MapboxRest.clean(t)) -> Text("Une partie de ce jeton semble manquante ou mal saisie. Recopiez-le avec le bouton de copie sur account.mapbox.com › Tokens.", color = Warn, fontSize = 13.sp)
+        else -> SetupPoint("Jeton ajouté : la carte s'affichera à la fin de la configuration")
     }
     Spacer(Modifier.height(10.dp))
-    Text("TomTom key", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-    Text("Address search uses TomTom, as Horizon Nav always has: it finds house numbers, postcodes and businesses most accurately. TomTom is also the backup for routes and traffic. The key is free.", color = c.text, fontSize = 15.sp)
-    Text("1. Go to developer.tomtom.com and sign up or log in\n2. Open your Dashboard (Keys) and copy your API key\n3. Paste it here", color = c.sub, fontSize = 14.sp)
+    Text("Clé TomTom", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+    Text("La recherche d'adresse utilise TomTom : c'est elle qui trouve le plus précisément numéros de rue, codes postaux et commerces. TomTom sert aussi de secours pour les itinéraires et le trafic. La clé est gratuite.", color = c.text, fontSize = 15.sp)
+    Text("1. Allez sur developer.tomtom.com et créez un compte ou connectez-vous\n2. Ouvrez votre Dashboard (Keys) et copiez votre clé API\n3. Collez-la ici", color = c.sub, fontSize = 14.sp)
     var tk by remember { mutableStateOf(prefs.s(PreferenceKeys.API_KEY, "")) }
-    SField(tk, { tk = it; prefs.setApiKey(it) }, placeholder = "TomTom API key", width = 560.dp, fill = true)
-    if (tk.isBlank()) Text("Without it, search uses Mapbox and OpenStreetMap instead, which miss more house numbers. You can add it later in Settings › Keys & accounts.", color = c.sub, fontSize = 13.sp)
-    else SetupPoint("TomTom key added: search uses TomTom")
+    SField(tk, { tk = it; prefs.setApiKey(it) }, placeholder = "Clé API TomTom", width = 560.dp, fill = true)
+    if (tk.isBlank()) Text("Sans elle, la recherche utilise Mapbox et OpenStreetMap, qui ratent plus de numéros de rue. Vous pourrez l'ajouter plus tard dans Réglages › Clés et comptes.", color = c.sub, fontSize = 13.sp)
+    else SetupPoint("Clé TomTom ajoutée : la recherche utilise TomTom")
 }
 
 @Composable
@@ -195,10 +195,10 @@ private fun HomeWorkStep(engine: NavEngine) {
     @Suppress("UNUSED_VARIABLE") val r = rev
     // where to look: the country you're in (worked out from the GPS) or anywhere
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Search in", color = c.sub, fontSize = 14.sp)
+        Text("Rechercher en", color = c.sub, fontSize = 14.sp)
         Segmented(searchCountryOptions(engine), searchCountryValue(engine.prefs)) { engine.prefs.put(PreferenceKeys.COUNTRY, it); if (q.length >= 3) engine.search(q) }
     }
-    for ((slot, label, icon) in listOf(Triple("home", "Home", Icons.Rounded.Home), Triple("work", "Work", Icons.Rounded.Work))) {
+    for ((slot, label, icon) in listOf(Triple("home", "Domicile", Icons.Rounded.Home), Triple("work", "Travail", Icons.Rounded.Work))) {
         val cur = engine.places.slot(slot)
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(if (which == slot) c.accent.copy(alpha = 0.14f) else c.tile)
@@ -208,12 +208,12 @@ private fun HomeWorkStep(engine: NavEngine) {
             Icon(icon, null, tint = if (cur != null) c.accent else c.sub, modifier = Modifier.size(26.dp))
             Column(Modifier.padding(start = 14.dp).weight(1f)) {
                 Text(label, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Text(cur?.let { it.name + if (it.sub.isNotBlank()) ", " + it.sub else "" } ?: "Not set · tap to search", color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(cur?.let { it.name + if (it.sub.isNotBlank()) ", " + it.sub else "" } ?: "Non défini · touchez pour chercher", color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (cur != null) Icon(Icons.Rounded.Check, null, tint = Good, modifier = Modifier.size(22.dp))
         }
         if (which == slot) {
-            SField(q, { q = it }, placeholder = "Search for your ${label.lowercase()} address or postcode", width = 640.dp, fill = true)
+            SField(q, { q = it }, placeholder = "Cherchez l'adresse ou le code postal (${label.lowercase()})", width = 640.dp, fill = true)
             engine.results.take(5).forEach { p ->
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable {
@@ -239,22 +239,22 @@ private fun PackStep(prefs: Prefs, engine: NavEngine) {
     val region = engine.chosenPack()
     var picking by remember { mutableStateOf(false) }
     val installed = region.id in engine.installedPacks()
-    Text("Download the pack once on Wi-Fi and routes, search, speed limits and cameras keep working with no signal. It's a large download (a few GB), so it's best done at home.", color = c.text, fontSize = 15.sp)
+    Text("Téléchargez le pack une fois en Wi-Fi et itinéraires, recherche, limitations et radars continuent de marcher sans réseau. C'est un gros téléchargement (quelques Go), mieux vaut le faire à la maison.", color = c.text, fontSize = 15.sp)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(region.name, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        SButton("Change area") { picking = true }
+        SButton("Changer de zone") { picking = true }
     }
     if (picking) PackPickerDialog(region, { prefs.put(PreferenceKeys.PACK_REGION, it.id) }, engine.fix?.pos ?: engine.map.center()) { picking = false }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (installed && !engine.packBusy) SetupPoint("Offline pack installed")
-        else SButton(if (engine.packBusy) "Downloading…" else "Download now", primary = true) {
+        if (installed && !engine.packBusy) SetupPoint("Pack hors ligne installé")
+        else SButton(if (engine.packBusy) "Téléchargement…" else "Télécharger maintenant", primary = true) {
             engine.downloadRegion(region)
         }
-        if (!engine.onWifi() && !installed) Text("You're not on Wi-Fi", color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        if (!engine.onWifi() && !installed) Text("Vous n'êtes pas en Wi-Fi", color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
     if (engine.packBusy) LinearProgressIndicator(color = c.accent, trackColor = c.tile, modifier = Modifier.fillMaxWidth())
-    if (engine.packStatus.isNotBlank()) Text(engine.packStatus + if (engine.packBusy) " · it carries on if you continue" else "", color = c.sub, fontSize = 13.sp)
-    Text("You can do this later in Settings › Offline maps.", color = c.sub, fontSize = 13.sp)
+    if (engine.packStatus.isNotBlank()) Text(engine.packStatus + if (engine.packBusy) " · il continue si vous poursuivez" else "", color = c.sub, fontSize = 13.sp)
+    Text("Vous pourrez le faire plus tard dans Réglages › Cartes hors ligne.", color = c.sub, fontSize = 13.sp)
 }
 
 @Composable
@@ -274,11 +274,11 @@ private fun PermissionStep() {
                 Text(title, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Text(sub, color = c.sub, fontSize = 13.sp)
             }
-            if (ok) Icon(Icons.Rounded.Check, "Allowed", tint = Good, modifier = Modifier.size(24.dp))
-            else SButton("Allow", primary = true) { try { ask.launch(perms) } catch (e: Exception) { } }
+            if (ok) Icon(Icons.Rounded.Check, "Autorisée", tint = Good, modifier = Modifier.size(24.dp))
+            else SButton("Autoriser", primary = true) { try { ask.launch(perms) } catch (e: Exception) { } }
         }
     }
-    row("Location", "Needed to show where you are and guide you", loc, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-    if (android.os.Build.VERSION.SDK_INT >= 33) row("Notifications", "So guidance keeps going when you switch apps", notif, arrayOf(Manifest.permission.POST_NOTIFICATIONS))
-    if (!loc) Text("If the Allow button does nothing, the permission was turned down before: allow it in Settings › About & backup › App permissions.", color = c.sub, fontSize = 13.sp)
+    row("Localisation", "Nécessaire pour vous situer et vous guider", loc, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    if (android.os.Build.VERSION.SDK_INT >= 33) row("Notifications", "Pour que le guidage continue quand vous changez d'appli", notif, arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+    if (!loc) Text("Si le bouton Autoriser ne fait rien, l'autorisation a déjà été refusée : accordez-la dans Réglages › À propos et sauvegarde › Autorisations de l'appli.", color = c.sub, fontSize = 13.sp)
 }

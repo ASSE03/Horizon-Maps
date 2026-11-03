@@ -18,9 +18,9 @@ class TurnInfo(
     val exitNo: String = "",
     /** At a roundabout: heading in, the exit you take and the other exits (degrees), for the roundabout diagram. */
     val rbIn: Double = -1.0, val rbOut: Double = -1.0, val rbExits: List<Double> = emptyList(),
-    /** How far the turn after this one comes after it (for "then" on the card). */
+    /** How far the turn after this one comes after it (for "puis" on the card). */
     val thenGap: Double = 0.0,
-    /** Roundabout exit for the following manoeuvre shown in the "then" cue. */
+    /** Roundabout exit for the following manoeuvre shown in the "puis" cue. */
     val thenExit: Int = 0,
 )
 /** Countries that use miles for road distances and speeds. */
@@ -30,7 +30,7 @@ val FAHRENHEIT_COUNTRIES = setOf("US", "PR", "VI", "GU", "AS", "MP", "LR", "BS",
 
 /** Countries that drive on the left (right-hand drive cars), where the screen keeps its normal layout. */
 /** Countries where warning drivers about speed cameras isn't allowed (camera alerts switch off there unless you choose otherwise). */
-val CAMERA_BANNED = mapOf("FR" to "France", "DE" to "Germany", "CH" to "Switzerland")
+val CAMERA_BANNED = mapOf("FR" to "France", "DE" to "Allemagne", "CH" to "Suisse")
 val KEEP_LEFT = setOf("GB", "IE", "IM", "GG", "JE", "MT", "CY", "AU", "NZ", "JP", "IN", "ZA", "HK", "MO", "SG", "MY", "TH", "ID", "KE", "TZ", "UG",
     "ZM", "ZW", "BW", "NA", "MZ", "MW", "LS", "SZ", "PK", "BD", "LK", "NP", "BT", "JM", "TT", "BB", "BS", "GY", "SR", "FJ", "PG", "MU", "SC", "BN", "TL", "KY", "BM", "VG", "AG", "DM", "GD", "KN", "LC", "VC", "FK", "SH", "MV", "KI", "SB", "TO", "TV", "WS", "NR")
 class AlertInfo(val kind: String, val text: String, val ms: Long = 5000)

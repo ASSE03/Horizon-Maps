@@ -199,11 +199,11 @@ fun rememberShareEta(engine: NavEngine): () -> Unit {
     val ctx = LocalContext.current
     val prefs = engine.prefs
     fun message(): String {
-        val d = engine.dest?.name ?: "my destination"
+        val d = engine.dest?.name ?: "ma destination"
         val e = engine.eta
         val p = engine.fix?.pos
-        return "I'm on my way to $d" + (if (e != null) ", arriving about ${e.arrive}" else "") +
-            (if (p != null) ". Where I am now: https://maps.google.com/?q=${p.lat},${p.lon}" else ".")
+        return "Je suis en route vers $d" + (if (e != null) ", arrivée vers ${e.arrive}" else "") +
+            (if (p != null) ". Ma position actuelle : https://maps.google.com/?q=${p.lat},${p.lon}" else ".")
     }
     fun shareNow() {
         val num = prefs.s(PreferenceKeys.ETA_NUMBER, "")
@@ -215,13 +215,13 @@ fun rememberShareEta(engine: NavEngine): () -> Unit {
                 .putExtra("sms_body", msg)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: Exception) {
-            engine.toast("No messaging app available", 3000)
+            engine.toast("Aucune appli de messagerie disponible", 3000)
         }
     }
-    val pickContact = rememberEtaContactPicker(prefs) { engine.toast("Contact saved. Tap share again to send.", 3500) }
+    val pickContact = rememberEtaContactPicker(prefs) { engine.toast("Contact enregistré. Touchez à nouveau Partager pour envoyer.", 3500) }
     return {
         if (prefs.s(PreferenceKeys.ETA_NUMBER, "").isBlank()) {
-            engine.toast("Choose who to send your ETA to", 3000)
+            engine.toast("Choisissez à qui envoyer votre heure d'arrivée", 3000)
             pickContact()
         } else shareNow()
     }

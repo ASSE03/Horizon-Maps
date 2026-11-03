@@ -64,9 +64,9 @@ object MapboxRest {
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
     private fun httpError(code: Int, body: String): IOException = IOException(when (code) {
-        401 -> "Mapbox didn't accept the access token (401). Check it in Settings > Keys & accounts"
-        403 -> "This Mapbox token isn't allowed to use that service (403). Check its scopes at account.mapbox.com"
-        429 -> "Mapbox's request limit was reached. Try again in a minute"
+        401 -> "Mapbox n'a pas accepté le jeton d'accès (401). Vérifiez-le dans Réglages > Clés et comptes"
+        403 -> "Ce jeton Mapbox n'a pas accès à ce service (403). Vérifiez ses « scopes » sur account.mapbox.com"
+        429 -> "La limite de requêtes Mapbox est atteinte (limit). Réessayez dans une minute"
         else -> "HTTP $code ${body.take(140)}"
     })
 
@@ -230,7 +230,7 @@ object MapboxRest {
     /** True when the last request was accepted with its departure time. */
     @Volatile var departApplied = false
 
-    /** Countries (two-letter codes) where toll roads are avoided even though "Avoid toll roads" is off. */
+    /** Countries (two-letter codes) where toll roads are avoided even though "Éviter les péages" is off. */
     @Volatile var tollCountries: Set<String> = emptySet()
 
     /** The route pays a toll in one of [countries]: a toll stretch (Mapbox marks its junctions "toll") in that country. */
@@ -268,7 +268,7 @@ object MapboxRest {
         val pts = listOf(from) + via + listOf(to)
         val coords = pts.joinToString(";") { String.format(java.util.Locale.US, "%.6f,%.6f", it.lon, it.lat) }
         val ex = excludes(TomTomRest.avoid)
-        val lang = java.util.Locale.getDefault().language.ifBlank { "en" }
+        val lang = "fr"
         var base = "$API/directions/v5/mapbox/driving-traffic/$coords?geometries=geojson&overview=full&steps=true" +
             "&annotations=maxspeed,congestion,duration,distance&language=$lang&alternatives=${alternatives && via.isEmpty()}&access_token=${enc(token)}"
         // the way you're facing, so a reroute doesn't send you the wrong way down the road you're on
@@ -556,7 +556,7 @@ object MapboxRest {
                 val oc = t.uppercase()
                 val r = JSONObject(get("https://api.postcodes.io/outcodes/" + enc(oc), 8000, 10000)).optJSONObject("result") ?: return null
                 val d = r.optJSONArray("admin_district")?.optString(0) ?: ""
-                Place(r.optString("outcode", oc), if (d.isNotBlank() && d != "null") d else "Postcode district", LL(r.getDouble("latitude"), r.getDouble("longitude")))
+                Place(r.optString("outcode", oc), if (d.isNotBlank() && d != "null") d else "Secteur postal", LL(r.getDouble("latitude"), r.getDouble("longitude")))
             } else null
         } catch (e: Exception) { null }
     }
@@ -581,7 +581,7 @@ object MapboxRest {
         val t = enc(token)
         val qq = enc(q.trim())
         val cc = country.trim().lowercase()
-        val lang = java.util.Locale.getDefault().language.ifBlank { "en" }
+        val lang = "fr"
         val prox = if (near != null) String.format(java.util.Locale.US, "&proximity=%.5f,%.5f", near.lon, near.lat) else ""
         val ctry = if (cc.isNotEmpty()) "&country=$cc" else ""
         val ukish = cc.isEmpty() || cc == "gb"
@@ -650,7 +650,7 @@ object MapboxRest {
      * filtered out, so the app fell back to the free OpenStreetMap servers; those are often busy ("HTTP 429", "HTTP 502").
      */
     fun poiNearby(token: String, kind: String, c: LL, radius: Int): List<Nearby> {
-        val lang = java.util.Locale.getDefault().language.ifBlank { "en" }
+        val lang = "fr"
         val near = String.format(java.util.Locale.US, "&proximity=%.5f,%.5f", c.lon, c.lat)
         // a box round the point (about [radius] each way), so the results really are nearby
         val dLat = radius / 111320.0; val dLon = radius / (111320.0 * Math.cos(Math.toRadians(c.lat)).coerceAtLeast(0.2))

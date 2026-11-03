@@ -74,15 +74,15 @@ object ExternalLinks {
             val q = param(text, "q")
             val label = q?.let { Regex("\\(([^)]*)\\)").find(it)?.groupValues?.get(1) }.orEmpty()
             val qp = ll(q)
-            if (qp != null) return SharedTarget(qp, label.ifBlank { "Shared location" }, null)
+            if (qp != null) return SharedTarget(qp, label.ifBlank { "Position partagée" }, null)
             if (!q.isNullOrBlank()) return SharedTarget(null, q, q.replace(Regex("\\([^)]*\\)"), "").trim())
             val p = ll(text.removePrefix("geo:").substringBefore('?'))
-            return if (p != null) SharedTarget(p, "Shared location", null) else null
+            return if (p != null) SharedTarget(p, "Position partagée", null) else null
         }
         if (lower.startsWith("google.navigation:")) {
             val q = param(text.replaceFirst(":", ":?"), "q") ?: text.substringAfter(':').substringAfter("q=").substringBefore('&').let { dec(it) }
             val p = ll(q)
-            return if (p != null) SharedTarget(p, "Shared location", null) else if (q.isNotBlank()) SharedTarget(null, q, q) else null
+            return if (p != null) SharedTarget(p, "Position partagée", null) else if (q.isNotBlank()) SharedTarget(null, q, q) else null
         }
         // a link (on its own, or inside shared text such as "Place name\nAddress\nhttps://maps.app.goo.gl/…")
         val link = urlRe.find(text)?.value
@@ -90,19 +90,19 @@ object ExternalLinks {
         if (link != null) {
             val u = try { expand(link) } catch (e: Exception) { link }
             val name = Regex("/place/([^/@]+)").find(u)?.groupValues?.get(1)?.let { dec(it).replace('+', ' ') }.orEmpty().ifBlank { before }
-            placeRe.find(u)?.let { m -> return SharedTarget(LL(m.groupValues[1].toDouble(), m.groupValues[2].toDouble()), name.ifBlank { "Shared location" }, null) }
+            placeRe.find(u)?.let { m -> return SharedTarget(LL(m.groupValues[1].toDouble(), m.groupValues[2].toDouble()), name.ifBlank { "Position partagée" }, null) }
             for (k in listOf("daddr", "destination", "q", "query", "ll", "center")) {
                 val v = param(u, k) ?: continue
                 val p = ll(v)
-                if (p != null) return SharedTarget(p, name.ifBlank { "Shared location" }, null)
+                if (p != null) return SharedTarget(p, name.ifBlank { "Position partagée" }, null)
                 if (k != "ll" && k != "center") return SharedTarget(null, name.ifBlank { v }, v)
             }
-            atRe.find(u)?.let { m -> return SharedTarget(LL(m.groupValues[1].toDouble(), m.groupValues[2].toDouble()), name.ifBlank { "Shared location" }, null) }
+            atRe.find(u)?.let { m -> return SharedTarget(LL(m.groupValues[1].toDouble(), m.groupValues[2].toDouble()), name.ifBlank { "Position partagée" }, null) }
             if (name.isNotBlank()) return SharedTarget(null, name, name)
             if (before.isNotBlank()) return SharedTarget(null, before, before)
             return null
         }
-        ll(text)?.let { return SharedTarget(it, "Shared location", null) }
+        ll(text)?.let { return SharedTarget(it, "Position partagée", null) }
         // plain text: search for it (the first line is usually the name, the rest the address)
         val q = text.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(2).joinToString(", ")
         return if (q.length >= 2) SharedTarget(null, q, q.take(120)) else null
