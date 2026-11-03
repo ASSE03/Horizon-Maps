@@ -751,7 +751,7 @@ private fun FuelSection(prefs: Prefs, engine: NavEngine) {
         SFieldItem("Home Assistant : entité batterie (%)", prefs.s(com.headunit.launcher.HaBattery.ENTITY_KEY, ""),
             "L'entité du niveau de charge, ex. sensor.mg4_soc", placeholder = "sensor.…") { prefs.put(com.headunit.launcher.HaBattery.ENTITY_KEY, it.trim()) }
         SFieldItem("Home Assistant : entité consommation (facultatif)", prefs.s(com.headunit.launcher.HaBattery.CONS_KEY, ""),
-            "Consommation moyenne de la voiture, en kWh/100 km ou km/kWh : remplit tout seul le champ Consommation ci-dessous", placeholder = "sensor.…") { prefs.put(com.headunit.launcher.HaBattery.CONS_KEY, it.trim()) }
+            "Vide : calculée d'après l'autonomie et l'énergie restante (MG via saic-gateway). Sinon une entité en kWh/100 km ou km/kWh. Remplit tout seul la Consommation et la Batterie utile", placeholder = "sensor.…") { prefs.put(com.headunit.launcher.HaBattery.CONS_KEY, it.trim()) }
         SToggle(prefs, "Afficher aussi les stations-service", PreferenceKeys.EV_SHOW_FUEL, false, "Le bouton Carburant sur la carte (téléphone et Android Auto). Désactivé : Recharge le remplace")
         if (mi) SFieldItem("Consommation (miles par kWh)", prefs.s(PreferenceKeys.EVMPK, ""), placeholder = "ex. 3.5", number = true) { s -> prefs.put(PreferenceKeys.EVMPK, num(s).take(5)) }
         else SFieldItem("Consommation (km par kWh)", prefs.s(PreferenceKeys.EVMPK, "").toDoubleOrNull()?.let { fmt1(it * 1.609344) } ?: "", placeholder = "ex. 5.6", number = true) { s ->

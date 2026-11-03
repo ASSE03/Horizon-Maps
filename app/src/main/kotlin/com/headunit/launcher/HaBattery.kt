@@ -39,9 +39,24 @@ object HaBattery {
      */
     fun syncConsumption(ctx: Context): Double? {
         val p = Prefs(ctx)
+        if (!configured(p)) return null
+        val base = p.s(URL_KEY, "").trim().trimEnd('/'); val token = p.s(TOKEN_KEY, "").trim()
         val entity = p.s(CONS_KEY, "").trim()
-        if (entity.isEmpty() || !configured(p)) return null
-        val v = number(p.s(URL_KEY, "").trim().trimEnd('/'), p.s(TOKEN_KEY, "").trim(), entity) ?: return null
+        // saic-python-mqtt-gateway (MG) : pas de capteur de consommation, mais l'autonomie et l'énergie restante donnent les km/kWh
+        // que la voiture utilise elle-même (sensor.<vin>_range / sensor.<vin>_soc_kwh), et la capacité de la batterie
+        val soc = p.s(ENTITY_KEY, "").trim()
+        val prefix = if (soc.endsWith("_soc")) soc.removeSuffix("_soc") else null
+        if (prefix != null) number(base, token, "${prefix}_total_battery_capacity")?.takeIf { it in 10.0..200.0 }?.let { cap ->
+            p.put(PreferenceKeys.EV_BATTERY_KWH, String.format(java.util.Locale.US, "%.1f", cap))
+        }
+        val v: Double = if (entity.isNotEmpty()) number(base, token, entity) ?: return null
+        else {
+            if (prefix == null) return null
+            val range = number(base, token, "${prefix}_range") ?: return null
+            val kwh = number(base, token, "${prefix}_soc_kwh") ?: return null
+            if (kwh < 3.0 || range <= 0) return null
+            range / kwh
+        }
         if (v <= 0) return null
         val kmPerKwh = if (v > 12) 100.0 / v else v
         if (kmPerKwh !in 2.0..12.0) return null
