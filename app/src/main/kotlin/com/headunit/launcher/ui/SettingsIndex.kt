@@ -71,6 +71,7 @@ internal val settingsIndex = listOf(
     SettingRef("Guidage par voie sur la carte de direction", "", "Carte de direction", 4),
     SettingRef("Style du guidage par voie", "", "Carte de direction", 4),
     SettingRef("Direction suivante sur la carte", "La direction d'après : si proche, toujours ou jamais", "Carte de direction", 4),
+    SettingRef("Direction suivante dans la notification", "Flèche et distance pour les lanceurs et les montres", "Carte de direction", 4),
     SettingRef("Affichée comme", "", "Carte de direction", 4),
     SettingRef("Voies peintes sur la carte", "", "Voies et carrefours", 4),
     SettingRef("Zoom sur les voies avant un carrefour", "", "Voies et carrefours", 4),

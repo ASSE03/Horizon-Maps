@@ -437,6 +437,7 @@ private fun GuidanceSection(prefs: Prefs, engine: NavEngine) {
         SChoice("Direction suivante sur la carte", listOf("close" to "Si proche", "always" to "Toujours", "off" to "Désactivé"), prefs.s(PreferenceKeys.THEN_MODE, "close"),
             when (prefs.s(PreferenceKeys.THEN_MODE, "close")) { "close" -> "Seulement quand la direction suivante arrive juste après (dans les 15 secondes environ)"; "always" -> "La direction d'après, tout le temps"; else -> null }) { prefs.put(PreferenceKeys.THEN_MODE, it) }
         if (prefs.s(PreferenceKeys.THEN_MODE, "close") != "off") SChoice("Affichée comme", listOf("row" to "Une ligne sous la carte", "icon" to "Une petite flèche"), prefs.s(PreferenceKeys.THEN_STYLE, "row")) { prefs.put(PreferenceKeys.THEN_STYLE, it) }
+        SToggle(prefs, "Direction suivante dans la notification", PreferenceKeys.TURN_NOTIF, true, "La flèche, la distance et la route dans la notification d'Horizon Nav pendant le guidage, pour les lanceurs de voiture, les montres et les écrans qui affichent les notifications de navigation")
     }
     SGroup("Voies et carrefours") {
         SToggle(prefs, "Voies peintes sur la carte", "lanemap", true)
