@@ -27,6 +27,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v5
         with:
@@ -53,11 +55,17 @@ jobs:
         with:
           gradle-version: 8.14.4
 
-      - name: Release notes for the in-app "What's new" card
+      - name: Release notes from the commits since the last published version
         run: |
           set -euo pipefail
+          git fetch --tags --force -q || true
+          PREV="$(git tag -l 'v1.0.*' --sort=-v:refname | head -n1)"
+          if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="-15"; fi
+          git log $RANGE --no-merges --format='- %s' | grep -v -i -E 'skip ci|^- Merge ' > "$RUNNER_TEMP/notes.md" || true
+          [ -s "$RUNNER_TEMP/notes.md" ] || printf -- "- Petites améliorations\n" > "$RUNNER_TEMP/notes.md"
           mkdir -p app/src/main/assets
-          printf -- "- Version française d'Horizon Nav (fork ASSE03), construite depuis les sources du dépôt.\n" > app/src/main/assets/whatsnew.md
+          cp "$RUNNER_TEMP/notes.md" app/src/main/assets/whatsnew.md
+          echo "Notes:"; cat "$RUNNER_TEMP/notes.md"
 
       - name: Build release APK
         env:
@@ -85,7 +93,12 @@ jobs:
           VERSION_CODE=$((100 + BUILD))
           sha256sum "$APK" | awk '{print $1}' > HorizonNav-public.apk.sha256
           printf '{\n  "version": "%s",\n  "build": %s,\n  "versionCode": %s\n}\n' "$VERSION" "$BUILD" "$VERSION_CODE" > version.json
-          printf "## Horizon Nav FR %s\n\nVersion française d'Horizon Nav.\n" "$VERSION" > release-notes.md
+          cp "$RUNNER_TEMP/notes.md" release-notes.md
+          # one release per version (v1.0.N, its notes = the commits since the previous one), so the What's new card can gather
+          # the changes of every version skipped; then the stable "app" release the updater reads
+          gh release create "v${VERSION}" "$APK" HorizonNav-public.apk.sha256 version.json --repo "${{ github.repository }}" \
+            --title "Horizon Nav FR ${VERSION}" --notes-file release-notes.md --target "${GITHUB_SHA}" --latest=false \
+            || gh release edit "v${VERSION}" --repo "${{ github.repository }}" --notes-file release-notes.md
           if gh release view app --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release edit app --repo "${{ github.repository }}" --title "Horizon Nav FR (${VERSION})" --notes-file release-notes.md
           else

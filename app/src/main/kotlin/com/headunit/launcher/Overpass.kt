@@ -517,7 +517,9 @@ object Overpass {
                     tags.optString("operator").takeIf { it.isNotBlank() && it != name }?.let { extra += it }
                 }
             }
-            out += Nearby(Place(name, tags.optString("addr:street"), pos), Geo.dist(c, pos), extra.joinToString(" · "))
+            // (fork FR : la ville avec la rue, pour savoir où est chaque borne ou station)
+            val addr = listOf(tags.optString("addr:street"), tags.optString("addr:city").ifBlank { tags.optString("addr:place") }).filter { it.isNotBlank() }.joinToString(", ")
+            out += Nearby(Place(name, addr, pos), Geo.dist(c, pos), extra.joinToString(" · "))
         }
         return out
     }

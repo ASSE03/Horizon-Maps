@@ -418,7 +418,8 @@ internal fun NearbyCard(engine: NavEngine) {
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text(n.place.name, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        val sub = listOfNotNull(n.extra.takeIf { it.isNotBlank() }, n.place.sub.takeIf { it.isNotBlank() && engine.nearbyKind == "fuel" }).joinToString(" · ")
+                        // fork FR : l'adresse (avec la ville) pour tous les types de lieux, pas seulement les stations-service, et en premier
+                        val sub = listOfNotNull(n.place.sub.takeIf { it.isNotBlank() }, n.extra.takeIf { it.isNotBlank() }).joinToString(" · ")
                         if (sub.isNotBlank()) Text(sub, color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     if (n.price != null) Text(com.headunit.launcher.fmtFuelPrice(n.price, n.unit), color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))

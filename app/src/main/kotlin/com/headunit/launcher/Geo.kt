@@ -417,7 +417,8 @@ object TomTomRest {
         val extra = ArrayList<String>()
         poi?.optJSONArray("brands")?.optJSONObject(0)?.optString("name")?.takeIf { it.isNotBlank() && !name.contains(it, true) }?.let { extra += it }
         poi?.optJSONArray("categories")?.optString(0)?.takeIf { it.isNotBlank() && kind in setOf("food", "coffee") }?.let { extra += it.replaceFirstChar { c -> c.uppercase() } }
-        val street = addr?.optString("streetName").orEmpty().ifBlank { addr?.optString("municipality").orEmpty() }
+        // (fork FR : la rue et la ville, pour savoir où est chaque lieu)
+        val street = listOf(addr?.optString("streetName").orEmpty(), addr?.optString("municipality").orEmpty()).filter { it.isNotBlank() }.distinct().joinToString(", ")
         val d = if (x.has("dist")) x.optDouble("dist", 0.0) else Geo.dist(from, p)
         return Nearby(Place(name, street, p), d, extra.joinToString(" · "))
     }

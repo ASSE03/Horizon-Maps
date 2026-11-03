@@ -158,7 +158,7 @@ object Updater {
         if (notes.none { it.first == installedBuild } && !installedFallback.isNullOrBlank()) {
             notes += installedBuild to "### $version\n$installedFallback"
         }
-        return notes.sortedBy { it.first }.joinToString("\n\n").take(4000).ifBlank { installedFallback.orEmpty() }
+        return notes.sortedBy { it.first }.joinToString("\n\n") { it.second }.take(4000).ifBlank { installedFallback.orEmpty() }
     }
 
     /** Fetches a single immutable GitHub release tag; returns null for network/API failures. */

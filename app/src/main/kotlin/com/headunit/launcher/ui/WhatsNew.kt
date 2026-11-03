@@ -53,7 +53,8 @@ import androidx.compose.ui.unit.sp
 internal class NoteItem(val kind: Int, val title: String, val desc: String, val icon: ImageVector)
 
 /** 0 new, 1 improved, 2 fixed. */
-private val kindNames = listOf("NEW", "IMPROVED", "FIXED")
+private val kindNames = listOf("NOUVEAU", "AMÉLIORÉ", "CORRIGÉ")
+private val kindCount = listOf("nouveauté" to "nouveautés", "amélioration" to "améliorations", "correction" to "corrections")
 
 /**
  * Turns release notes ("- Something: what it does" lines, maybe under "### 1.0.N" headings when several versions are shown) into
@@ -71,7 +72,7 @@ internal fun parseNotes(notes: String): List<NoteItem> {
         if (l.isEmpty()) continue
         if (l.startsWith("#")) {
             val h = l.trimStart('#').trim().lowercase()
-            headKind = when { h.startsWith("new") || h.startsWith("added") -> 0; h.startsWith("improv") || h.startsWith("changed") -> 1; h.startsWith("fix") -> 2; else -> -1 }
+            headKind = when { h.startsWith("new") || h.startsWith("added") || h.startsWith("nouv") -> 0; h.startsWith("improv") || h.startsWith("changed") || h.startsWith("amélior") -> 1; h.startsWith("fix") || h.startsWith("corrig") -> 2; else -> -1 }
             continue
         }
         if (l.startsWith("- ") || l.startsWith("* ") || l.startsWith("• ")) bullets += l.substring(2).trim() to headKind
@@ -83,8 +84,8 @@ internal fun parseNotes(notes: String): List<NoteItem> {
         if (b.isEmpty()) continue
         val low = b.lowercase()
         val kind = if (hk >= 0) hk else when {
-            low.startsWith("fix") || low.startsWith("stop ") || low.startsWith("no more") || low.contains(" no longer ") && low.indexOf(" no longer ") < 40 -> 2
-            low.startsWith("new") || low.startsWith("add") || low.startsWith("added") || low.contains(" new ") && low.indexOf(" new ") < 25 -> 0
+            low.startsWith("fix") || low.startsWith("corrige") || low.startsWith("stop ") || low.startsWith("no more") || low.contains(" no longer ") && low.indexOf(" no longer ") < 40 -> 2
+            low.startsWith("new") || low.startsWith("add") || low.startsWith("added") || low.startsWith("ajout") || low.startsWith("nouve") || low.contains(" new ") && low.indexOf(" new ") < 25 -> 0
             else -> 1
         }
         // the headline: before the first colon if that comes early, else the first short clause, else it all
@@ -184,5 +185,5 @@ private fun NoteCard(it: NoteItem, v: Vw, tints: List<Color>, tintBg: List<Color
 internal fun notesSummary(notes: String): String {
     val items = parseNotes(notes)
     if (items.isEmpty()) return ""
-    return listOf(0, 1, 2).mapNotNull { k -> items.count { it.kind == k }.takeIf { it > 0 }?.let { "$it ${kindNames[k].lowercase()}" } }.joinToString(" · ")
+    return listOf(0, 1, 2).mapNotNull { k -> items.count { it.kind == k }.takeIf { it > 0 }?.let { n -> "$n " + if (n > 1) kindCount[k].second else kindCount[k].first } }.joinToString(" · ")
 }
