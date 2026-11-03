@@ -155,6 +155,9 @@ internal object ClearView {
     fun shapes(me: LL?, heading: Double, route: List<LL>): FeatureCollection {
         val feats = ArrayList<Feature>()
         val p = me ?: return FeatureCollection.fromFeatures(feats)
+        // fork FR : sans itinéraire, rien n'est dégagé. La flèche est alors à la position GPS, souvent dans ou contre un bâtiment
+        // (chez soi, garé) : Mapbox retirait tout le modèle 3D touché, et la maison disparaissait de la carte
+        if (route.size < 2) return FeatureCollection.fromFeatures(feats)
         val kx = 111320.0 * Math.cos(Math.toRadians(p.lat)); val ky = 111320.0
         // round the arrow (about 14 m)
         // (kept tight: Mapbox takes away the whole of any 3D model the area touches, and with a wider area big landmark buildings
