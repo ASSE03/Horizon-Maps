@@ -1,0 +1,20 @@
+Plantage d'Horizon Nav FR 1.0.5 · samsung SM-S921B, Android 17 · fichier du Tue Nov 03 19:36:02 GMT+01:00 2026
+
+Thread main
+java.lang.UnsupportedOperationException: JsonNull
+	at com.google.gson.JsonElement.getAsString(JsonElement.java:252)
+	at com.mapbox.geojson.Feature.getStringProperty(Feature.java:364)
+	at com.mapbox.maps.interactions.standard.generated.StandardPoiFeature.getName(StandardPoiFeature.kt:32)
+	at com.headunit.launcher.MapBinding.installTapSelect$lambda$72(MapBinding.kt:979)
+	at com.headunit.launcher.MapBinding.$r8$lambda$HpjbjtXf1ti42VcU6omGgmaTYZs(MapBinding.kt:0)
+	at com.headunit.launcher.MapBinding$$ExternalSyntheticLambda17.invoke(D8$$SyntheticClass:0)
+	at com.mapbox.maps.ClickInteraction$1.handleBegin(ClickInteraction.kt:48)
+	at android.os.MessageQueue.nativePollOnce(Native Method)
+	at android.os.MessageQueue.nextLegacy(MessageQueue.java:871)
+	at android.os.MessageQueue.next(MessageQueue.java:773)
+	at android.os.Looper.loopOnce(Looper.java:257)
+	at android.os.Looper.loop(Looper.java:422)
+	at android.app.ActivityThread.main(ActivityThread.java:10616)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:635)
+	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:982)
