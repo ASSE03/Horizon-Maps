@@ -202,7 +202,10 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
     // fork FR : batterie réelle lue dans Home Assistant (MG4 via saic-python-mqtt-gateway) à chaque nouvelle destination
     val haCtx = androidx.compose.ui.platform.LocalContext.current.applicationContext
     if (ev && com.headunit.launcher.HaBattery.configured(engine.prefs)) androidx.compose.runtime.LaunchedEffect(engine.dest) {
-        val v = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.headunit.launcher.HaBattery.fetch(haCtx) }
+        val v = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.headunit.launcher.HaBattery.syncConsumption(haCtx)
+            com.headunit.launcher.HaBattery.fetch(haCtx)
+        }
         if (v != null) { engine.prefs.put(PreferenceKeys.EV_CHARGE_PCT, v.coerceIn(5, 100)); engine.refreshEvPlan() }
     }
     if (ev) Row(

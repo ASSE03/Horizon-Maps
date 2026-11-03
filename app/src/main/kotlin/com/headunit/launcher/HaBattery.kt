@@ -14,12 +14,40 @@ object HaBattery {
     const val URL_KEY = "ha_url"
     const val TOKEN_KEY = "ha_token"
     const val ENTITY_KEY = "ha_soc_entity"
+    const val CONS_KEY = "ha_cons_entity"
 
     @Volatile var status = ""; private set
     @Volatile var lastPct: Int? = null; private set
     @Volatile var lastAt = 0L; private set
 
     fun configured(p: Prefs) = p.s(URL_KEY, "").isNotBlank() && p.s(TOKEN_KEY, "").isNotBlank() && p.s(ENTITY_KEY, "").isNotBlank()
+
+    /** Valeur numérique d'une entité, ou null (réseau : hors du fil principal). */
+    private fun number(base: String, token: String, entity: String): Double? = try {
+        val c = URL("$base/api/states/$entity").openConnection() as HttpURLConnection
+        try {
+            c.connectTimeout = 8_000; c.readTimeout = 10_000
+            c.setRequestProperty("Authorization", "Bearer $token")
+            if (c.responseCode == 200) JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optString("state").replace(',', '.').toDoubleOrNull() else null
+        } finally { c.disconnect() }
+    } catch (e: Exception) { null }
+
+    /**
+     * Consommation réelle de la voiture (entité facultative), rangée dans le réglage de consommation (stocké en miles par kWh).
+     * L'unité est devinée à la valeur : au-dessus de 12 ce sont des kWh/100 km (ex. 16,5), en dessous des km/kWh (ex. 6,1).
+     * Renvoie les km/kWh retenus, ou null.
+     */
+    fun syncConsumption(ctx: Context): Double? {
+        val p = Prefs(ctx)
+        val entity = p.s(CONS_KEY, "").trim()
+        if (entity.isEmpty() || !configured(p)) return null
+        val v = number(p.s(URL_KEY, "").trim().trimEnd('/'), p.s(TOKEN_KEY, "").trim(), entity) ?: return null
+        if (v <= 0) return null
+        val kmPerKwh = if (v > 12) 100.0 / v else v
+        if (kmPerKwh !in 2.0..12.0) return null
+        p.put(PreferenceKeys.EVMPK, String.format(java.util.Locale.US, "%.3f", kmPerKwh / 1.609344))
+        return kmPerKwh
+    }
 
     /** Réseau : hors du fil principal. Le % de batterie (0..100), ou null avec [status] qui dit pourquoi. */
     fun fetch(ctx: Context): Int? {
