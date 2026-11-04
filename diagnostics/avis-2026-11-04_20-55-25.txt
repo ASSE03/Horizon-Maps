@@ -1,0 +1,88 @@
+---
+Horizon Nav 1.0.45 (public)
+Unit: samsung SM-S921B, Android 17 (API 37), screen 1080x2093
+Country: FR · map: mapbox · TomTom key: yes · Mapbox token: yes · routes from: mapbox · online: yes
+Offline area: none
+Frame rate: auto · map detail: full · driving side: left-hand
+Night signals: system setting auto · screen night since 20:53:43 · config night since 20:53:43 · setting day since 20:53:43 · theme sun
+Heat: cool
+Chip: s5e9945 / s5e9945 / s5e9945 · safer drawing step 0 · fast map drawing: on
+Last session didn't close normally: open 0 min 40 s, the app was closed by Android (the unit kept running). Speed then: 0 mph. Last note (Wed Nov 04 20:53:39 GMT+01:00 2026): app memory 44 MB + native 76 MB; unit free 2369 of 7223 MB; 
+Mapbox token: pk.… looks whole
+Radars : activés · 1 autour · 1 affichés · dernière recherche : aucune · OpenStreetMap : overpass-api: HTTP 502; overpass: timeout; overpass: timeout; maps: timeout · zones : 
+Carte : mapbox://styles/mapbox/standard-satellite · satellite : oui
+Test direct Mapbox : 20:53:44 satellite : HTTP 429 {"message":"Too Many Requests"} x-rate-limit-limit=-1 · carte : HTTP 200  x-rate-limit-limit=600 · style satellite : HTTP 200
+
+Erreurs de chargement de la carte :
+20:53:44 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · compositebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · compositebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · compositebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · compositebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:42 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:43 Tile · compositebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:43 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:44 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:45 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+20:54:45 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+Total par erreur depuis l'ouverture :
+777 × Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+15 × Tile · compositebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+15 × Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+Limitations (MG4Dash) : 50 · paquets : p45_4.bin chargé (9636 cases, 268 ms) · 96 en ligne · residential (paquet OSM) · position fused ±0 m à 20:55:25 · tuiles 4/4 (stockage 0, réseau 0) · aucune tuile chargée
+
+Limitations (dernières) :
+04/11 17:24:23 carte sûr : 50 km/h · ? (way 0) @ 45.28763,4.63058
+04/11 17:24:30 carte sûr : 50 km/h · ? (way 0) @ 45.28890,4.62998
+04/11 17:24:40 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/3 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28527,4.62742
+04/11 17:25:06 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : liste illisible (IllegalStateException HTTP 404) · tuiles 0/3 (stockage 0, réseau 0) · auc @ 45.28627,4.62648
+04/11 17:56:05 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 235 ms) · 96 en ligne · residential (paquet OSM) · position gps ±8 m à 17:56:05 · tuiles 4/4 (s @ 45.28772,4.62711
+04/11 18:01:56 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28779,4.62704
+04/11 18:02:21 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 220 ms) · 96 en ligne · residential (paquet OSM) · position gps ±67 m à 18:02:21 · tuiles 4/4 ( @ 45.28769,4.62728
+04/11 18:08:04 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28779,4.62705
+04/11 18:08:12 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 207 ms) · 96 en ligne · residential (paquet OSM) · position gps ±21 m à 18:08:12 · tuiles 4/4 ( @ 45.28779,4.62706
+04/11 18:14:44 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28775,4.62713
+04/11 18:14:50 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 205 ms) · 96 en ligne · residential (paquet OSM) · position gps ±36 m à 18:14:50 · tuiles 4/4 ( @ 45.28786,4.62717
+04/11 18:16:26 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28776,4.62713
+04/11 18:16:39 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 207 ms) · 96 en ligne · residential (paquet OSM) · position gps ±47 m à 18:16:39 · tuiles 4/4 ( @ 45.28774,4.62700
+04/11 18:27:37 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28776,4.62712
+04/11 18:27:46 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 249 ms) · 96 en ligne · residential (paquet OSM) · position gps ±7 m à 18:27:46 · tuiles 4/4 (s @ 45.28776,4.62712
+04/11 19:07:17 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28776,4.62712
+04/11 19:07:26 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 205 ms) · 96 en ligne · residential (paquet OSM) · position gps ±20 m à 19:07:26 · tuiles 4/4 ( @ 45.28788,4.62764
+04/11 19:09:28 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28788,4.62764
+04/11 19:09:53 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 207 ms) · 96 en ligne · residential (paquet OSM) · position gps ±44 m à 19:09:53 · tuiles 4/4 ( @ 45.28767,4.62707
+04/11 19:12:30 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28791,4.62749
+04/11 19:12:40 MG4Dash : 50 · 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 205 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±15 m à 19:12:40 · t @ 45.28777,4.62676
+04/11 19:17:00 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28776,4.62714
+04/11 19:18:34 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28776,4.62714
+04/11 19:18:40 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 212 ms) · 96 en ligne · residential (paquet OSM) · position gps ±19 m à 19:18:40 · tuiles 4/4 ( @ 45.28776,4.62700
+04/11 19:27:08 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28775,4.62708
+04/11 19:27:11 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 275 ms) · 96 en ligne · residential (paquet OSM) · position gps ±28 m à 19:27:11 · tuiles 4/4 ( @ 45.28772,4.62700
+04/11 20:24:43 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28771,4.62720
+04/11 20:24:51 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 239 ms) · 96 en ligne · residential (paquet OSM) · position gps ±17 m à 20:24:51 · tuiles 4/4 ( @ 45.28776,4.62706
+04/11 20:25:36 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28777,4.62715
+04/11 20:25:41 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 255 ms) · 96 en ligne · residential (paquet OSM) · position gps ±13 m à 20:25:41 · tuiles 4/4 ( @ 45.28780,4.62716
+04/11 20:36:34 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28779,4.62716
+04/11 20:36:43 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 212 ms) · 96 en ligne · residential (paquet OSM) · position gps ±38 m à 20:36:43 · tuiles 4/4 ( @ 45.28770,4.62707
+04/11 20:37:15 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28779,4.62716
+04/11 20:37:19 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 254 ms) · 96 en ligne · residential (paquet OSM) · position gps ±16 m à 20:37:19 · tuiles 4/4 ( @ 45.28776,4.62710
+04/11 20:43:30 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28779,4.62716
+04/11 20:43:37 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 210 ms) · 96 en ligne · residential (paquet OSM) · position gps ±25 m à 20:43:37 · tuiles 4/4 ( @ 45.28775,4.62705
+04/11 20:53:00 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28771,4.62707
+04/11 20:53:09 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 219 ms) · 96 en ligne · residential (paquet OSM) · position gps ±22 m à 20:53:09 · tuiles 4/4 ( @ 45.28780,4.62714
+04/11 20:53:43 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28771,4.62707
+04/11 20:53:49 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 268 ms) · 96 en ligne · residential (paquet OSM) · position gps ±23 m à 20:53:49 · tuiles 4/4 ( @ 45.28775,4.62722
