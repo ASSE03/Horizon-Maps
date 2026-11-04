@@ -140,6 +140,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     var via by mutableStateOf<List<Place>>(emptyList())
     var stopMode by mutableStateOf(false)
     var destRain by mutableStateOf<String?>(null)
+    /** Fork FR : la prévision Bison Futé pour le jour du départ sur les départements traversés (null : tout vert). */
+    var bisonText by mutableStateOf<String?>(null)
     var routeWx by mutableStateOf<List<RouteWx>>(emptyList())
     var arriveFlash by mutableStateOf(false)
     var arrival by mutableStateOf<ArrivalInfo?>(null)
@@ -1089,6 +1091,15 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     // ---- extras: journey times, rain at destination, stops, arriving home ----
+    private fun loadBison(r: Route, atMs: Long) {
+        bisonText = null
+        if (!online() || !prefs.b("bisonfute", true)) return
+        scope.launch {
+            val t = withContext(Dispatchers.IO) { try { BisonFute.forRoute(ctx, r.pts, r.cum, atMs) } catch (e: Exception) { null } }
+            if (route === r || routes.any { it === r }) bisonText = t
+        }
+    }
+
     private fun loadRain(to: Place, routeSecs: Double) {
         destRain = null
         scope.launch {
@@ -1208,6 +1219,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · dernière recherche : ${Overpass.camNote.ifBlank { "aucune" }.take(160)} · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)} · zones : ${Zones.status.take(120)}")
             appendLine("Carte : ${try { map.styleNote } catch (e: Exception) { "?" }} · satellite : ${if (map.isSatellite) "oui" else "non"}")
+            if (BisonFute.status.isNotBlank()) appendLine(BisonFute.status)
             if (MapErrors.probe.isNotBlank()) appendLine("Test direct Mapbox : ${MapErrors.probe}")
             run { val me = MapErrors.read(); if (me.isNotBlank()) { appendLine(); appendLine("Erreurs de chargement de la carte :"); appendLine(me) } }
             if (mgLimits()) appendLine("Limitations (MG4Dash) : ${MgSpeedLimit.status.take(400)}")
@@ -1724,6 +1736,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (to.name != "Repère posé") places.addRecent(to)
                 if (!keepVia) habits.record(to)
                 loadRain(to, rs[0].time)
+                loadBison(rs[0], if (departMs > 0) departMs else System.currentTimeMillis())
                 loadRouteWeather(rs[0])
                 fuelSuggestion = null
                 clearLiveAlts()

@@ -188,6 +188,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         if (engine.via.isNotEmpty()) Text(engine.via.joinToString(" › ") { it.name }, color = c.text, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
         if (costText != null) Text(costText, color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp))
         engine.destRain?.let { Text(it, color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 8.dp)) }
+        engine.bisonText?.let { Text(it, color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, modifier = Modifier.padding(horizontal = 8.dp).widthIn(max = 420.dp)) }
     }
     // fork FR : la démo, avec un départ au choix et une vitesse ×1 à ×8 (Réglages › Performances › Bouton de trajet de démo)
     if (engine.prefs.b(PreferenceKeys.DEMO, false)) Row(
