@@ -174,6 +174,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         subs += mbMap.subscribeRenderFrameStarted { PerfStats.renders++ }
         subs += mbMap.subscribeMapLoadingError { e ->
             try { MapErrors.add(e.type.toString(), e.sourceId, e.message) } catch (x: Throwable) { }
+            // fork FR : les photos de Standard Satellite refusées (429) : on passe sur l'ancienne vue satellite de Mapbox
+            if (satellite && !satClassic && (e.sourceId ?: "").contains("satellitebasemap") && (e.message ?: "").contains("429")) {
+                satClassic = true
+                MapErrors.add("Repli", null, "vue satellite classique (satellite-streets-v12)")
+                main0.post { val r = onRestyle; if (r != null) r() else setStyleUrl(baseStyle()) }
+            }
             // only the style itself failing is reported (a missing tile now and then is normal)
             if (e.type == MapLoadingErrorType.STYLE) onError?.invoke(e.message)
             // the 3D model couldn't be loaded: the picture of the same shape instead (until the app is restarted)
@@ -361,7 +367,11 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** Fork FR : le style chargé, pour les rapports. */
     val styleNote: String get() = (loadedStyle ?: "aucun") + (if (style == null) " (en chargement)" else "")
 
-    private fun isMapboxStyle(u: String?) = u == Style.STANDARD || u == Style.STANDARD_SATELLITE || u == Style.MAPBOX_STREETS || u == Style.DARK || u == NAV_DAY || u == NAV_NIGHT
+    /** Fork FR : Standard Satellite refusé, l'ancienne vue satellite est utilisée jusqu'au prochain démarrage. */
+    @Volatile private var satClassic = false
+    private val SAT_CLASSIC = "mapbox://styles/mapbox/satellite-streets-v12"
+
+    private fun isMapboxStyle(u: String?) = u == SAT_CLASSIC || u == Style.STANDARD || u == Style.STANDARD_SATELLITE || u == Style.MAPBOX_STREETS || u == Style.DARK || u == NAV_DAY || u == NAV_NIGHT
 
     /** Standard's light: "day", "dawn", "dusk" or "night". Changing it fades smoothly, without reloading the map. */
     private var lightPreset = "night"
@@ -1665,7 +1675,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val dayLook = !nightStyle
         bubImgs.clear(); laneImgs.clear()
         // the classic map in the Horizon colours
-        if (!slotsOn && (colours == "horizon" || recolourBase)) try { recolourClassic(st) } catch (e: Throwable) { }
+        if (!slotsOn && !satellite && (colours == "horizon" || recolourBase)) try { recolourClassic(st) } catch (e: Throwable) { }
         // Standard's newer settings are set once it's loaded (so a style that doesn't know one can't stop the map loading)
         if (!satellite) {
             setBase("show3dTrees", Value.valueOf(treesOn)); setBase("showLandmarkIcons", Value.valueOf(!lite))
@@ -1921,7 +1931,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
 
     /** The style the map should show: Standard, or Standard Satellite when satellite is on. */
     fun baseStyle(): String = when (MapStylePolicy.choose(satellite, mapDetail, nightStyle)) {
-        BaseMapStyle.STANDARD_SATELLITE -> Style.STANDARD_SATELLITE
+        BaseMapStyle.STANDARD_SATELLITE -> if (satClassic) SAT_CLASSIC else Style.STANDARD_SATELLITE
         BaseMapStyle.DARK_STREETS -> Style.DARK
         BaseMapStyle.STREETS -> Style.MAPBOX_STREETS
         BaseMapStyle.STANDARD -> Style.STANDARD
