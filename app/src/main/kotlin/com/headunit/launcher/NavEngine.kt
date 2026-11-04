@@ -2135,6 +2135,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         noteCameraBan()
         if (!camerasOn()) { cameraDist = null; if (cameras.isNotEmpty()) { cameras = emptyList(); map.setCameras(emptyList()) }; camPos = null; return }
         val cp = camPos
+        // fork FR : à l'ouverture, les radars trouvés la dernière fois au même endroit s'affichent tout de suite, en attendant
+        // la réponse (parfois lente) d'OpenStreetMap
+        if (aroundCams.isEmpty() && !camCacheTried) {
+            camCacheTried = true
+            loadCamCache(p.pos)?.let { c -> aroundCams = c; mergeCams() }
+        }
         if (now - camAt > 120000 && (cp == null || Geo.dist(cp, p.pos) > 2500)) {
             camAt = now; camPos = p.pos
             // the cameras within 6 km: warned about as you approach, and drawn on the map (route or not)
@@ -2142,7 +2148,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val found = withContext(Dispatchers.IO) { localCameras(p.pos, 6000.0) ?: Overpass.cameras(p.pos, 6000) }
                 // a failed lookup (weak signal, busy server) keeps the ones already shown and tries again in about half a minute
                 if (found == null) { camAt = System.currentTimeMillis() - 90_000L; camPos = null }
-                else { aroundCams = found; mergeCams() }
+                else { aroundCams = found; mergeCams(); saveCamCache(p.pos, found) }
             }
         }
         // the cameras on the map follow the route coming and going, and the ones you've passed drop off
@@ -3130,6 +3136,25 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** The cameras from the search around you (route or not). */
     private var aroundCams: List<LL> = emptyList()
+    private var camCacheTried = false
+
+    /** Fork FR : les derniers radars trouvés autour de vous, gardés sur le téléphone pour l'ouverture suivante. */
+    private fun saveCamCache(at: LL, cams: List<LL>) {
+        try {
+            val a = org.json.JSONArray(); for (c in cams) { a.put(c.lat); a.put(c.lon) }
+            java.io.File(ctx.filesDir, "cams_cache.json").writeText(org.json.JSONObject().put("la", at.lat).put("lo", at.lon).put("c", a).toString())
+        } catch (e: Exception) { }
+    }
+
+    private fun loadCamCache(at: LL): List<LL>? = try {
+        val f = java.io.File(ctx.filesDir, "cams_cache.json")
+        if (!f.exists() || System.currentTimeMillis() - f.lastModified() > 7L * 86_400_000L) null
+        else {
+            val o = org.json.JSONObject(f.readText())
+            if (Geo.dist(LL(o.getDouble("la"), o.getDouble("lo")), at) > 4000.0) null
+            else { val a = o.getJSONArray("c"); (0 until a.length() / 2).map { LL(a.getDouble(it * 2), a.getDouble(it * 2 + 1)) } }
+        }
+    } catch (e: Exception) { null }
 
     /** The cameras shown and warned about: the ones around you plus the ones found along the route, within 10 km. */
     private fun mergeCams() {
