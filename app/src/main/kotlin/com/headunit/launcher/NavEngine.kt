@@ -4973,7 +4973,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Fork FR : vitesse de la démo (×1, ×2, ×4, ×8), réglable avant et pendant. */
     var demoSpeed by mutableIntStateOf(1)
 
-    fun setDemoSpeed(x: Int) { demoSpeed = x.coerceIn(1, 16); if (simMode != 0) simMode = demoSpeed }
+    fun chooseDemoSpeed(x: Int) { demoSpeed = x.coerceIn(1, 16); if (simMode != 0) simMode = demoSpeed }
 
     /** Le départ de la démo revient à votre position, et l'itinéraire est recalculé depuis là. */
     fun clearDemoStart() { demoFrom = null; pickDemoStart = false; dest?.let { if (previewing) startRoute(it) } }
@@ -4984,9 +4984,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // à l'arrêt : démarre à la vitesse choisie ; en route : ×1 → ×2 → ×4 → ×8, puis fin
         if (simMode == 0) { simMode = demoSpeed; startSim(r); return }
         when (simMode) {
-            1 -> setDemoSpeed(2)
-            2 -> setDemoSpeed(4)
-            4 -> setDemoSpeed(8)
+            1 -> chooseDemoSpeed(2)
+            2 -> chooseDemoSpeed(4)
+            4 -> chooseDemoSpeed(8)
             else -> stopSim()
         }
     }

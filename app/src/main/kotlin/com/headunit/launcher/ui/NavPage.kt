@@ -201,7 +201,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
             if (engine.pickDemoStart) engine.toast("Cherchez le lieu de départ, ou faites un appui long sur la carte", 4000)
         })
         Text("Vitesse", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 14.dp, end = 4.dp))
-        for (x in listOf(1, 2, 4, 8)) Pill("×$x", engine.demoSpeed == x, { engine.setDemoSpeed(x) })
+        for (x in listOf(1, 2, 4, 8)) Pill("×$x", engine.demoSpeed == x, { engine.chooseDemoSpeed(x) })
         Pill("Lancer la démo", false, { engine.beginNavigation(); engine.cycleSim() })
     }
     Row(
