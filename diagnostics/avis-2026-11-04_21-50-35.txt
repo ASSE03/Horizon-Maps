@@ -1,0 +1,56 @@
+---
+Horizon Nav 1.0.51 (public)
+Unit: samsung SM-S921B, Android 17 (API 37), screen 1080x2093
+Country: FR · map: mapbox · TomTom key: yes · Mapbox token: yes · routes from: mapbox · online: yes
+Offline area: none
+Frame rate: auto · map detail: full · driving side: left-hand
+Night signals: system setting auto · screen night since 21:50:06 · config night since 21:50:06 · setting day since 21:50:06 · theme sun
+Heat: cool
+Chip: s5e9945 / s5e9945 / s5e9945 · safer drawing step 0 · fast map drawing: on
+Last session didn't close normally: open 0 min 40 s, the app was closed by Android (the unit kept running). Speed then: 0 mph. Last note (Wed Nov 04 21:14:38 GMT+01:00 2026): app memory 40 MB + native 109 MB; unit free 2120 of 7223 MB; 
+Mapbox token: pk.… looks whole
+Radars : activés · 1 autour · 1 affichés · dernière recherche : aucune · OpenStreetMap : - · zones : 
+Carte : mapbox://styles/mapbox/standard · satellite : non
+Limitations (MG4Dash) : 50 · paquets : p45_4.bin chargé (9636 cases, 216 ms) · 96 en ligne · residential (paquet OSM) · position fused ±6 m à 21:50:35 · tuiles 4/4 (stockage 0, réseau 0) · aucune tuile chargée
+
+Limitations (dernières) :
+04/11 19:12:30 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28791,4.62749
+04/11 19:12:40 MG4Dash : 50 · 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 205 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±15 m à 19:12:40 · t @ 45.28777,4.62676
+04/11 19:17:00 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28776,4.62714
+04/11 19:18:34 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28776,4.62714
+04/11 19:18:40 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 212 ms) · 96 en ligne · residential (paquet OSM) · position gps ±19 m à 19:18:40 · tuiles 4/4 ( @ 45.28776,4.62700
+04/11 19:27:08 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28775,4.62708
+04/11 19:27:11 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 275 ms) · 96 en ligne · residential (paquet OSM) · position gps ±28 m à 19:27:11 · tuiles 4/4 ( @ 45.28772,4.62700
+04/11 20:24:43 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28771,4.62720
+04/11 20:24:51 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 239 ms) · 96 en ligne · residential (paquet OSM) · position gps ±17 m à 20:24:51 · tuiles 4/4 ( @ 45.28776,4.62706
+04/11 20:25:36 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28777,4.62715
+04/11 20:25:41 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 255 ms) · 96 en ligne · residential (paquet OSM) · position gps ±13 m à 20:25:41 · tuiles 4/4 ( @ 45.28780,4.62716
+04/11 20:36:34 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28779,4.62716
+04/11 20:36:43 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 212 ms) · 96 en ligne · residential (paquet OSM) · position gps ±38 m à 20:36:43 · tuiles 4/4 ( @ 45.28770,4.62707
+04/11 20:37:15 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28779,4.62716
+04/11 20:37:19 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 254 ms) · 96 en ligne · residential (paquet OSM) · position gps ±16 m à 20:37:19 · tuiles 4/4 ( @ 45.28776,4.62710
+04/11 20:43:30 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28779,4.62716
+04/11 20:43:37 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 210 ms) · 96 en ligne · residential (paquet OSM) · position gps ±25 m à 20:43:37 · tuiles 4/4 ( @ 45.28775,4.62705
+04/11 20:53:00 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28771,4.62707
+04/11 20:53:09 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 219 ms) · 96 en ligne · residential (paquet OSM) · position gps ±22 m à 20:53:09 · tuiles 4/4 ( @ 45.28780,4.62714
+04/11 20:53:43 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28771,4.62707
+04/11 20:53:49 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 268 ms) · 96 en ligne · residential (paquet OSM) · position gps ±23 m à 20:53:49 · tuiles 4/4 ( @ 45.28775,4.62722
+04/11 21:01:51 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28771,4.62708
+04/11 21:01:59 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 236 ms) · 96 en ligne · residential (paquet OSM) · position gps ±20 m à 21:01:59 · tuiles 4/4 ( @ 45.28774,4.62713
+04/11 21:02:36 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28771,4.62708
+04/11 21:02:41 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 230 ms) · 96 en ligne · residential (paquet OSM) · position gps ±16 m à 21:02:41 · tuiles 4/4 ( @ 45.28778,4.62704
+04/11 21:13:59 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28780,4.62704
+04/11 21:14:07 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 222 ms) · 96 en ligne · residential (paquet OSM) · position gps ±59 m à 21:14:07 · tuiles 4/4 ( @ 45.28763,4.62729
+04/11 21:14:46 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28780,4.62704
+04/11 21:14:50 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 218 ms) · 96 en ligne · residential (paquet OSM) · position gps ±22 m à 21:14:50 · tuiles 4/4 ( @ 45.28776,4.62721
+04/11 21:20:27 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28776,4.62707
+04/11 21:20:34 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 211 ms) · 96 en ligne · residential (paquet OSM) · position gps ±20 m à 21:20:34 · tuiles 4/4 ( @ 45.28779,4.62706
+04/11 21:37:12 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28772,4.62713
+04/11 21:37:19 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 338 ms) · 96 en ligne · residential (paquet OSM) · position gps ±15 m à 21:37:18 · tuiles 4/4 ( @ 45.28778,4.62716
+04/11 21:38:51 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28789,4.62707
+04/11 21:38:53 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 310 ms) · 96 en ligne · residential (paquet OSM) · position gps ±50 m à 21:38:53 · tuiles 4/4 ( @ 45.28773,4.62724
+04/11 21:40:37 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28778,4.62710
+04/11 21:40:42 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 313 ms) · 96 en ligne · residential (paquet OSM) · position gps ±31 m à 21:40:42 · tuiles 4/4 ( @ 45.28773,4.62713
+04/11 21:46:56 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28773,4.62711
+04/11 21:50:07 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28773,4.62711
+04/11 21:50:15 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 216 ms) · 96 en ligne · residential (paquet OSM) · position gps ±16 m à 21:50:15 · tuiles 4/4 ( @ 45.28775,4.62713
