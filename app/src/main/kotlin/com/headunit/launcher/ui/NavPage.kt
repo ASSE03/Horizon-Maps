@@ -147,7 +147,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
     if (engine.pickDemoStart) {
         Row(Modifier.align(Alignment.BottomCenter).padding(12.dp).floating(50.dp).padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Départ de la démo : cherchez un lieu en haut, ou appui long sur la carte", color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(max = 480.dp))
+            Text("Départ de la démo : cherchez un lieu en haut, ou appui long sur la carte", color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f, fill = false).widthIn(max = 480.dp))
             Pill("Annuler", false, { engine.pickDemoStart = false })
         }
         return
