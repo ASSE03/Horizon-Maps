@@ -899,6 +899,8 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
     SGroup("En conduite") {
         SToggle(prefs, "Route et cap en conduite sans itinéraire", "cruise", true)
         SToggle(prefs, "Garder la flèche sur la route sans itinéraire", "snaproad", true)
+        SChoice("Avance de la flèche", listOf("0" to "Aucune", "0.5" to "0,5 s", "1.0" to "1 s", "1.5" to "1,5 s", "2.0" to "2 s"), prefs.s("arrowlead", "1.0"),
+            "Compense le retard du GPS : la flèche est placée là où vous serez dans ce délai. Augmentez si elle arrive aux croisements après la voiture, baissez si elle les dépasse avant") { prefs.put("arrowlead", it) }
         SToggle(prefs, "Assombrir la carte dans les tunnels", "tunneldim", true)
         SToggle(prefs, "Moins de boutons en conduite", "drivesimple", true)
         SToggle(prefs, "Bloquer la saisie en conduite", "drivelock", true, "La recherche vocale reste possible")

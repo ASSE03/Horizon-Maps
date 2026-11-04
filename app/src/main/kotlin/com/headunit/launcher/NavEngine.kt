@@ -2638,6 +2638,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var vsyncNs = 16_666_667.0
     private var frameCount = 0L
     private var glideFps = 30
+    /** Fork FR : avance de la flèche sur le GPS, en secondes (Réglages › Écran et tailles › En conduite). */
+    private var arrowLead = 1.0
 
     private fun glideTick(frameNs: Long) {
         // never do more work than the map can actually draw: on a slow head unit this frees the CPU for rendering
@@ -2648,6 +2650,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // a hot phone or battery saver: fewer frames, whatever is chosen (60 a second on a phone running Android Auto drained
             // the battery and made it hot, and a hot phone slows itself down, which made the arrow lag)
             glideFps = minOf(want, heatCap())
+            arrowLead = (prefs.s("arrowlead", "1.0").toDoubleOrNull() ?: 1.0).coerceIn(0.0, 2.5)
         }
         // with another app in front (guidance carrying on in the background) a few updates a second is plenty: nobody sees the map
         val fps = if (appVisible) glideFps else 5
@@ -2671,6 +2674,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val rawAge = (now - mAt) / 1000.0
         val age = rawAge.coerceIn(0.0, if (drOk) 120.0 else 2.5)
         val dr = drOk && rawAge > 3.0 && rawAge < 120.0
+        // fork FR : le point GPS a déjà environ une seconde quand il arrive : la flèche est avancée d'autant (réglable)
+        val lead = if (simMode == 0 && mSpeed > 2.0) arrowLead else 0.0
         if (dr != deadReckoning) deadReckoning = dr
         if (dr) camTargetAt = now
         gSpeed += (mSpeed - gSpeed) * (1.0 - Math.exp(-dt / 1.2))
@@ -2679,7 +2684,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         var lookB = gHead
         if (glideOnRoute && r != null) {
             // distance along the route: run on at the current speed, nudge towards where the latest fix says we are, and never go backwards
-            val target = mProg + gSpeed * age
+            val target = mProg + gSpeed * (age + lead)
             var np = gProg + gSpeed * dt
             val err = target - np
             np = if (abs(err) > 60.0) target else np + (err * (1.0 - Math.exp(-dt / 2.5))).coerceIn(-(0.3 * gSpeed + 0.4) * dt, (0.3 * gSpeed + 0.4) * dt)
@@ -2698,8 +2703,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val mp = mPos ?: f.pos
             val rad = Math.toRadians(mHead)
             val kLon = 111320.0 * cos(Geo.rad(gp.lat))
-            val predLat = (mp.lat) + cos(rad) * gSpeed * age / 110574.0
-            val predLon = (mp.lon) + Math.sin(rad) * gSpeed * age / kLon
+            val predLat = (mp.lat) + cos(rad) * gSpeed * (age + lead) / 110574.0
+            val predLon = (mp.lon) + Math.sin(rad) * gSpeed * (age + lead) / kLon
             var nLat = gp.lat + cos(rad) * gSpeed * dt / 110574.0
             var nLon = gp.lon + Math.sin(rad) * gSpeed * dt / kLon
             val eN = (predLat - nLat) * 110574.0; val eE = (predLon - nLon) * kLon

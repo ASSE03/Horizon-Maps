@@ -146,6 +146,7 @@ internal val settingsIndex = listOf(
     SettingRef("Position de la vitesse", "En bas, au milieu ou en haut", "Affichage de la vitesse", 10),
     SettingRef("Route et cap en conduite sans itinéraire", "", "En conduite", 10),
     SettingRef("Garder la flèche sur la route sans itinéraire", "", "En conduite", 10),
+    SettingRef("Avance de la flèche", "retard GPS décalage", "En conduite", 10),
     SettingRef("Assombrir la carte dans les tunnels", "", "En conduite", 10),
     SettingRef("Moins de boutons en conduite", "", "En conduite", 10),
     SettingRef("Bloquer la saisie en conduite", "La recherche vocale reste possible", "En conduite", 10),
