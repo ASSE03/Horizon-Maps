@@ -959,7 +959,7 @@ private fun AndroidAutoSection(prefs: Prefs) {
         SItem("Installé par", source)
         SItem("Paramètres d'Android Auto", if (hasAa) null else "Android Auto n'est pas installé sur ce téléphone") {
             if (hasAa) SButton("Ouvrir") {
-                val i = ctx.packageManager.getLaunchIntentForPackage(gh)
+                val i = ctx.packageManager.getLaunchIntentForPackage(gh) ?: aaSettingsIntent(ctx, gh)
                 try {
                     if (i != null) ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) else openSystemSettings(ctx, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, ghUri)
                 } catch (e: Exception) { openSystemSettings(ctx, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, ghUri) }
@@ -979,6 +979,30 @@ private fun AndroidAutoSection(prefs: Prefs) {
         }
     }
 }
+
+/**
+ * Fork FR : Android Auto n'a souvent pas d'icône (Samsung, Android récents) : on cherche son écran de paramètres parmi ses
+ * activités ouvrables, plutôt que d'ouvrir la fiche de l'appli comme le bouton « Infos sur l'appli ».
+ */
+private fun aaSettingsIntent(ctx: android.content.Context, pkg: String): android.content.Intent? = try {
+    val pm = ctx.packageManager
+    val info = if (android.os.Build.VERSION.SDK_INT >= 33) pm.getPackageInfo(pkg, android.content.pm.PackageManager.PackageInfoFlags.of(android.content.pm.PackageManager.GET_ACTIVITIES.toLong()))
+               else @Suppress("DEPRECATION") pm.getPackageInfo(pkg, android.content.pm.PackageManager.GET_ACTIVITIES)
+    val acts = info.activities.orEmpty().filter { it.exported && it.enabled && it.permission == null }
+    fun score(n: String): Int {
+        val l = n.lowercase()
+        return when {
+            l.endsWith("companion.settings.settingsactivity") -> 0
+            l.contains("settings") && l.contains("companion") -> 1
+            l.endsWith(".settingsactivity") -> 2
+            l.contains("settings") && !l.contains("developer") && !l.contains("notification") -> 3
+            else -> 99
+        }
+    }
+    acts.map { it.name to score(it.name) }.filter { it.second < 99 }.minByOrNull { it.second }?.let { (n, _) ->
+        android.content.Intent().setClassName(pkg, n)
+    }
+} catch (e: Throwable) { null }
 
 // ------------------------------------------------------------------ Performance
 
