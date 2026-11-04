@@ -1685,13 +1685,21 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             else prefs.s(PreferenceKeys.AVOID_TOLL_COUNTRIES, "").split(',').map { it.trim().uppercase() }.filter { it.length == 2 }.toSet()
     }
 
-    fun startRoute(to: Place, departInMin: Int = 0, keepVia: Boolean = false, startNow: Boolean = false) {
-        syncRoutePrefs(fix?.pos ?: map.center(), to.pos)
+    fun startRoute(to0: Place, departInMin: Int = 0, keepVia: Boolean = false, startNow: Boolean = false) {
+        var to = to0
+        // fork FR : choix du départ de la démo : le lieu cherché (ou posé d'un appui long) devient le départ, la destination reste
+        if (pickDemoStart) {
+            pickDemoStart = false
+            val d = dest
+            if (d != null) { demoFrom = to0; toast("Départ de la démo : ${to0.name}", 2500); to = d }
+        }
+        val demoStart = demoFrom?.takeIf { prefs.b(PreferenceKeys.DEMO, false) && simMode == 0 }
+        syncRoutePrefs(demoStart?.pos ?: fix?.pos ?: map.center(), to.pos)
         resume = null
         if (!keepVia) via = emptyList()
         if (!hasOnline && !OfflineRouter.installed(ctx)) { toast("Pour calculer des itinéraires, ajoutez une clé TomTom ou un jeton Mapbox gratuits dans Réglages > Clés et comptes, ou téléchargez le pack hors ligne", 7000); return }
-        val from = fix?.pos ?: map.center() ?: return
-        if (fix == null) toast("Pas encore de position GPS : itinéraire depuis le centre de la carte. Utilisez la démo pour simuler.", 5000)
+        val from = demoStart?.pos ?: fix?.pos ?: map.center() ?: return
+        if (fix == null && demoStart == null) toast("Pas encore de position GPS : itinéraire depuis le centre de la carte. Utilisez la démo pour simuler.", 5000)
         busy = true
         scope.launch {
             try {
@@ -4959,19 +4967,34 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     // ---- demo drive ----
+    /** Fork FR : départ choisi pour la démo (null : votre position), et le prochain lieu choisi devient ce départ. */
+    var demoFrom by mutableStateOf<Place?>(null)
+    var pickDemoStart by mutableStateOf(false)
+    /** Fork FR : vitesse de la démo (×1, ×2, ×4, ×8), réglable avant et pendant. */
+    var demoSpeed by mutableIntStateOf(1)
+
+    fun setDemoSpeed(x: Int) { demoSpeed = x.coerceIn(1, 16); if (simMode != 0) simMode = demoSpeed }
+
+    /** Le départ de la démo revient à votre position, et l'itinéraire est recalculé depuis là. */
+    fun clearDemoStart() { demoFrom = null; pickDemoStart = false; dest?.let { if (previewing) startRoute(it) } }
+
     fun cycleSim() {
         val r = route
         if (r == null) { toast("Choisissez d'abord une destination, puis lancez la démo"); return }
+        // à l'arrêt : démarre à la vitesse choisie ; en route : ×1 → ×2 → ×4 → ×8, puis fin
+        if (simMode == 0) { simMode = demoSpeed; startSim(r); return }
         when (simMode) {
-            0 -> { simMode = 1; startSim(r) }
-            1 -> simMode = 4
+            1 -> setDemoSpeed(2)
+            2 -> setDemoSpeed(4)
+            4 -> setDemoSpeed(8)
             else -> stopSim()
         }
     }
 
     private fun startSim(r: Route) {
         simJob?.cancel()
-        simDist = fix?.let { snap(r, it.pos).progress } ?: 0.0
+        // fork FR : avec un départ de démo choisi, la démo part du début de l'itinéraire
+        simDist = if (demoFrom != null && prefs.b(PreferenceKeys.DEMO, false)) 0.0 else fix?.let { snap(r, it.pos).progress } ?: 0.0
         following = true
         simJob = scope.launch {
             while (true) {

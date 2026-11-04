@@ -189,6 +189,21 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         if (costText != null) Text(costText, color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp))
         engine.destRain?.let { Text(it, color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 8.dp)) }
     }
+    // fork FR : la démo, avec un départ au choix et une vitesse ×1 à ×8 (Réglages › Performances › Bouton de trajet de démo)
+    if (engine.prefs.b(PreferenceKeys.DEMO, false)) Row(
+        Modifier.floating(50.dp).horizontalScroll(rememberScrollState()).padding(6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("Démo depuis", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 10.dp))
+        Pill("Ma position", engine.demoFrom == null && !engine.pickDemoStart, { engine.clearDemoStart() })
+        Pill(if (engine.pickDemoStart) "Cherchez ou appui long…" else engine.demoFrom?.name?.take(24) ?: "Choisir un départ", engine.demoFrom != null || engine.pickDemoStart, {
+            engine.pickDemoStart = !engine.pickDemoStart
+            if (engine.pickDemoStart) engine.toast("Cherchez le lieu de départ, ou faites un appui long sur la carte", 4000)
+        })
+        Text("Vitesse", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 14.dp, end = 4.dp))
+        for (x in listOf(1, 2, 4, 8)) Pill("×$x", engine.demoSpeed == x, { engine.setDemoSpeed(x) })
+        Pill("Lancer la démo", false, { engine.beginNavigation(); engine.cycleSim() })
+    }
     Row(
         Modifier.floating(50.dp).horizontalScroll(rememberScrollState()).padding(6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),

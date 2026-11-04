@@ -574,7 +574,7 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             strip.addAction(Action.Builder().setTitle("Arrêter").setOnClickListener { e?.endRoute(); invalidate() }.build())
             // the demo drive (for trying it out parked; only with Demo switched on in Settings, as in the app): starts it, speeds it
             // up, stops it. Otherwise that space is the 2D / 3D button
-            if (demoOn) strip.addAction(Action.Builder().setTitle(when (e?.simMode ?: 0) { 0 -> "Démo"; 1 -> "Plus vite"; else -> "Fin de la démo" })
+            if (demoOn) strip.addAction(Action.Builder().setTitle(when (e?.simMode ?: 0) { 0 -> "Démo"; 1 -> "×2"; 2 -> "×4"; 4 -> "×8"; else -> "Fin de la démo" })
                 .setOnClickListener { e?.cycleSim(); invalidate() }.build())
             else strip.addAction(view)
             strip.addAction(sound)
