@@ -133,7 +133,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
     val progress = remember { Animatable(0f) }
     // planning an arrive-by trip (or having the picker open) stops the countdown: you are not leaving now
     var arriveBy by remember { mutableStateOf(false) }
-    val hold = arriveBy || engine.flyingOver || engine.planned?.dest?.let { p -> engine.dest?.let { d -> Geo.dist(p.pos, d.pos) < 50.0 } } == true
+    val hold = arriveBy || engine.pickDemoStart || engine.flyingOver || engine.planned?.dest?.let { p -> engine.dest?.let { d -> Geo.dist(p.pos, d.pos) < 50.0 } } == true
     val autoStart = engine.prefs.b(PreferenceKeys.AUTO_START_ROUTE, true)
     val countdownMs = engine.prefs.i(PreferenceKeys.AUTO_START_SECONDS, 10).coerceIn(3, 30) * 1000
     LaunchedEffect(engine.active, engine.routes, hold, autoStart, countdownMs) {
@@ -143,6 +143,15 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         if (!engine.stopMode) engine.beginNavigation()
     }
     if (arriveBy) ArriveByDialog(engine) { arriveBy = false }
+    // fork FR : choix du départ de la démo : le panneau se replie pour laisser la carte (appui long) et la recherche
+    if (engine.pickDemoStart) {
+        Row(Modifier.align(Alignment.BottomCenter).padding(12.dp).floating(50.dp).padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Départ de la démo : cherchez un lieu en haut, ou appui long sur la carte", color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(max = 480.dp))
+            Pill("Annuler", false, { engine.pickDemoStart = false })
+        }
+        return
+    }
     val fmt = com.headunit.launcher.Clock.format()
     val baseMs = if (engine.departAtMs > 0) engine.departAtMs else System.currentTimeMillis()
     // fork FR : en paysage sur téléphone (peu de hauteur), le panneau défile au lieu de couper les cartes d'itinéraire et Démarrer

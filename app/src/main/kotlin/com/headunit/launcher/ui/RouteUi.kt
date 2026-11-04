@@ -525,7 +525,7 @@ fun FuelSuggestionRow(engine: NavEngine) {
         Text(if (engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV") "Arrêt recharge" else "Arrêt carburant", color = Good, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Text(
             n.place.name + " · dans " + Geo.fmtDist(n.dist, engine.imperial) + (if (n.price != null) " · " + com.headunit.launcher.fmtFuelPrice(n.price, n.unit) else "") + (if (n.detourMin >= 0) " · +${n.detourMin} min" else "") + (if (n.extra.startsWith("arrivée")) " · " + n.extra else ""),
-            color = c.text, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 420.dp),
+            color = c.text, fontSize = 13.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 420.dp),
         )
         Pill("Ajouter une étape", false, { engine.addStop(n.place); engine.fuelSuggestion = null })
     }
