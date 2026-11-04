@@ -961,7 +961,7 @@ private fun AndroidAutoSection(prefs: Prefs) {
         }
     }
     SGroup("Installation", footer = "Si Horizon Nav n'apparaît pas dans Android Auto : 1. Ouvrez les paramètres d'Android Auto, touchez une dizaine de fois le numéro de version en bas, puis dans le menu en haut à droite ouvrez les Paramètres pour les développeurs et activez Sources inconnues. 2. De retour dans les paramètres d'Android Auto, ouvrez Personnaliser le lanceur et vérifiez que Horizon Nav est coché. 3. Forcez l'arrêt d'Android Auto (Infos sur l'appli ci-dessous), débranchez et rebranchez. Si elle n'apparaît toujours pas, l'Android Auto de votre téléphone n'affiche que les applis installées par le Play Store : installez l'APK avec un installateur qui déclare le Play Store comme source (par exemple « adb install -i com.android.vending », ou une appli comme AAAD ou Install with Options).") {
-        SItem("Installé par", source)
+        SItem("Installé par", source + if (source.startsWith("Google Play")) (if (prefs.b("aadirect", true)) " · mises à jour : directes, comme AAEnabler" else " · mises à jour : à installer avec AAEnabler") else "")
         SItem("Paramètres d'Android Auto", if (hasAa) null else "Android Auto n'est pas installé sur ce téléphone") {
             if (hasAa) SButton("Ouvrir") {
                 val i = ctx.packageManager.getLaunchIntentForPackage(gh) ?: aaSettingsIntent(ctx, gh)
