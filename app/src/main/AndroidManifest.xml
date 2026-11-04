@@ -31,6 +31,15 @@
         </intent>
         <!-- Android Auto, for the shortcuts to its settings -->
         <package android:name="com.google.android.projection.gearhead" />
+        <!-- fork FR : les applis qui installent un APK (AAEnabler, installateur), pour leur donner le droit de lire la mise à jour -->
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE" />
+            <data android:scheme="content" android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="content" android:mimeType="application/vnd.android.package-archive" />
+        </intent>
     </queries>
 
     <application

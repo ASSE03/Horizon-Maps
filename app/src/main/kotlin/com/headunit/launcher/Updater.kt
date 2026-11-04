@@ -327,6 +327,7 @@ object Updater {
                                     .putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")
                                     .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
                                 ii.clipData = android.content.ClipData.newRawUri("Mise à jour d'Horizon Nav", uri)
+                                grantToInstallers(ctx, uri)
                                 ctx.startActivity(ii)
                             }
                             return
@@ -388,6 +389,23 @@ object Updater {
             p.put("aadirect", false)
             "Android n'a pas gardé le Play Store comme source : Horizon Nav peut avoir disparu d'Android Auto. Réinstallez-la avec AAEnabler (la nouvelle version est dans Téléchargements) ; les prochaines mises à jour passeront par AAEnabler."
         }
+    }
+
+    /**
+     * Fork FR : AAEnabler reçoit le fichier, puis le passe à l'installateur d'Android sans lui transmettre le droit de le lire :
+     * l'installation échouait et AAEnabler se fermait. Le droit de lecture est donc donné d'avance à toutes les applis qui savent
+     * installer un APK (AAEnabler, l'installateur d'Android et celui de Samsung).
+     */
+    private fun grantToInstallers(ctx: Context, uri: Uri) {
+        val pm = ctx.packageManager
+        val pkgs = HashSet<String>()
+        for (probe in listOf(
+            @Suppress("DEPRECATION") Intent(Intent.ACTION_INSTALL_PACKAGE).setData(uri),
+            Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive"))) {
+            try { pm.queryIntentActivities(probe, 0).forEach { pkgs += it.activityInfo.packageName } } catch (e: Exception) { }
+        }
+        pkgs += listOf("com.google.android.packageinstaller", "com.android.packageinstaller", "com.samsung.android.packageinstaller")
+        for (p in pkgs) try { ctx.grantUriPermission(p, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) { }
     }
 
     /** Copies the checked update into the phone's Downloads folder (Android 10 and newer: no permission needed). */
