@@ -404,8 +404,20 @@ object Overpass {
     }
 
     /** Speed cameras within [radius] m of [p]; null when the lookup failed (so the ones already shown are kept, not wiped). */
+    /** Fork FR : la dernière recherche de radars (serveur, nombre), pour les rapports. */
+    @Volatile var camNote = ""
+
     fun cameras(p: LL, radius: Int): List<LL>? = try {
-        val els = run("[out:json][timeout:15];node(around:$radius,${p.lat},${p.lon})[\"highway\"=\"speed_camera\"];out;", 10000, 20000)
+        val q = "[out:json][timeout:15];node(around:$radius,${p.lat},${p.lon})[\"highway\"=\"speed_camera\"];out;"
+        var els = run(q, 10000, 20000)
+        camNote = "${lastNote} : ${els.length()}"
+        // fork FR : un serveur de secours a répondu « aucun radar » là où il y en a : on redemande aux autres serveurs
+        if (els.length() == 0 && preferred != 0) {
+            val was = preferred
+            preferred = (was + 1) % endpoints.size
+            try { val e2 = run(q, 10000, 20000, endpoints.size - 1); camNote += " puis ${lastNote} : ${e2.length()}"; if (e2.length() > 0) els = e2 else preferred = was }
+            catch (e: Exception) { preferred = was; camNote += " puis échec" }
+        }
         (0 until els.length()).mapNotNull {
             val e = els.getJSONObject(it)
             if (e.has("lat") && e.has("lon")) LL(e.getDouble("lat"), e.getDouble("lon")).also { c -> noteDir(c, e.optJSONObject("tags")) } else null
