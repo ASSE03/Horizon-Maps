@@ -152,7 +152,7 @@ fun FogOverlay(modifier: Modifier = Modifier) {
     val night = LocalVw.current.dark
     val col = if (night) Color(0xFF9AA3B5) else Color(0xFFF2F4F7)
     androidx.compose.foundation.Canvas(modifier) {
-        drawRect(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(col.copy(alpha = 0.55f), col.copy(alpha = 0.22f), col.copy(alpha = 0.08f))), Offset.Zero, size)
+        drawRect(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(col.copy(alpha = 0.30f), col.copy(alpha = 0.10f), col.copy(alpha = 0.0f))), Offset.Zero, size)
     }
 }
 

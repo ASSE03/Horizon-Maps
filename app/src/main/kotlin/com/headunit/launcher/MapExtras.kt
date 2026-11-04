@@ -129,9 +129,10 @@ internal object Sky {
      * The haze towards the horizon to match the weather (Open-Meteo code): a light grey haze when it's overcast, thicker in rain or
      * snow, thick in fog. Clear weather (or null) leaves Mapbox's own sky, which already glows at dawn and dusk.
      */
-    fun atmosphere(st: Style, code: Int?, night: Boolean) {
+    fun atmosphere(st: Style, code: Int?, night: Boolean, satellite: Boolean = false) {
         try {
-            val c = code ?: -1
+            // fork FR : en vue satellite, le brouillard recouvrait les photos et les routes (seuls les noms restaient visibles)
+            val c = if (satellite) -1 else code ?: -1
             val kind = when (c) {
                 45, 48 -> 3
                 in 51..67, in 80..82, in 95..99, in 71..77, 85, 86 -> 2
@@ -141,7 +142,8 @@ internal object Sky {
             if (kind == 0) { try { st.removeAtmosphere() } catch (e: Throwable) { }; return }
             val col = if (night) "#2A2F3D" else when (kind) { 3 -> "#D3D6DB"; 2 -> "#C2C7CF"; else -> "#CDD3DB" }
             val high = if (night) "#1C2131" else when (kind) { 3 -> "#C9CDD3"; 2 -> "#A9B1BD"; else -> "#B9C4D2" }
-            val rg = when (kind) { 3 -> listOf(0.2, 2.5); 2 -> listOf(0.6, 5.5); else -> listOf(1.0, 9.0) }
+            // fork FR : brouillard moins dense (il commençait juste devant la flèche et blanchissait toute la carte)
+            val rg = when (kind) { 3 -> listOf(1.0, 6.0); 2 -> listOf(1.2, 7.0); else -> listOf(1.5, 10.0) }
             st.setAtmosphere(com.mapbox.maps.extension.style.atmosphere.generated.atmosphere {
                 color(col); highColor(high); horizonBlend(if (kind == 3) 0.3 else 0.15); range(rg)
                 spaceColor(if (night) "#0B0E17" else high); starIntensity(if (night && kind < 2) 0.15 else 0.0)

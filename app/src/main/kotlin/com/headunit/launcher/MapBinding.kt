@@ -701,7 +701,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     fun setSky(code: Int?) {
         if (code == skyCode && style != null) return
         skyCode = code
-        main0.post { style?.let { Sky.atmosphere(it, skyCode, nightStyle) } }
+        main0.post { style?.let { Sky.atmosphere(it, skyCode, nightStyle, satellite) } }
     }
 
     /** The weather where you are now (Open-Meteo code), for rain or snow on the map; null for none. */
@@ -716,7 +716,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // hills and valleys (not on the classic 2D map)
         Sky.terrain(st, terrainOn && mapDetail != "lightest")
         drawsWeather = Sky.weather(st, weatherCode)
-        Sky.atmosphere(st, skyCode, nightStyle)
+        Sky.atmosphere(st, skyCode, nightStyle, satellite)
         if (furnitureOn && MapStylePolicy.supportsFullDetailFeatures(mapDetail)) {
             Furniture.addModels(st)
             addS(st, GeoJsonSource.Builder("dl-signals-m").featureCollection(signalModels).build())
