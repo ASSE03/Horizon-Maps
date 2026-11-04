@@ -163,7 +163,13 @@ class CarNavSession : Session() {
     private val themeTick = object : Runnable {
         override fun run() {
             try { if (holder.engine != null && carDark() != themeApplied) applyTheme() } catch (e: Exception) { }
-            themeHandler.postDelayed(this, 60_000L)
+            // fork FR : satellite et bâtiments 3D changés sur le téléphone s'appliquent aussi à l'écran de la voiture
+            try {
+                val pr = Prefs(carContext.applicationContext)
+                val sat = pr.b(PreferenceKeys.SATELLITE, false)
+                holder.map?.let { m -> if (m.isSatellite != sat) m.setView(sat, pr.b(PreferenceKeys.BUILDINGS_3D, true)) }
+            } catch (e: Exception) { }
+            themeHandler.postDelayed(this, 5_000L)
         }
     }
 
@@ -228,6 +234,8 @@ class CarNavSession : Session() {
         map.setLogoCorner(prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"))
         map.setExtras(prefs.b(PreferenceKeys.FACADES, true), prefs.b(PreferenceKeys.LANDMARKS3D, true), prefs.b(PreferenceKeys.PATHS, true), prefs.b(PreferenceKeys.TERRAIN, false),
             false, prefs.b(PreferenceKeys.FURNITURE3D, true), prefs.b(PreferenceKeys.CLEARVIEW, true))
+        // fork FR : la vue satellite choisie dans les réglages vaut aussi pour l'écran de la voiture
+        map.setView(prefs.b(PreferenceKeys.SATELLITE, false), prefs.b(PreferenceKeys.BUILDINGS_3D, true))
         val engine = NavEngine(app, prefs, map)
         // the car screen does the talking while it's connected, and shares the trip with the phone
         engine.isCar = true
@@ -241,7 +249,7 @@ class CarNavSession : Session() {
         CarTicks.tick = { surface.tick() }
         applyTheme()
         themeHandler.removeCallbacks(themeTick)
-        themeHandler.postDelayed(themeTick, 60_000L)
+        themeHandler.postDelayed(themeTick, 5_000L)
         try { engine.startLocation() } catch (e: Exception) { }
         mapScreen?.start()
         // asked for a destination before the map was up (Android Auto opened the app for it)
@@ -1013,6 +1021,14 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
             .setOnClickListener {
                 prefs.put(PreferenceKeys.CARTHEME, when (th) { "sun" -> "car"; "car" -> "day"; "day" -> "night"; else -> "sun" })
                 onTheme(); invalidate()
+            }.build()
+        val satOn = prefs.b(PreferenceKeys.SATELLITE, false)
+        rows += Row.Builder().setTitle("Vue satellite")
+            .addText(if (satOn) "Activée · touchez pour revenir à la carte" else "Désactivée · touchez pour activer")
+            .setOnClickListener {
+                prefs.put(PreferenceKeys.SATELLITE, !satOn)
+                try { holder.map?.setView(!satOn, prefs.b(PreferenceKeys.BUILDINGS_3D, true)) } catch (x: Exception) { }
+                invalidate()
             }.build()
         // Android Auto's templated UI does not expose a native continuous slider here,
         // so these map-accessible controls step through sensible values on each tap.
