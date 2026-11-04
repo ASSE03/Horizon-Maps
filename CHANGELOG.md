@@ -73,6 +73,8 @@ Add user-facing Horizon Nav changes under **Unreleased** before publishing each 
 - Where lanes are painted on the road, the route line runs through the lit-up lanes right up to the junction and carries smoothly into the turn arrow, then eases back onto the road over the next 25 m, with no gap or step where the lane guidance ends.
 
 ### New
+- Lorry routes: Settings > Routes > Vehicle can now be set to Lorry, with its height, width, length, weight, axle weight and hazardous goods. Routes from TomTom and offline routes then keep off low bridges, weight limits and lorry bans for that size; Mapbox routes use the height, width and weight. A lorry never gets a car route as a fallback. Each route shows a lorry badge: blue when every measurement was used, amber when only height and weight could be (Mapbox).
+- Low bridge and weight limit warnings: for a lorry on a route, height, weight, width and length limits on the road ahead show as signs on the map, and one the lorry is over gets a red card under the turn card and a spoken warning at about 1 km and again at 300 m. On the phone, head unit and Android Auto.
 - Next turn in the notification: while you navigate, Horizon Nav's notification now shows the turn arrow, distance, road and arrival time, marked as a navigation notification. Car launchers, smartwatches and other screens that show navigation notifications can pick it up. Switch it off in Settings > Guidance > Turn card.
 - Speed position: Settings > Screen & sizes > Speed position moves the speed limit and speedometer to the middle or top of its side (away from the cards), for when your hand covers it at the bottom.
 - Map on the driver's display: on cars whose Android Auto offers it, the screen behind the steering wheel now shows the map following you, with your route (it used to show only the app's icon). Switch it off in Android Auto's Settings > Map on the driver's display.
@@ -91,6 +93,7 @@ Add user-facing Horizon Nav changes under **Unreleased** before publishing each 
 - 2D / 3D on Android Auto: a 2D / 3D button in Android Auto's own buttons, as in the app (while navigating it takes the Demo button's place unless Demo is switched on in Settings).
 
 ### Improved
+- Settings easier to scan: long lists are split under more headings (3D, Sky and satellite; Speed, Cameras, Hazards, Zones and reminders; Directions, Voice and volume; Brightness, Sizes, Speed display; and on Android Auto, Sizes on the car screen and Setting it up). Nothing has moved section, and the settings search finds everything, now including "Show petrol stations too".
 - Electric cars: with Electric chosen as your fuel, the map page shows Charging first and Toilets instead of the petrol Fuel button (on the phone and Android Auto). Settings > Fuel > Show petrol stations too brings it back.
 - Android Auto settings: the 12 / 24-hour clock can be set from the car too.
 - Search while navigating on Android Auto: the Report screen now has a Search tile, for finding a stop on the way.

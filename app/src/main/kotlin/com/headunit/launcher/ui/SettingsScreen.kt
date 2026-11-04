@@ -79,6 +79,7 @@ import com.headunit.launcher.mapSource
 import com.headunit.launcher.mapDetail
 import com.headunit.launcher.setApiKey
 import com.headunit.launcher.Zones
+import com.headunit.launcher.Vehicle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -220,7 +221,7 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
                         0 -> MapLookSection(prefs, engine)
                         1 -> OnTheMapSection(prefs, engine)
                         2 -> ArrowSection(prefs, engine)
-                        3 -> RoutesSection(prefs)
+                        3 -> RoutesSection(prefs, engine)
                         4 -> GuidanceSection(prefs, engine)
                         5 -> AlertsSection(prefs, engine)
                         6 -> SoundSection(prefs, engine)
@@ -266,17 +267,19 @@ private fun MapLookSection(prefs: Prefs, engine: NavEngine) {
         SChoice("Position du logo Mapbox", listOf("tl" to "En haut à gauche", "tr" to "En haut à droite", "bl" to "En bas à gauche", "br" to "En bas à droite"), prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"),
             "Mapbox impose son logo sur la carte ; choisissez le coin qui vous convient") { prefs.put(PreferenceKeys.MAPBOX_LOGO, it) }
     }
-    SGroup("3D et satellite") {
-        SToggle(prefs, "Satellite", "satellite", false)
+    SGroup("3D") {
         SToggle(prefs, "Bâtiments 3D", "buildings3d", true)
         SToggle(prefs, "Façades détaillées", "facades", true, "Fenêtres, portes et vitrines sur les bâtiments, là où Mapbox les a (surtout en centre-ville)")
         SToggle(prefs, "Monuments 3D", "landmarks3d", true, "Modèles détaillés de bâtiments célèbres, ponts et stades")
         SToggle(prefs, "Relief 3D", "terrain", false, "Le vrai relief. Superbe en région vallonnée, mais plus lourd pour un autoradio lent")
-        SToggle(prefs, "Brume et ciel", "skyweather", true, "Brume à l'horizon selon la météo : grise par temps couvert, plus dense sous la pluie, épaisse dans le brouillard")
-        SToggle(prefs, "Ciel nocturne en 3D", "nightsky", true, "Étoiles scintillantes au-dessus de l'horizon la nuit")
         SToggle(prefs, "Arbres dans les parcs", "trees", true, "Les arbres 3D de Mapbox dans les parcs et le long des rues")
         SToggle(prefs, "Dégager la route devant", "clearview", true, "Les arbres et monuments 3D de Mapbox sont masqués autour de votre flèche et, en itinéraire, au milieu de la route juste devant, pour ne jamais la cacher")
         SToggle(prefs, "Toucher pour mettre en évidence", "tapselect", true, "Touchez un bâtiment pour l'éclairer ; touchez un commerce ou un lieu, puis appui long pour y aller")
+    }
+    SGroup("Ciel et satellite") {
+        SToggle(prefs, "Satellite", "satellite", false)
+        SToggle(prefs, "Brume et ciel", "skyweather", true, "Brume à l'horizon selon la météo : grise par temps couvert, plus dense sous la pluie, épaisse dans le brouillard")
+        SToggle(prefs, "Ciel nocturne en 3D", "nightsky", true, "Étoiles scintillantes au-dessus de l'horizon la nuit")
     }
 }
 
@@ -387,7 +390,8 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
 // ------------------------------------------------------------------ Routes
 
 @Composable
-private fun RoutesSection(prefs: Prefs) {
+private fun RoutesSection(prefs: Prefs, engine: NavEngine) {
+    VehicleGroup(prefs, engine.imperial)
     SGroup("À éviter", footer = "Les changements s'appliquent au prochain itinéraire calculé. « Éviter cette route » sur la carte ne vaut que pour ce trajet.") {
         SToggle(prefs, "Éviter les péages", "avoid_toll", false, if (prefs.b(PreferenceKeys.AVOID_TOLL, false)) "Partout" else null)
         // ...or only in some countries: a route that would use a toll road in one of them is planned without toll roads
@@ -423,6 +427,38 @@ private fun RoutesSection(prefs: Prefs) {
     }
 }
 
+/** Car or lorry; for a lorry its size and weight, which every route is then planned for (see Vehicle). */
+@Composable
+private fun VehicleGroup(prefs: Prefs, imperial: Boolean) {
+    val lorry = prefs.s(PreferenceKeys.VEHICLE, "car") == "lorry"
+    SGroup("Véhicule", footer = if (lorry) "Utilisé par TomTom et les itinéraires hors ligne, et par Mapbox pour la hauteur, la largeur et le poids. Les limites viennent des données de la carte et certaines peuvent manquer : respectez toujours la signalisation." else null) {
+        SChoice("Véhicule", listOf("car" to "Voiture", "lorry" to "Poids lourd"), if (lorry) "lorry" else "car",
+            if (lorry) "Les itinéraires évitent les ponts bas, limites de poids et interdictions poids lourds selon votre gabarit" else null) { prefs.put(PreferenceKeys.VEHICLE, it) }
+        if (lorry) {
+            SStep("Hauteur", "Chargement compris. Sert à vérifier les ponts bas", prefs, PreferenceKeys.LORRY_HEIGHT, 400, 200, 500, 5) { Vehicle.heightText(it, imperial) }
+            SStep("Largeur", "Sans les rétroviseurs", prefs, PreferenceKeys.LORRY_WIDTH, 255, 180, 300, 5) { String.format(java.util.Locale.US, "%.2f m", it / 100.0) }
+            SStep("Longueur", "Tracteur et remorque", prefs, PreferenceKeys.LORRY_LENGTH, 1650, 500, 2500, 50) { String.format(java.util.Locale.US, "%.1f m", it / 100.0) }
+            SStep("Poids", "En charge", prefs, PreferenceKeys.LORRY_WEIGHT, 440, 35, 600, 5) { tonnes(it) }
+            SStep("Poids par essieu", "Essieu le plus chargé", prefs, PreferenceKeys.LORRY_AXLE, 115, 50, 200, 5) { tonnes(it) }
+            SToggle(prefs, "Matières dangereuses", PreferenceKeys.LORRY_HAZMAT, false, "Évite les tunnels et routes interdits aux matières dangereuses")
+        }
+    }
+}
+
+private fun tonnes(t10: Int): String = if (t10 % 10 == 0) "${t10 / 10} t" else String.format(java.util.Locale.US, "%.1f t", t10 / 10.0)
+
+/** A number set with − and + (a lorry's measurements): [show] turns the stored value into what's shown. */
+@Composable
+private fun SStep(title: String, sub: String, prefs: Prefs, key: String, def: Int, min: Int, max: Int, by: Int, show: (Int) -> String) {
+    val c = LocalVw.current
+    val v = prefs.i(key, def).coerceIn(min, max)
+    SItem(title, sub) {
+        SButton("−") { prefs.put(key, (v - by).coerceAtLeast(min)) }
+        Text(show(v), color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(min = 92.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        SButton("+") { prefs.put(key, (v + by).coerceAtMost(max)) }
+    }
+}
+
 // ------------------------------------------------------------------ Turn card & lanes
 
 @Composable
@@ -437,7 +473,6 @@ private fun GuidanceSection(prefs: Prefs, engine: NavEngine) {
         SChoice("Direction suivante sur la carte", listOf("close" to "Si proche", "always" to "Toujours", "off" to "Désactivé"), prefs.s(PreferenceKeys.THEN_MODE, "close"),
             when (prefs.s(PreferenceKeys.THEN_MODE, "close")) { "close" -> "Seulement quand la direction suivante arrive juste après (dans les 15 secondes environ)"; "always" -> "La direction d'après, tout le temps"; else -> null }) { prefs.put(PreferenceKeys.THEN_MODE, it) }
         if (prefs.s(PreferenceKeys.THEN_MODE, "close") != "off") SChoice("Affichée comme", listOf("row" to "Une ligne sous la carte", "icon" to "Une petite flèche"), prefs.s(PreferenceKeys.THEN_STYLE, "row")) { prefs.put(PreferenceKeys.THEN_STYLE, it) }
-        SToggle(prefs, "Direction suivante dans la notification", PreferenceKeys.TURN_NOTIF, true, "La flèche, la distance et la route dans la notification d'Horizon Nav pendant le guidage, pour les lanceurs de voiture, les montres et les écrans qui affichent les notifications de navigation")
     }
     SGroup("Voies et carrefours") {
         SToggle(prefs, "Voies peintes sur la carte", "lanemap", true)
@@ -455,6 +490,9 @@ private fun GuidanceSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Moment d'arrivée", "arrivalfx", true, "La caméra plonge vers votre destination et montre le parking le plus proche")
         SToggle(prefs, "Parking près de la destination", "parkprompt", true, (if (mi) "Environ un mile" else "Environ 1,5 km") + " avant l'arrivée, les parkings proches avec le temps de marche depuis chacun")
         SToggle(prefs, "Itinéraire retour", "routeback", true, "Sur la carte d'arrivée : un seul appui pour revenir à votre point de départ")
+    }
+    SGroup("Autres écrans") {
+        SToggle(prefs, "Direction suivante dans la notification", PreferenceKeys.TURN_NOTIF, true, "La flèche, la distance et la route dans la notification d'Horizon Nav pendant le guidage, pour les lanceurs de voiture, les montres et les écrans qui affichent les notifications de navigation")
     }
 }
 
@@ -482,18 +520,22 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
         if (prefs.b(PreferenceKeys.SPEEDWARN, true)) SChoice("Avertir au-delà de", listOf("0", "5", "10").map { it to it + if (engine.imperial) " mph" else " km/h" }, prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5")) { prefs.put(PreferenceKeys.TRAFFIC_WARNING, it) }
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
         SToggle(prefs, "Afficher les limitations estimées", "limitest", false, "Sans limitation connue, affiche la limitation habituelle pour ce type de route (grisée). Désactivé : aucun panneau plutôt qu'une estimation")
+    }
+    SGroup("Radars") {
         SToggle(prefs, "Radars", "cameras", true)
         if (prefs.b(PreferenceKeys.CAMERA_WARNINGS, true)) SToggle(prefs, "Désactivés là où c'est interdit", "cambanobey", true, "La France, l'Allemagne et la Suisse interdisent les alertes radar : elles s'y coupent d'elles-mêmes")
         SToggle(prefs, "Radars tronçons", "avgzones", true, "Affiche votre moyenne par rapport à la limite")
     }
-    SGroup("Sur la route", footer = "Radars tronçons, ralentisseurs, écoles et ZFE viennent d'OpenStreetMap : certains peuvent manquer.") {
+    SGroup("Dangers", footer = "Ralentisseurs, écoles, passages à niveau et gués viennent d'OpenStreetMap : certains peuvent manquer.") {
         SToggle(prefs, "Travaux et incidents", "incidents", true)
         SToggle(prefs, "Alerte contresens", "wrongway", true, "Si vous vous engagez à contresens dans une rue à sens unique")
         SToggle(prefs, "Ralentisseurs", "bumps", true)
         SToggle(prefs, "Écoles aux heures d'entrée et de sortie", "schools", true)
+        SToggle(prefs, "Passages à niveau et gués", "railford", true, "Un panneau et une alerte vocale pour les passages à niveau et les gués de votre itinéraire")
+    }
+    SGroup("Zones et rappels") {
         SToggle(prefs, "Zones à faibles émissions (ZFE)", "zonewarn", true)
         SToggle(prefs, "Rappel de pause après 2 heures", "breakremind", true)
-        SToggle(prefs, "Passages à niveau et gués", "railford", true, "Un panneau et une alerte vocale pour les passages à niveau et les gués de votre itinéraire")
         SToggle(prefs, "Conseils météo", "wxadvice", true, "Une discrète remarque par forte pluie, neige, brouillard ou verglas quand vous êtes proche de la limite")
     }
     SGroup("Vos signalements", footer = "Faites un signalement depuis le bouton d'options de la carte. Les signalements restent sur cet appareil et disparaissent après quelques heures.") {
@@ -507,11 +549,13 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
 @Composable
 private fun SoundSection(prefs: Prefs, engine: NavEngine) {
     val ctx = LocalContext.current
-    SGroup("Son") {
+    SGroup("Instructions") {
         SChoice("Guidage vocal", listOf("0" to "Tout", "1" to "Alertes seules", "2" to "Désactivé"), engine.soundMode.toString(),
             "Alertes seules : pas d'instructions de direction, mais radars, limitations et dangers restent annoncés") { prefs.put(PreferenceKeys.SOUND_MODE, it.toInt()) }
         SToggle(prefs, "Annoncer les noms de rues", PreferenceKeys.VOICE_ROADS, true, "Désactivé : seulement la direction, « Dans 200 mètres, tournez à gauche », sans la rue ni les villes des panneaux")
         SToggle(prefs, "Instructions plus intelligentes", "smartvoice", true, "Numéros de sortie et directions des panneaux, la manœuvre suivante quand elle suit de près, et moins d'annonces anticipées sur vos routes habituelles")
+    }
+    SGroup("Voix et volume") {
         SChoice("Canal audio de la voix", listOf("nav" to "Navigation", "media" to "Média"), prefs.s(PreferenceKeys.VOICE_CHANNEL, "nav"),
             "Si vous entendez les bips mais pas la voix, choisissez Média : certains autoradios ne jouent pas le canal navigation") { prefs.put(PreferenceKeys.VOICE_CHANNEL, it) }
         SItem("Voix et langue", "Utilise la synthèse vocale du système (installez la voix française)") { SButton("Ouvrir") { openSystemSettings(ctx, "com.android.settings.TTS_SETTINGS") } }
@@ -803,10 +847,12 @@ private fun OfflinePlacesGroup(engine: NavEngine) {
 
 @Composable
 private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
-    SGroup("Écran") {
+    SGroup("Luminosité") {
         SSlider("Luminosité", prefs.i(PreferenceKeys.BRIGHT, 100).toFloat(), 10f..100f, "%", sub = "100 % laisse le système décider", live = true) { prefs.put(PreferenceKeys.BRIGHT, it) }
         SToggle(prefs, "Assombrir l'écran la nuit", "dimnight", false)
         SToggle(prefs, "Garder l'écran allumé", "keepon", true)
+    }
+    SGroup("Tailles") {
         val screenConfig = androidx.compose.ui.platform.LocalConfiguration.current
         val autoPercent = recommendedMainUiScale(screenConfig.screenWidthDp, screenConfig.screenHeightDp)
         val autoScale = prefs.b(PreferenceKeys.UI_AUTO_SCALE, prefs.s(PreferenceKeys.UI_SCALE, "").isBlank())
@@ -840,12 +886,14 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
         }
 
     }
-    SGroup("En conduite") {
+    SGroup("Affichage de la vitesse") {
         SToggle(prefs, "Votre vitesse à côté de la limitation", "mapspeed", true)
         SToggle(prefs, "Anneau du compteur", "speedring", true, "Se remplit vers la limite, passe à l'orange puis au rouge")
         SSlider("Taille de la limitation et du compteur", prefs.i(PreferenceKeys.SPEED_SIZE, 100).toFloat(), 50f..200f, "%", sub = "Sur le téléphone et l'écran de la voiture", steps = 29, reset = 100f) { prefs.put(PreferenceKeys.SPEED_SIZE, it) }
         SChoice("Position de la vitesse", listOf("bottom" to "En bas", "middle" to "Au milieu", "top" to "En haut"), prefs.s(PreferenceKeys.SPEED_POS, "bottom"),
             "Du côté opposé aux cartes pour ne jamais les cacher. Montez-la si votre main la cache") { prefs.put(PreferenceKeys.SPEED_POS, it) }
+    }
+    SGroup("En conduite") {
         SToggle(prefs, "Route et cap en conduite sans itinéraire", "cruise", true)
         SToggle(prefs, "Garder la flèche sur la route sans itinéraire", "snaproad", true)
         SToggle(prefs, "Assombrir la carte dans les tunnels", "tunneldim", true)
@@ -873,22 +921,22 @@ private fun AndroidAutoSection(prefs: Prefs) {
     val ctx = LocalContext.current
     // Android Auto only lists apps that weren't installed from Play when its own "Sources inconnues" is on, and some phones hide them
     // anyway: the steps that get it showing, with shortcuts
-    SGroup("Écran de la voiture", footer = "Si Horizon Nav n'apparaît pas dans Android Auto : 1. Ouvrez les paramètres d'Android Auto, touchez une dizaine de fois le numéro de version en bas, puis dans le menu en haut à droite ouvrez les Paramètres pour les développeurs et activez Sources inconnues. 2. De retour dans les paramètres d'Android Auto, ouvrez Personnaliser le lanceur et vérifiez que Horizon Nav est coché. 3. Forcez l'arrêt d'Android Auto (Infos sur l'appli ci-dessous), débranchez et rebranchez. Si elle n'apparaît toujours pas, l'Android Auto de votre téléphone n'affiche que les applis installées par le Play Store : installez l'APK avec un installateur qui déclare le Play Store comme source (par exemple « adb install -i com.android.vending », ou une appli comme AAAD ou Install with Options).") {
-        val gh = "com.google.android.projection.gearhead"
-        val ghUri = android.net.Uri.parse("package:$gh")
-        val hasAa = remember { try { ctx.packageManager.getPackageInfo(gh, 0); true } catch (e: Exception) { false } }
-        val source = remember {
-            try {
-                val inst = if (android.os.Build.VERSION.SDK_INT >= 30) ctx.packageManager.getInstallSourceInfo(ctx.packageName).installingPackageName
-                    else @Suppress("DEPRECATION") ctx.packageManager.getInstallerPackageName(ctx.packageName)
-                when (inst) {
-                    "com.android.vending" -> "Google Play (Android Auto l'affiche sans rien faire de plus)"
-                    null -> "Inconnu (installé depuis un fichier) : nécessite Sources inconnues dans Android Auto"
-                    ctx.packageName -> "Mise à jour intégrée d'Horizon Nav : nécessite Sources inconnues dans Android Auto"
-                    else -> "$inst : nécessite Sources inconnues dans Android Auto"
-                }
-            } catch (e: Exception) { "Inconnu" }
-        }
+    val gh = "com.google.android.projection.gearhead"
+    val ghUri = android.net.Uri.parse("package:$gh")
+    val hasAa = remember { try { ctx.packageManager.getPackageInfo(gh, 0); true } catch (e: Exception) { false } }
+    val source = remember {
+        try {
+            val inst = if (android.os.Build.VERSION.SDK_INT >= 30) ctx.packageManager.getInstallSourceInfo(ctx.packageName).installingPackageName
+                else @Suppress("DEPRECATION") ctx.packageManager.getInstallerPackageName(ctx.packageName)
+            when (inst) {
+                "com.android.vending" -> "Google Play (Android Auto l'affiche sans rien faire de plus)"
+                null -> "Inconnu (installé depuis un fichier) : nécessite Sources inconnues dans Android Auto"
+                ctx.packageName -> "Mise à jour intégrée d'Horizon Nav : nécessite Sources inconnues dans Android Auto"
+                else -> "$inst : nécessite Sources inconnues dans Android Auto"
+            }
+        } catch (e: Exception) { "Inconnu" }
+    }
+    SGroup("Tailles sur l'écran de la voiture") {
         SSlider("Taille globale sur l'écran de la voiture", prefs.i(PreferenceKeys.CARSCALE, 100).toFloat(), 40f..300f, "%", sub = "Échelle de base de tout l'affichage", steps = 25, reset = 100f) { prefs.put(PreferenceKeys.CARSCALE, it) }
         SSlider("Taille du compteur et du panneau de limitation", prefs.i(PreferenceKeys.CAR_SPEED_SIZE, 100).toFloat(), 40f..180f, "%", sub = "Réduit automatiquement si la place à l'écran est insuffisante", reset = 100f) { prefs.put(PreferenceKeys.CAR_SPEED_SIZE, it) }
         var carAdvanced by rememberSaveable { mutableStateOf(false) }
@@ -902,6 +950,8 @@ private fun AndroidAutoSection(prefs: Prefs) {
             SSlider("Taille de la flèche de navigation", prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).toFloat(), 60f..180f, "%", reset = 100f) { prefs.put(PreferenceKeys.CAR_ARROW_SIZE, it) }
             SSlider("Taille du nom de rue", prefs.i(PreferenceKeys.CAR_ROAD_NAME_SIZE, 100).toFloat(), 70f..200f, "%", sub = "Le nom de la route où vous êtes, sous votre flèche", steps = 12, reset = 100f) { prefs.put(PreferenceKeys.CAR_ROAD_NAME_SIZE, it) }
         }
+    }
+    SGroup("Installation", footer = "Si Horizon Nav n'apparaît pas dans Android Auto : 1. Ouvrez les paramètres d'Android Auto, touchez une dizaine de fois le numéro de version en bas, puis dans le menu en haut à droite ouvrez les Paramètres pour les développeurs et activez Sources inconnues. 2. De retour dans les paramètres d'Android Auto, ouvrez Personnaliser le lanceur et vérifiez que Horizon Nav est coché. 3. Forcez l'arrêt d'Android Auto (Infos sur l'appli ci-dessous), débranchez et rebranchez. Si elle n'apparaît toujours pas, l'Android Auto de votre téléphone n'affiche que les applis installées par le Play Store : installez l'APK avec un installateur qui déclare le Play Store comme source (par exemple « adb install -i com.android.vending », ou une appli comme AAAD ou Install with Options).") {
         SItem("Installé par", source)
         SItem("Paramètres d'Android Auto", if (hasAa) null else "Android Auto n'est pas installé sur ce téléphone") {
             if (hasAa) SButton("Ouvrir") {
