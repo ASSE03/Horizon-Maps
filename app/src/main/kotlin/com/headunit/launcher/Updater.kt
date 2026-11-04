@@ -315,6 +315,20 @@ object Updater {
                         if (toDownloads && android.os.Build.VERSION.SDK_INT >= 29) {
                             progress("Enregistrement dans Téléchargements…")
                             saveToDownloads(ctx, uri, name)
+                            // fork FR : comme AAEnabler, l'appli s'installe en déclarant le Play Store comme source, pour rester dans
+                            // Android Auto (un seul appui sur « Mettre à jour » dans la fenêtre d'Android). Si Android ne garde pas
+                            // cette source, le prochain démarrage le voit et repasse à « enregistrer pour AAEnabler » (copie ci-dessus)
+                            if (Prefs(ctx).b("aadirect", true)) {
+                                progress("Ouverture de l'installateur (source : Play Store, comme AAEnabler)…")
+                                Prefs(ctx).put("aadirect_from", BuildConfig.VERSION_NAME)
+                                @Suppress("DEPRECATION")
+                                val ii = Intent(Intent.ACTION_INSTALL_PACKAGE).setData(uri)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    .putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")
+                                    .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+                                ii.clipData = android.content.ClipData.newRawUri("Mise à jour d'Horizon Nav", uri)
+                                ctx.startActivity(ii)
+                            }
                             return
                         }
                         progress("Ouverture de l'installateur…")
@@ -358,6 +372,23 @@ object Updater {
             else @Suppress("DEPRECATION") ctx.packageManager.getInstallerPackageName(ctx.packageName)
         inst == "com.android.vending"
     } catch (e: Exception) { false }
+
+    /**
+     * Fork FR : après une mise à jour installée par l'appli en se déclarant installée par le Play Store, vérifie qu'Android a gardé
+     * cette source. Sinon, Android Auto ne l'affiche plus : on le dit, et les mises à jour suivantes repassent par AAEnabler.
+     * Renvoie un message à montrer, ou null.
+     */
+    fun checkAaDirect(ctx: Context): String? {
+        val p = Prefs(ctx)
+        val from = p.s("aadirect_from", "")
+        if (from.isBlank() || from == BuildConfig.VERSION_NAME) return null
+        p.put("aadirect_from", "")
+        return if (installedViaAaTool(ctx)) null
+        else {
+            p.put("aadirect", false)
+            "Android n'a pas gardé le Play Store comme source : Horizon Nav peut avoir disparu d'Android Auto. Réinstallez-la avec AAEnabler (la nouvelle version est dans Téléchargements) ; les prochaines mises à jour passeront par AAEnabler."
+        }
+    }
 
     /** Copies the checked update into the phone's Downloads folder (Android 10 and newer: no permission needed). */
     @androidx.annotation.RequiresApi(29)

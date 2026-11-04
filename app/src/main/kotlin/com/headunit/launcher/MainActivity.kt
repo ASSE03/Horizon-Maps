@@ -53,6 +53,8 @@ class MainActivity : ComponentActivity() {
         FreezeWatch.start(applicationContext)
         // fork FR : le dernier plantage ou blocage part ensuite dans le dépôt GitHub (branche « diagnostics »), si un jeton est réglé
         Thread { try { FreezeWatch.collectLastExit(applicationContext) } catch (e: Throwable) { }; DiagUpload.uploadPending(applicationContext) }.start()
+        // fork FR : mise à jour installée « comme AAEnabler » : Android a-t-il gardé le Play Store comme source ?
+        try { Updater.checkAaDirect(applicationContext)?.let { msg -> android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show() } } catch (e: Throwable) { }
         // it crashed while starting twice running: show a plain page that can send the crash report (it doesn't start the map),
         // instead of crashing again before anything can be tapped
         if (boot.getInt(CrashGuardPrefs.START_FAILURES, 0) >= 2 && crashFile.exists()) {

@@ -771,7 +771,8 @@ fun AppUpdateCard(engine: NavEngine) {
             val ctx = androidx.compose.ui.platform.LocalContext.current
             val viaAaTool = remember { com.headunit.launcher.Updater.installedViaAaTool(ctx) }
             if (viaAaTool && !engine.updateBusy && engine.updateStatus.isBlank()) Text(
-                if (android.os.Build.VERSION.SDK_INT >= 29) "Installée avec AAEnabler : Mettre à jour enregistre la nouvelle version dans Téléchargements, pour l'installer avec AAEnabler et la garder dans Android Auto."
+                if (android.os.Build.VERSION.SDK_INT >= 29) (if (engine.prefs.b("aadirect", true)) "Installée avec AAEnabler : Mettre à jour l'installe comme AAEnabler (source Play Store) pour la garder dans Android Auto. Une copie est aussi enregistrée dans Téléchargements."
+                    else "Installée avec AAEnabler : Mettre à jour enregistre la nouvelle version dans Téléchargements, pour l'installer avec AAEnabler et la garder dans Android Auto.")
                 else "Installée avec AAEnabler (ou similaire) ? Mettre à jour ici la retire d'Android Auto : réinstallez ensuite la nouvelle version avec AAEnabler.",
                 color = Warn, fontSize = 11.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }

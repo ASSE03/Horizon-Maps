@@ -1450,7 +1450,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         scope.launch {
             try {
                 withContext(Dispatchers.IO) { Updater.downloadAndInstall(ctx, u, toDownloads = forAaTool) { updateStatus = it } }
-                updateStatus = if (forAaTool) "Enregistré dans Téléchargements sous HorizonNav-${u.version}.apk. Installez-le avec AAEnabler pour le garder dans Android Auto"
+                updateStatus = if (forAaTool && prefs.b("aadirect", true)) "Touchez Mettre à jour dans la fenêtre d'Android. (Copie dans Téléchargements si besoin de passer par AAEnabler)"
+                    else if (forAaTool) "Enregistré dans Téléchargements sous HorizonNav-${u.version}.apk. Installez-le avec AAEnabler pour le garder dans Android Auto"
                     else "Suivez l'installateur pour terminer"
             } catch (e: Exception) {
                 // Never bypass checksum verification by opening the APK URL after a failed download.
