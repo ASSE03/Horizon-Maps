@@ -2539,14 +2539,27 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      */
     private fun fillChargerAvailability() {
         val list = nearby
+        fillChargerPrices(list)
         if (!hasKey || !online() || list.none { it.chargeId.isNotBlank() }) return
         scope.launch {
             val ids = list.map { it.chargeId }.filter { it.isNotBlank() }.distinct().take(10)
             val got = withContext(Dispatchers.IO) {
                 ids.map { id -> async { id to TomTomRest.chargingFree(apiKey, id) } }.map { it.await() }.toMap()
             }
-            if (nearbyKind != "charging" || nearby !== list) return@launch
-            nearby = list.map { n -> if (n.chargeId in got) n.copy(free = got[n.chargeId]?.let { (f, t) -> "$f sur $t libres" } ?: "Pas d'info en direct") else n }
+            if (nearbyKind != "charging") return@launch
+            nearby = nearby.map { n -> if (n.chargeId in got) n.copy(free = got[n.chargeId]?.let { (f, t) -> "$f sur $t libres" } ?: "Pas d'info en direct") else n }
+        }
+    }
+
+    /** Fork FR : le tarif de chaque borne (base nationale IRVE), ajouté à sa ligne d'infos. En France seulement. */
+    private fun fillChargerPrices(list: List<Nearby>) {
+        if (!online() || !detectedCountry.equals("FR", true) || list.isEmpty()) return
+        scope.launch {
+            val got = withContext(Dispatchers.IO) {
+                list.take(12).map { n -> async { n.place.pos to IrvePrice.near(n.place.pos) } }.map { it.await() }.toMap()
+            }
+            if (nearbyKind != "charging") return@launch
+            nearby = nearby.map { n -> val t = got[n.place.pos]; if (t.isNullOrBlank() || n.extra.contains(t)) n else n.copy(extra = if (n.extra.isBlank()) t else n.extra + " · " + t) }
         }
     }
 
@@ -4497,7 +4510,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                             // puissance moyenne réelle jusqu'à 80 % : environ 70 % de la puissance de la borne, limitée à ce que la voiture accepte
                             val rate = (if (kw > 0.0) min(kw, evMaxKw()) else 50.0) * 0.7
                             val mins = Math.round((80 - arr).coerceAtLeast(10) / 100.0 * batt / rate * 60.0).toInt()
-                            val freeNow = freeMap[n.chargeId]?.let { (f, t) -> " · $f sur $t libres maintenant" } ?: ""
+                            val freeNow = (freeMap[n.chargeId]?.let { (f, t) -> " · $f sur $t libres maintenant" } ?: "") +
+                                (if (detectedCountry.equals("FR", true)) IrvePrice.near(n.place.pos).takeIf { it.isNotBlank() }?.let { " · $it" } ?: "" else "")
                             n.copy(extra = "arrivée vers $arr %" + (if (kw > 0.0) " · ${Math.round(kw)} kW" else "") + " · charge à 80 %, environ $mins min$freeNow")
                         }
                     } catch (e: Exception) { null }
