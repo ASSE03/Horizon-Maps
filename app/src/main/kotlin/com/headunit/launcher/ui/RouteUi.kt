@@ -31,6 +31,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.draw.scale
+import androidx.compose.material.icons.rounded.EvStation
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.TurnSlightRight
 import androidx.compose.material.icons.rounded.DirectionsWalk
