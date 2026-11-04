@@ -683,8 +683,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Plays a sample alert (chime, banner and voice) so the sound can be checked. */
     fun testAlert() {
         chime(android.media.ToneGenerator.TONE_PROP_PROMPT)
-        raiseAlert("camera", "Alerte de test : radar devant")
-        speak("Radar devant", true)
+        raiseAlert("camera", "Alerte de test : radar dans 500 mètres")
+        speak("Radar dans 500 mètres", true)
     }
 
     fun shutdown() {
@@ -2228,7 +2228,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         cameraDist = if (best != null) bestD.toInt() else null
         if (best != null) {
             if (camAlerted.size > 100) camAlerted.clear()
-            if (camAlerted.add(best)) { chime(android.media.ToneGenerator.TONE_PROP_PROMPT); raiseAlert("camera", "Radar devant"); speak("Radar devant", true) }
+            if (camAlerted.add(best)) {
+                // fork FR : la distance du radar plutôt que « Radar devant »
+                val say = if (bestD < 60.0) "Radar tout de suite" else "Radar dans ${Geo.spoken(bestD, imperial)}"
+                chime(android.media.ToneGenerator.TONE_PROP_PROMPT); raiseAlert("camera", say); speak(say, true)
+            }
         }
     }
 
