@@ -1046,6 +1046,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
         }
         if (simMode != 0) return
+        // fork FR : guidage lancé depuis un départ de démo : la vraie position ne le recalcule pas depuis chez vous en attendant la démo
+        if (demoFrom != null && route != null && !previewing && prefs.b(PreferenceKeys.DEMO, false)) return
         detectCountry(l.latitude, l.longitude)
         val now = System.currentTimeMillis()
         val slow = !l.hasSpeed() || l.speed < 1.0f
@@ -1814,7 +1816,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             raiseAlert("rain", (if (snow) "Neige" else "Pluie") + " prévue dans environ ${it.minutes} min sur votre trajet", 6000)
             speak((if (snow) "Neige" else "Pluie") + " prévue dans environ ${it.minutes} minutes sur votre trajet", true)
         }
-        val f = fix
+        // fork FR : avec un départ de démo choisi, la flèche part du début de l'itinéraire (la vraie position, loin de là, faisait
+        // recalculer l'itinéraire depuis chez vous juste avant la démo)
+        val r0 = route
+        val f = if (demoFrom != null && prefs.b(PreferenceKeys.DEMO, false) && r0 != null && r0.pts.size >= 2)
+            Fix(r0.pts[0], Geo.bearing(r0.pts[0], r0.pts[1]), 0.0, 0.0) else fix
         if (f != null) onPosition(f, true)
         else { updateGuidance(0.0); toast("Pas encore de position GPS. Utilisez le bouton lecture pour une démo.", 5000) }
         cardsForStartAlts()
@@ -1897,6 +1903,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun endRoute() {
         shortRoute = false
+        // fork FR : le départ de démo ne sert qu'à ce trajet (le suivant repart de votre position)
+        demoFrom = null; pickDemoStart = false
         // (only a trip under way: cancelling a route choice leaves the other screen's trip alone)
         if (route != null && !previewing) try { RouteSync.ended(this) } catch (e: Exception) { }
         itineraryOpen = false
