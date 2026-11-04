@@ -475,7 +475,7 @@ internal fun NearbyCard(engine: NavEngine) {
             Pill("Les moins chers", engine.nearbySort == "cheap", { engine.changeNearbySort("cheap") })
             Text(com.headunit.launcher.FuelFinder.fuelName(engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10")), color = c.sub, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp))
         }
-        LazyColumn(Modifier.heightIn(max = 230.dp).padding(top = 6.dp)) {
+        LazyColumn(Modifier.heightIn(max = 300.dp).padding(top = 6.dp)) {
             items(engine.nearby) { n ->
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { if (adding) engine.addStop(n.place) else engine.startRoute(n.place) }.padding(vertical = 8.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).clip(androidx.compose.foundation.shape.CircleShape).background(c.accent.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
@@ -485,17 +485,18 @@ internal fun NearbyCard(engine: NavEngine) {
                         Text(n.place.name, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         // fork FR : l'adresse (avec la ville) pour tous les types de lieux, pas seulement les stations-service, et en premier
                         val sub = listOfNotNull(n.place.sub.takeIf { it.isNotBlank() }, n.extra.takeIf { it.isNotBlank() }).joinToString(" · ")
-                        if (sub.isNotBlank()) Text(sub, color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (sub.isNotBlank()) Text(sub, color = c.sub, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        // a charger's live availability: green with some free, red with none, grey without live data
+                        // (fork FR : sous le nom, pour ne plus le réduire à « … »)
+                        if (n.free.isNotBlank()) {
+                            val none = n.free.startsWith("0 sur"); val unknown = n.free.startsWith("Pas")
+                            val fg = if (unknown) c.sub else if (none) Color(0xFFF2C2BF) else Color(0xFF9BE3B0)
+                            val bg = if (unknown) c.tile else if (none) Color(0xFF3A2224) else Color(0xFF1E3A28)
+                            Text(n.free, color = fg, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                                modifier = Modifier.padding(top = 3.dp).clip(RoundedCornerShape(8.dp)).background(bg).padding(horizontal = 8.dp, vertical = 2.dp))
+                        }
                     }
                     if (n.price != null) Text(com.headunit.launcher.fmtFuelPrice(n.price, n.unit), color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
-                    // a charger's live availability: green with some free, red with none, grey without live data
-                    if (n.free.isNotBlank()) {
-                        val none = n.free.startsWith("0 sur"); val unknown = n.free.startsWith("Pas")
-                        val fg = if (unknown) c.sub else if (none) Color(0xFFF2C2BF) else Color(0xFF9BE3B0)
-                        val bg = if (unknown) c.tile else if (none) Color(0xFF3A2224) else Color(0xFF1E3A28)
-                        Text(n.free, color = fg, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                            modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(8.dp)).background(bg).padding(horizontal = 8.dp, vertical = 3.dp))
-                    }
                     Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 10.dp)) {
                         Text(Geo.fmtDist(n.dist, engine.imperial), color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 4.dp))
                         if (n.detourMin >= 0) Text("+${n.detourMin} min", color = c.sub, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
