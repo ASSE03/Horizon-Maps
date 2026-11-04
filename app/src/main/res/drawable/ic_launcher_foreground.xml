@@ -6,7 +6,7 @@
         android:strokeColor="#FFFFFF" android:strokeAlpha="0.7" android:strokeWidth="1">
         <aapt:attr name="android:fillColor">
             <gradient android:type="radial" android:centerX="49.33" android:centerY="44.67" android:gradientRadius="35.00"
-                android:startColor="#99B9DBFF" android:endColor="#733C86F0" />
+                android:startColor="#FF6FB1FF" android:endColor="#FF2A6FD6" />
         </aapt:attr>
     </path>
     <path android:pathData="M36.33,46.33 A20.00,20.00 0 0,1 68.00,36.33" android:strokeColor="#FFFFFF" android:strokeAlpha="0.35"
