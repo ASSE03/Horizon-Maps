@@ -1,152 +1,151 @@
-# Horizon Nav FR (fork en français)
+# Horizon Nav FR
 
-Version française d'[Horizon Nav](https://github.com/benbishop028-arch/Horizon-Maps) : interface, annonces vocales, commandes vocales et Android Auto traduits.
+Version française d'[Horizon Nav](https://github.com/benbishop028-arch/Horizon-Maps), le GPS gratuit pour autoradios Android et Android Auto, de benbishop028-arch. Sans publicité, sans compte et sans pistage.
 
-- ⬇️ **[Télécharger l'APK](https://github.com/ASSE03/Horizon-Maps/releases/download/app/HorizonNav-public.apk)** (s'installe à côté de l'appli officielle, sous le nom « Horizon Nav FR »)
-- Compilation : workflow **Build Horizon Nav FR** (onglet Actions), secret `SIGNING_KEYSTORE_BASE64` requis.
-- La voix utilise la synthèse vocale française du système : installez la voix française si besoin.
+Ce fork traduit toute l'appli (écrans, annonces et commandes vocales, Android Auto) et ajoute des réglages pensés pour la France. Les nouveautés de l'auteur y sont reprises et traduites régulièrement.
 
----
+⬇️ **[Télécharger la dernière version (APK)](https://github.com/ASSE03/Horizon-Maps/releases/download/app/HorizonNav-public.apk)**
 
-# Horizon Nav
+L'appli s'installe à côté de l'appli officielle, sous le nom **« Horizon Nav FR »**, puis se met à jour toute seule.
 
-Free sat nav for Android car head units, that also runs on Android Auto. No ads, no account and no tracking. Made by one person in their spare time, and a lot of it comes from your feedback here and on Reddit.
-
-⬇️ **[Download the latest version](https://github.com/benbishop028-arch/Horizon-Maps/releases/tag/app)**: install the APK, and the app updates itself from then on.
-
-💙 **[Support development](https://www.paypal.me/BBishop462)**: totally optional. The app stays free.
+💙 Pour soutenir l'auteur de l'appli d'origine : **[PayPal](https://www.paypal.me/BBishop462)** (facultatif).
 
 ---
 
-## Features
+## Ce que le fork ajoute
 
-### 🗺️ The map
-- Smooth 3D map with buildings, landmarks and trees, and optional 3D hills
-- Your locator: a 3D car (saloon, hatchback, estate, SUV, pickup, van or sports) in any colour, an arrow, or your own picture
-- 2D / 3D view, remembered between drives
-- Day, night, auto and headlight-linked themes, plus satellite view
-- Your zoom and North Up are remembered, and you can set your own default zoom
-- Traffic overview when you're stopped (can be switched off)
-- Junction close-ups at exits and slip roads
-
-### 🧭 Navigation
-- Routes with live traffic. With both keys added, new routes are asked of TomTom and Mapbox, and the quicker one is offered first
-- Offline maps and offline routing for every country, several areas at once. Big countries can be downloaded a region at a time (a German state, an English county...), and the app suggests the area you're in
-- Lane guidance on the turn card, plus a lane sign over the road at junctions
-- Speed limits, speed cameras, average-speed zones and stop signs, with spoken warnings
-- Flock and other number-plate (ALPR) cameras shown on the map (can be switched off)
-- Faster-route suggestions while you drive
-- Avoid tolls, motorways or ferries, or tolls only in chosen countries
-- Lorry (HGV) routes: enter your lorry's height, width, length and weight, and routes avoid low bridges, weight limits and lorry bans, with warnings for limits ahead
-- Electric car planning: battery level, charge at arrival and charging stops, with Charging in place of the petrol button on the map page
-- Live fuel prices in the UK, France, Austria and Germany, plus E85
-- One-tap stops along the route: fuel, charging, coffee, food, services and toilets
-- Report police, crashes, hazards, broken-down cars and mobile cameras, on the head unit, phone or Android Auto
-- Voice guidance with or without road names, km/h or mph, 12 or 24-hour clock
-- Move the speed limit and speedometer to the bottom, middle or top of the screen
-
-### 📱 Phone and car
-- Full Android Auto support, with the same map page as the app, and search and reports from the car screen
-- The map on your driver's display (the screen behind the steering wheel), on cars whose Android Auto offers it
-- The next turn in the notification, for car launchers and smartwatches that show navigation notifications
-- Send a destination from your phone to the head unit
-- Remembers where you parked when Android Auto disconnects
-- Resumes your trip if the head unit restarts mid-journey
+- **Tout en français** : écrans, réglages, annonces vocales (« Dans 300 mètres, tournez à droite sur l'A7 »), commandes vocales et écran Android Auto. La voix est celle de la synthèse vocale française du téléphone.
+- **Panneaux de direction à la française** : panneaux bleus (autoroute), verts (routes principales) et blancs (routes locales), avec les cartouches A, N, D et E aux bonnes couleurs, et la case « SORTIE ». Les panneaux britanniques restent au Royaume-Uni.
+- **ZFE** : les zones à faibles émissions françaises sont téléchargées, signalées sur l'itinéraire et peuvent être évitées.
+- **Batterie de la voiture via Home Assistant** : niveau de charge, autonomie et consommation lus dans Home Assistant (adresse et jeton dans les réglages), pour l'estimation de la charge à l'arrivée.
+- **Jour et nuit sur Android Auto au lever et au coucher du soleil**, selon votre position. On peut aussi suivre la voiture, ou forcer le jour ou la nuit.
+- **Limitations de vitesse vérifiées** : celle de l'itinéraire est comparée à la carte OpenStreetMap, et la plus basse est gardée tant que les deux ne sont pas d'accord.
+- **Vue satellite de secours** : si Mapbox refuse les photos de sa nouvelle vue satellite, l'appli passe sur l'ancienne.
+- **Rapports de bug déposés dans ce dépôt** : avec un jeton GitHub, « Avis ou problème » envoie le rapport directement ici (branche `diagnostics`).
+- **Réglages simplifiés** : les champs propres au Royaume-Uni ou à l'Allemagne (prix des carburants) n'apparaissent que dans ces pays.
+- **Ville affichée** pour les stations de recharge et les lieux trouvés à proximité.
 
 ---
 
-## Installing
+## Fonctions de l'appli
 
-### On a head unit or phone
-1. Download the APK from the [download page](https://github.com/benbishop028-arch/Horizon-Maps/releases/tag/app) and open it.
-2. Allow installing from unknown sources if it asks.
-3. Open Horizon Nav and follow the setup: location permission, units, and your keys (see below).
-4. For no-signal driving, download your area in **Settings › Offline maps**. "Near you" at the top of Choose an area suggests your region, which is a much smaller download than the whole country.
+### 🗺️ La carte
+- Carte 3D fluide avec bâtiments, monuments et arbres, et relief 3D en option
+- Votre position : une voiture 3D (berline, compacte, break, SUV, pick-up, utilitaire ou sportive) de la couleur de votre choix, une flèche ou votre propre image
+- Vue 2D / 3D, gardée d'un trajet à l'autre
+- Thèmes jour, nuit, automatique ou liés aux phares, et vue satellite
+- Zoom et carte orientée au nord gardés en mémoire, zoom par défaut réglable
+- Vue d'ensemble du trafic à l'arrêt (désactivable)
+- Gros plan des sorties et des bretelles
 
-### On Android Auto
-Android Auto only lists apps from outside the Play Store once you allow it:
+### 🧭 Le guidage
+- Itinéraires avec le trafic en direct. Avec les deux clés, TomTom et Mapbox sont interrogés et le plus rapide est proposé en premier
+- Cartes et calcul d'itinéraire hors ligne pour tous les pays, plusieurs zones à la fois. Les grands pays se téléchargent par région, et l'appli propose celle où vous êtes
+- Voies de circulation sur la carte de direction, et panneau des voies au-dessus de la route aux échangeurs
+- Limitations de vitesse, zones de vitesse moyenne et stops, avec alertes vocales
+- Radars, là où la loi les autorise (voir plus bas)
+- Propositions d'itinéraire plus rapide en cours de route
+- Éviter les péages, les autoroutes, les ferries ou les ZFE
+- Mode poids lourd : hauteur, largeur, longueur, poids et matières dangereuses ; les itinéraires évitent les ponts bas, les limites de poids et les interdictions, avec alertes à l'approche
+- Voiture électrique : niveau de batterie, charge à l'arrivée et arrêts recharge
+- Prix des carburants en France, au Royaume-Uni, en Autriche et en Allemagne, E85 compris
+- Arrêts en un geste le long du trajet : carburant, recharge, café, restauration, aires et toilettes
+- Signalements (police, accident, danger, véhicule en panne, radar mobile) depuis l'autoradio, le téléphone ou Android Auto
 
-1. Open Android Auto's settings on your phone (Settings › Connected devices › Android Auto, or the Android Auto app).
-2. Scroll to the bottom and tap **Version** about 10 times until developer settings are on.
-3. Open the ⋮ menu › **Developer settings**, and tick **Unknown sources**.
-4. Back in Android Auto's settings, open **Customise launcher** and make sure **Horizon Nav** is ticked.
-
-**Still not showing?** On some phones Android Auto ignores apps installed straight from the APK. Install it with one of these instead:
-
-- **[KingInstaller](https://github.com/fcaronte/KingInstaller/releases)**: open the Horizon Nav APK with it. This has worked for most people who couldn't get it to show.
-- **AAEnabler**: open the APK with it. If you use AAEnabler, update through it too. Updating from inside the app removes Horizon Nav from Android Auto, so the app saves new versions to your Downloads folder for AAEnabler to install instead.
-
-Phones running **GrapheneOS, LineageOS** or other versions of Android without Google's own apps may not be able to show it on Android Auto at all. It still works on the phone itself.
-
----
-
-## 🔑 Your free keys: TomTom and Mapbox
-
-The app has no keys built in, so nothing goes through a server of mine. You add your own once, in **Settings › Keys & accounts**.
-
-**Mapbox** (needed for the map)
-1. Sign up at [account.mapbox.com](https://account.mapbox.com).
-2. Open **Tokens** and tap the **copy button** next to your **Default public token** (it starts `pk.`).
-3. Paste it into the Mapbox box. Don't type it in by hand: one wrong character and Mapbox refuses it (error 401).
-
-**TomTom** (recommended: the best address search, traffic, and a second opinion on routes)
-1. Sign up at [developer.tomtom.com](https://developer.tomtom.com). On a phone, switching the browser to desktop view helps.
-2. Open your dashboard and copy your API key (the default one is fine, with Routing and Search ticked).
-3. Paste it into the TomTom box.
-
-**Good to know**
-- **Put both in.** Search is best with both, and new routes are compared between them.
-- **Cost:** both have free allowances that one person's driving won't use up. Mapbox may ask for card details when you sign up, but you're only charged if you go over the free allowance.
-- **One key on several devices** (phone and head unit) is fine.
-- **Lorry drivers:** add the TomTom key. It's the only online service that checks every measurement (length, axle weight and hazardous goods as well as height and weight).
+### 📱 Téléphone et voiture
+- Android Auto complet, avec la même carte que dans l'appli, la recherche et les signalements depuis l'écran de la voiture
+- Carte sur l'écran du conducteur, sur les voitures dont Android Auto le permet
+- Prochaine direction dans la notification, pour les lanceurs et les montres qui l'affichent
+- Envoi d'une destination du téléphone vers l'autoradio
+- Reprise du trajet si l'autoradio redémarre en route
 
 ---
 
-## 🔒 Privacy: what leaves the car
+## Installation
 
-No account, no ads, no tracking, and no Horizon Nav server. The app talks directly to these services, and only for the feature you're using:
+### Sur un téléphone ou un autoradio
+1. Téléchargez l'APK avec le lien ci-dessus et ouvrez-le.
+2. Autorisez l'installation depuis des sources inconnues si Android le demande.
+3. Ouvrez Horizon Nav FR et suivez la mise en route : localisation, unités et clés (voir plus bas).
+4. Pour rouler sans réseau, téléchargez votre zone dans **Réglages › Cartes hors ligne**.
 
-| Service | What it gets | What for |
+### Sur Android Auto
+Android Auto n'affiche les applis installées hors du Play Store qu'une fois autorisé :
+
+1. Ouvrez les paramètres d'Android Auto sur le téléphone.
+2. Touchez une dizaine de fois **Version**, tout en bas, pour activer les paramètres pour les développeurs.
+3. Menu ⋮ › **Paramètres pour les développeurs** › cochez **Sources inconnues**.
+4. Dans **Personnaliser le lanceur**, vérifiez que **Horizon Nav FR** est coché.
+
+**Toujours absente ?** Sur certains téléphones, Android Auto ignore les applis installées directement depuis l'APK. Installez-la plutôt avec **[AAEnabler](https://github.com/malebuffy/AAEnabler)** ou **[KingInstaller](https://github.com/fcaronte/KingInstaller/releases)**.
+
+Avec AAEnabler, faites aussi les mises à jour avec lui : l'appli enregistre chaque nouvelle version dans le dossier Téléchargements pour qu'AAEnabler l'installe.
+
+---
+
+## 🔑 Vos clés gratuites : Mapbox et TomTom
+
+L'appli n'a aucune clé intégrée : vous ajoutez les vôtres dans **Réglages › Clés et comptes**.
+
+**Mapbox** (nécessaire pour la carte)
+1. Créez un compte sur [account.mapbox.com](https://account.mapbox.com).
+2. Dans **Tokens**, copiez votre **Default public token** avec le bouton de copie (il commence par `pk.`).
+3. Collez-le dans la case Mapbox. Ne le tapez pas à la main : une seule erreur et Mapbox le refuse (erreur 401).
+
+**TomTom** (conseillé : meilleure recherche d'adresses, trafic, et un second avis sur les itinéraires)
+1. Créez un compte sur [developer.tomtom.com](https://developer.tomtom.com).
+2. Copiez votre clé API depuis le tableau de bord.
+3. Collez-la dans la case TomTom.
+
+Les deux ont des quotas gratuits largement suffisants pour une personne. Une même clé peut servir sur plusieurs appareils.
+
+---
+
+## ⚠️ Radars en France
+
+En France, la loi interdit aux GPS d'indiquer l'emplacement exact des radars. L'amende peut aller jusqu'à 1 500 € et l'appareil peut être confisqué. Le réglage **Réglages › Alertes › Radars › Désactivés là où c'est interdit** coupe donc les radars en France, en Allemagne et en Suisse. Il est activé par défaut.
+
+---
+
+## 🔒 Ce qui sort de la voiture
+
+Pas de compte, pas de publicité, pas de serveur Horizon Nav. L'appli parle directement à ces services, seulement pour la fonction utilisée :
+
+| Service | Ce qu'il reçoit | Pour quoi |
 |---|---|---|
-| Mapbox | Your position and destination | The map, routes, search, traffic, speed limits |
-| TomTom (with your key) | Your position and destination | Routes, search, traffic, speed limits |
-| OpenStreetMap services (Overpass, Nominatim, Photon) | The area around you | Speed cameras, number-plate cameras, speed limits, lorry height and weight limits, traffic lights, search, and the "Near you" area suggestion |
-| Open-Meteo, RainViewer | Your rough position | Weather and the rain radar (only when switched on) |
-| Fuel price services (UK, France, Austria, Germany) | The area you're searching | Fuel prices |
-| GitHub | Nothing about you | Checking for and downloading updates |
-| ntfy.sh | The place you send, under your pairing code | "Send to car" from your phone (only if you pair a phone) |
+| Mapbox | Votre position et votre destination | Carte, itinéraires, recherche, trafic, limitations |
+| TomTom (avec votre clé) | Votre position et votre destination | Itinéraires, recherche, trafic, limitations |
+| OpenStreetMap (Overpass, Nominatim, Photon) | Les environs | Radars, limitations, ZFE, limites poids lourds, feux, recherche |
+| Open-Meteo, RainViewer | Votre position approximative | Météo et radar de pluie (si activés) |
+| Prix des carburants | La zone recherchée | Prix des carburants |
+| Home Assistant (si configuré) | Rien | Lecture de la batterie de la voiture |
+| GitHub | Rien sur vous, sauf les rapports que vous envoyez | Mises à jour et rapports de bug |
 
-**Stays on the device:** saved places, recent destinations, your own reports, the trip log and your settings.
-
-**Works with no signal** (once you've downloaded an area): the map, routes, search for downloaded places, speed limits, speed cameras and traffic lights.
-
-**Needs signal:** live traffic, online search, weather, fuel prices and updates.
+Les rapports envoyés contiennent la version, l'appareil, les principaux réglages et les derniers changements de limitation avec leur position GPS. Ils ne contiennent aucune clé.
 
 ---
 
-## 🛠️ Troubleshooting
+## 🛠️ Dépannage
 
-- **The APK download stops at 100% and never finishes:** this is the browser, not the app. Try another browser, or once it's installed, update from inside the app (Settings › About & backup).
-- **Blank or black map:** check both keys are in Settings › Keys & accounts.
-- **Mapbox "401":** the token isn't being accepted. Copy it again with the copy button. The app tells you what Mapbox says is wrong with it.
-- **"No signal" all the time, even though there is signal:** check the head unit's **date and time**. When they're wrong, every secure connection fails and looks like no signal.
-- **Laggy on a slower head unit:** in Settings, set Map detail to Lite or Lightest and lower the frame rate.
-- **Phone getting hot or the battery draining on Android Auto:** set the frame rate to Auto (60 uses a lot of battery). The app also draws fewer frames by itself when the phone gets warm.
-- **Driver's display shows only the app icon:** your car's Android Auto may not offer that screen to navigation apps. If it does but causes trouble, turn it off in Android Auto's Settings › Map on the driver's display.
-- **An area says it "hasn't been built yet":** that region's pack isn't ready. Pick the whole country for now, or try again later.
-- **Spoken directions missing:** check your device's text-to-speech voice is installed. If you hear the beeps but not the voice, try Settings › Sound › Voice channel › Media.
-- **Lorry: "No route found":** no route could be found that your lorry fits. Check the measurements in Settings › Routes › Vehicle. Lorry routes are only as good as the limits on the map, so always follow the road signs.
+- **Carte blanche ou noire** : vérifiez la clé Mapbox dans Réglages › Clés et comptes.
+- **Mapbox « 401 »** : la clé est refusée. Recopiez-la avec le bouton de copie.
+- **« Pas de réseau » alors qu'il y en a** : vérifiez la date et l'heure de l'appareil.
+- **Lent sur un autoradio modeste** : baissez le détail de la carte et les images par seconde dans les réglages.
+- **Téléphone chaud sur Android Auto** : laissez les images par seconde sur Auto.
+- **Trop petit sur l'écran de la voiture** : Réglages › Android Auto › Tailles sur l'écran de la voiture.
+- **Pas de voix** : installez la voix française dans les paramètres de synthèse vocale d'Android.
+- **Vue satellite ou radars absents** : un VPN ou un bloqueur de pub peut faire refuser les demandes par Mapbox ou OpenStreetMap. Essayez sans.
 
 ---
 
-## 💬 Feedback and bug reports
+## 💬 Signaler un problème
 
-Bug reports, ideas and screenshots are very welcome, in [GitHub Issues](https://github.com/benbishop028-arch/Horizon-Maps/issues) or on Reddit.
+Le plus simple : **Réglages › À propos et sauvegarde › Avis ou problème** (bouton **Signaler**). Décrivez ce qui s'est passé et où, puis touchez **Envoyer** (avec un jeton GitHub enregistré) ou **Copier**.
 
-The best way to report a problem: **Settings › About & backup › Feedback or a problem**. It sends a report with your app version and head unit details, which makes it much quicker to fix. Please include it in your issue.
+---
 
-⚠️ **Lane guidance** is the hardest part to get right. Some roads line up with the map's painted lanes and some don't, so tell me how it looks on yours.
+## Pour les développeurs
 
-See [CHANGELOG.md](CHANGELOG.md) for what's changed in each version.
-
-Thanks for all the testing! 🙏
+- Chaque modification envoyée sur `main` compile l'APK (workflow **Build Horizon Nav FR**, onglet Actions) et le publie sur la release `app`, où l'appli cherche ses mises à jour.
+- Chaque version a aussi sa propre release `v1.0.N`, dont les notes alimentent la carte « Nouveautés ». Seules les 10 dernières sont gardées.
+- Le secret `SIGNING_KEYSTORE_BASE64` (keystore de signature) est nécessaire pour que les mises à jour s'installent par-dessus la version précédente.

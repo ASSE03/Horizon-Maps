@@ -96,9 +96,14 @@ jobs:
           cp "$RUNNER_TEMP/notes.md" release-notes.md
           # one release per version (v1.0.N, its notes = the commits since the previous one), so the What's new card can gather
           # the changes of every version skipped; then the stable "app" release the updater reads
-          gh release create "v${VERSION}" "$APK" HorizonNav-public.apk.sha256 version.json --repo "${{ github.repository }}" \
-            --title "Horizon Nav FR ${VERSION}" --notes-file release-notes.md --target "${GITHUB_SHA}" --latest=false \
-            || gh release edit "v${VERSION}" --repo "${{ github.repository }}" --notes-file release-notes.md
+          # (relancé après une erreur de GitHub : la version existe déjà, ses fichiers sont remplacés)
+          if gh release view "v${VERSION}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release edit "v${VERSION}" --repo "${{ github.repository }}" --notes-file release-notes.md
+            gh release upload "v${VERSION}" "$APK" HorizonNav-public.apk.sha256 version.json --repo "${{ github.repository }}" --clobber
+          else
+            gh release create "v${VERSION}" "$APK" HorizonNav-public.apk.sha256 version.json --repo "${{ github.repository }}" \
+              --title "Horizon Nav FR ${VERSION}" --notes-file release-notes.md --target "${GITHUB_SHA}" --latest=false
+          fi
           if gh release view app --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release edit app --repo "${{ github.repository }}" --title "Horizon Nav FR (${VERSION})" --notes-file release-notes.md
           else
@@ -106,3 +111,7 @@ jobs:
           fi
           gh release upload app "$APK" HorizonNav-public.apk.sha256 version.json --repo "${{ github.repository }}" --clobber
           echo "Lien de téléchargement : https://github.com/${{ github.repository }}/releases/download/app/HorizonNav-public.apk"
+          # seules les 10 dernières versions (v1.0.N) sont gardées ; la release « app » reste toujours
+          gh release list --repo "${{ github.repository }}" --limit 200 --json tagName --jq '.[].tagName' \
+            | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -t. -k3,3nr | tail -n +11 \
+            | while read -r t; do gh release delete "$t" --repo "${{ github.repository }}" --yes --cleanup-tag || true; done
