@@ -173,6 +173,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // counted all the time: the automatic frame rate compares frames drawn with camera moves asked for
         subs += mbMap.subscribeRenderFrameStarted { PerfStats.renders++ }
         subs += mbMap.subscribeMapLoadingError { e ->
+            try { MapErrors.add(e.type.toString(), e.sourceId, e.message) } catch (x: Throwable) { }
             // only the style itself failing is reported (a missing tile now and then is normal)
             if (e.type == MapLoadingErrorType.STYLE) onError?.invoke(e.message)
             // the 3D model couldn't be loaded: the picture of the same shape instead (until the app is restarted)
@@ -357,6 +358,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** Asked to load the map style again (satellite switched): the engine knows which map source is chosen. */
     var onRestyle: (() -> Unit)? = null
     val isSatellite: Boolean get() = satellite
+    /** Fork FR : le style chargé, pour les rapports. */
+    val styleNote: String get() = (loadedStyle ?: "aucun") + (if (style == null) " (en chargement)" else "")
 
     private fun isMapboxStyle(u: String?) = u == Style.STANDARD || u == Style.STANDARD_SATELLITE || u == Style.MAPBOX_STREETS || u == Style.DARK || u == NAV_DAY || u == NAV_NIGHT
 

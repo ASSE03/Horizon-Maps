@@ -32,3 +32,16 @@ object LimitLog {
 
     fun pos(p: LL?) = if (p == null) "?" else String.format(Locale.US, "%.5f,%.5f", p.lat, p.lon)
 }
+
+/** Fork FR : les dernières erreurs de chargement de la carte Mapbox (sans le jeton), jointes aux rapports. */
+object MapErrors {
+    private val lines = ArrayList<String>()
+    @Synchronized fun add(type: String, source: String?, msg: String?) {
+        val m = (msg ?: "").replace(Regex("access_token=[^&\\s]+"), "access_token=…").take(220)
+        val line = "$type · ${source ?: "-"} · $m"
+        if (lines.lastOrNull()?.endsWith(line) == true) return
+        lines += SimpleDateFormat("HH:mm:ss", Locale.FRANCE).format(Date()) + " " + line
+        while (lines.size > 25) lines.removeAt(0)
+    }
+    @Synchronized fun read(): String = lines.joinToString("\n")
+}
