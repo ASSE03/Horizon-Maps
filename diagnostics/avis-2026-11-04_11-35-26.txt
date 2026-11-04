@@ -1,0 +1,16 @@
+---
+Horizon Nav 1.0.30 (public)
+Unit: samsung SM-S921B, Android 17 (API 37), screen 1080x2093
+Country: FR · map: mapbox · TomTom key: yes · Mapbox token: yes · routes from: mapbox · online: yes
+Offline area: none
+Frame rate: auto · map detail: full · driving side: left-hand
+Heat: cool
+Chip: s5e9945 / s5e9945 / s5e9945 · safer drawing step 0 · fast map drawing: on
+Last session didn't close normally: open 0 min 10 s, the app was closed by Android (the unit kept running). Speed then: 1 mph. Last note (Tue Nov 03 19:36:15 GMT+01:00 2026): app memory 17 MB + native 120 MB; unit free 1872 of 7223 MB; 
+Mapbox token: pk.… looks whole
+Carte : mapbox://styles/mapbox/standard-satellite · satellite : oui
+
+Erreurs de chargement de la carte :
+11:21:06 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+11:23:06 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: Couldn't connect to server: Exception in CronetUrlRequest: net::ERR_NAME_NOT_RESOLVED, ErrorCode=1, InternalErrorCode=-105, Retryable=false
+11:34:50 Tile · mapbox://mapbox.satellitebasemap · Failed to load tile: HTTP status code 429. Too Many Requests
