@@ -1181,6 +1181,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val shape = when { t.isBlank() -> "none"; !MapboxRest.looksValid(t) -> "not a token"; !MapboxRest.looksWhole(t) -> "looks incomplete"; else -> "looks whole" }
                 appendLine("Mapbox token: ${t.take(3)}… $shape" + (if (mbCheckNote.isNotBlank()) " · $mbCheckNote" else "") + (if (mbKeyRefused) " · refused" else ""))
             }
+            appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)} · zones : ${Zones.status.take(120)}")
             appendLine("Carte : ${try { map.styleNote } catch (e: Exception) { "?" }} · satellite : ${if (map.isSatellite) "oui" else "non"}")
             run { val me = MapErrors.read(); if (me.isNotBlank()) { appendLine(); appendLine("Erreurs de chargement de la carte :"); appendLine(me) } }
             run { val ll = LimitLog.read(ctx); if (ll.isNotBlank()) { appendLine(); appendLine("Limitations (dernières) :"); appendLine(ll) } }

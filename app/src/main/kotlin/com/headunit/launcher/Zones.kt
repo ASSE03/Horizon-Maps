@@ -48,6 +48,10 @@ object Zones {
 
     fun needsRefresh(ctx: Context): Boolean {
         val f = file(ctx)
+        // fork FR : une tentative ratée n'est retentée qu'au bout de 6 h (la grosse requête relancée à chaque ouverture faisait
+        // bloquer les serveurs OpenStreetMap, et avec eux les radars et les limitations)
+        val t = File(ctx.filesDir, "zones.try")
+        if (t.exists() && System.currentTimeMillis() - t.lastModified() < 6L * 3_600_000L) return false
         return !f.exists() || System.currentTimeMillis() - f.lastModified() > 30L * 86_400_000L
     }
 
@@ -88,10 +92,11 @@ object Zones {
     fun fetch(ctx: Context) {
         if (fetching) return
         fetching = true
+        try { File(ctx.filesDir, "zones.try").writeText(System.currentTimeMillis().toString()) } catch (e: Exception) { }
         try {
             val q = "[out:json][timeout:90];(relation[\"boundary\"~\"^(low_emission_zone|congestion_charge|clean_air_zone)$\"](41.3,-8.7,60.9,9.6);" +
                 "way[\"boundary\"~\"^(low_emission_zone|congestion_charge|clean_air_zone)$\"](41.3,-8.7,60.9,9.6););out geom;"
-            val els = Overpass.query(q, 15000, 120000, 3)
+            val els = Overpass.query(q, 15000, 120000, 1)
             val out = JSONArray()
             var n = 0
             for (i in 0 until els.length()) {
