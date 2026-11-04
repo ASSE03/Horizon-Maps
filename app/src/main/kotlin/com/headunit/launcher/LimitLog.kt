@@ -81,3 +81,16 @@ object MapErrors {
         }.start()
     }
 }
+
+/** Fork FR : journal des mises à jour (téléchargement, lancement de l'installation, résultat), joint aux rapports. */
+object UpdLog {
+    private fun file(ctx: Context) = File(ctx.filesDir, "update.log")
+    @Synchronized fun add(ctx: Context, line: String) {
+        try {
+            val f = file(ctx)
+            val old = if (f.exists()) f.readLines().takeLast(30) else emptyList()
+            f.writeText((old + (SimpleDateFormat("dd/MM HH:mm:ss", Locale.FRANCE).format(Date()) + " " + line)).joinToString("\n"))
+        } catch (e: Exception) { }
+    }
+    fun read(ctx: Context): String = try { file(ctx).takeIf { it.exists() }?.readLines()?.takeLast(15)?.joinToString("\n") ?: "" } catch (e: Exception) { "" }
+}

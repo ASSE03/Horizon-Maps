@@ -259,6 +259,22 @@ object Updater {
         require(UpdaterPolicy.isHttpsUrl(u.url)) { "Update URL must use HTTPS" }
         require(UpdaterPolicy.parseSha256(u.sha256) != null) { "Update checksum is invalid" }
         val name = "HorizonNav-${u.version}.apk"
+        // fork FR : une installation qui n'a pas abouti (AAEnabler fermé sans installer) : le fichier déjà téléchargé et vérifié est
+        // réutilisé, sans le retélécharger
+        if (toDownloads && android.os.Build.VERSION.SDK_INT >= 29 && Prefs(ctx).b("aadirect", true)) {
+            val p0 = Prefs(ctx)
+            if (p0.s("pending_apk_ver", "") == u.version) {
+                val pu = Uri.parse(p0.s("pending_apk_uri", ""))
+                val ok = try { sha256Of(ctx, pu).equals(u.sha256, ignoreCase = true) } catch (e: Exception) { UpdLog.add(ctx, "fichier en attente illisible : ${e.message}"); false }
+                if (ok) {
+                    progress("Ouverture de l'installateur (fichier déjà téléchargé)…")
+                    UpdLog.add(ctx, "réessai avec le fichier déjà téléchargé ${u.version}")
+                    launchAaInstall(ctx, pu)
+                    return
+                }
+                p0.put("pending_apk_ver", "")
+            }
+        }
         // a file left from an earlier try (of this version or another) goes first: with one already there, Android saves the new
         // download as "HorizonNav-1.0.355-1.apk", and the tidy-up below then deleted that new file as "not the one we wanted",
         // so every later try failed with "open failed: ENOENT (No such file or directory)"
@@ -320,15 +336,10 @@ object Updater {
                             // cette source, le prochain démarrage le voit et repasse à « enregistrer pour AAEnabler » (copie ci-dessus)
                             if (Prefs(ctx).b("aadirect", true)) {
                                 progress("Ouverture de l'installateur (source : Play Store, comme AAEnabler)…")
-                                Prefs(ctx).put("aadirect_from", BuildConfig.VERSION_NAME)
-                                @Suppress("DEPRECATION")
-                                val ii = Intent(Intent.ACTION_INSTALL_PACKAGE).setData(uri)
-                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    .putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")
-                                    .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
-                                ii.clipData = android.content.ClipData.newRawUri("Mise à jour d'Horizon Nav", uri)
-                                grantToInstallers(ctx, uri)
-                                ctx.startActivity(ii)
+                                Prefs(ctx).put("pending_apk_ver", u.version)
+                                Prefs(ctx).put("pending_apk_uri", uri.toString())
+                                UpdLog.add(ctx, "téléchargé et vérifié ${u.version} ($bytesRead octets)")
+                                launchAaInstall(ctx, uri)
                             }
                             return
                         }
@@ -381,6 +392,8 @@ object Updater {
      */
     fun checkAaDirect(ctx: Context): String? {
         val p = Prefs(ctx)
+        // fork FR : la version installée est celle qui attendait : le fichier gardé ne sert plus
+        if (p.s("pending_apk_ver", "") == BuildConfig.VERSION_NAME) { p.put("pending_apk_ver", ""); UpdLog.add(ctx, "installé : ${BuildConfig.VERSION_NAME}") }
         val from = p.s("aadirect_from", "")
         if (from.isBlank() || from == BuildConfig.VERSION_NAME) return null
         p.put("aadirect_from", "")
@@ -396,6 +409,31 @@ object Updater {
      * l'installation échouait et AAEnabler se fermait. Le droit de lecture est donc donné d'avance à toutes les applis qui savent
      * installer un APK (AAEnabler, l'installateur d'Android et celui de Samsung).
      */
+    /** Fork FR : SHA-256 d'un fichier (pour revérifier un téléchargement gardé). */
+    private fun sha256Of(ctx: Context, uri: Uri): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        ctx.contentResolver.openInputStream(uri)?.use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) { val n = input.read(buffer); if (n < 0) break; digest.update(buffer, 0, n) }
+        } ?: throw IllegalStateException("fichier introuvable")
+        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
+    /** Fork FR : ouvre l'installation (AAEnabler, ou l'installateur d'Android) en déclarant le Play Store comme source. */
+    private fun launchAaInstall(ctx: Context, uri: Uri) {
+        Prefs(ctx).put("aadirect_from", BuildConfig.VERSION_NAME)
+        @Suppress("DEPRECATION")
+        val ii = Intent(Intent.ACTION_INSTALL_PACKAGE).setData(uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")
+            .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+        ii.clipData = android.content.ClipData.newRawUri("Mise à jour d'Horizon Nav", uri)
+        grantToInstallers(ctx, uri)
+        val target = try { ctx.packageManager.resolveActivity(ii, 0)?.activityInfo?.packageName } catch (e: Exception) { null }
+        UpdLog.add(ctx, "installation lancée vers ${target ?: "?"} (${uri})")
+        ctx.startActivity(ii)
+    }
+
     private fun grantToInstallers(ctx: Context, uri: Uri) {
         val pm = ctx.packageManager
         val pkgs = HashSet<String>()
