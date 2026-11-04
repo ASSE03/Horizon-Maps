@@ -36,12 +36,48 @@ object LimitLog {
 /** Fork FR : les dernières erreurs de chargement de la carte Mapbox (sans le jeton), jointes aux rapports. */
 object MapErrors {
     private val lines = ArrayList<String>()
+    private val counts = LinkedHashMap<String, Int>()
+    @Volatile var probe = ""
+    @Volatile private var probing = false
     @Synchronized fun add(type: String, source: String?, msg: String?) {
         val m = (msg ?: "").replace(Regex("access_token=[^&\\s]+"), "access_token=…").take(220)
         val line = "$type · ${source ?: "-"} · $m"
+        counts[line] = (counts[line] ?: 0) + 1
+        if (counts.size > 40) counts.remove(counts.keys.first())
         if (lines.lastOrNull()?.endsWith(line) == true) return
         lines += SimpleDateFormat("HH:mm:ss", Locale.FRANCE).format(Date()) + " " + line
         while (lines.size > 25) lines.removeAt(0)
     }
-    @Synchronized fun read(): String = lines.joinToString("\n")
+    @Synchronized fun read(): String = lines.joinToString("\n") +
+        (if (counts.isEmpty()) "" else "\nTotal par erreur depuis l'ouverture :\n" + counts.entries.joinToString("\n") { "${it.value} × ${it.key}" })
+
+    /**
+     * Fork FR : interroge directement Mapbox avec la clé (photos satellite, carte), pour lire sa réponse exacte (code et message)
+     * quand il refuse. Résultat dans [probe], pour les rapports. Hors du fil principal.
+     */
+    fun runProbe(token: String) {
+        if (probing || token.isBlank()) return
+        probing = true
+        Thread {
+            val out = StringBuilder()
+            val tests = listOf(
+                "satellite" to "https://api.mapbox.com/v4/mapbox.satellite/14/8402/5859@2x.jpg90",
+                "carte" to "https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/14/8402/5859.mvt",
+                "style satellite" to "https://api.mapbox.com/styles/v1/mapbox/standard-satellite")
+            for ((name, u) in tests) {
+                try {
+                    val c = java.net.URL("$u?access_token=" + java.net.URLEncoder.encode(token, "UTF-8")).openConnection() as java.net.HttpURLConnection
+                    c.connectTimeout = 8000; c.readTimeout = 10000
+                    c.setRequestProperty("User-Agent", "HorizonNavFR")
+                    val code = c.responseCode
+                    val body = try { (if (code >= 400) c.errorStream else null)?.bufferedReader()?.readText()?.take(160)?.replace("\n", " ") ?: "" } catch (e: Exception) { "" }
+                    val lim = listOf("x-rate-limit-limit", "x-rate-limit-remaining", "retry-after").mapNotNull { h -> c.getHeaderField(h)?.let { "$h=$it" } }.joinToString(" ")
+                    out.append("$name : HTTP $code ${body.ifBlank { "" }} $lim".trim()).append(" · ")
+                    c.disconnect()
+                } catch (e: Exception) { out.append("$name : ${e.javaClass.simpleName} ${e.message?.take(60)} · ") }
+            }
+            probe = SimpleDateFormat("HH:mm:ss", Locale.FRANCE).format(Date()) + " " + out.toString().removeSuffix(" · ")
+            probing = false
+        }.start()
+    }
 }

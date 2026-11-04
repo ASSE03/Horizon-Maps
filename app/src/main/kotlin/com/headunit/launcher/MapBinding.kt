@@ -174,6 +174,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         subs += mbMap.subscribeRenderFrameStarted { PerfStats.renders++ }
         subs += mbMap.subscribeMapLoadingError { e ->
             try { MapErrors.add(e.type.toString(), e.sourceId, e.message) } catch (x: Throwable) { }
+            // fork FR : une erreur Mapbox : on demande directement à Mapbox ce qui ne va pas (une fois), pour le rapport
+            if (MapErrors.probe.isBlank()) try { MapErrors.runProbe(com.mapbox.common.MapboxOptions.accessToken) } catch (x: Throwable) { }
             // fork FR : les photos de Standard Satellite refusées (429) : on passe sur l'ancienne vue satellite de Mapbox
             if (satellite && !satClassic && (e.sourceId ?: "").contains("satellitebasemap") && (e.message ?: "").contains("429")) {
                 satClassic = true
