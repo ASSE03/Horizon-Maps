@@ -140,15 +140,36 @@ class CarNavSession : Session() {
         worker.start()
     }
 
-    /** Night colours on the car screen: follow the car, or always day / always night (quick settings on the car). */
-    private fun carDark(): Boolean = when (Prefs(carContext.applicationContext).s(PreferenceKeys.CARTHEME, "car")) {
-        "day" -> false
-        "night" -> true
-        else -> carContext.isDarkMode
+    /**
+     * Night colours on the car screen: sunrise and sunset where you are (default, as in MG4Dash), follow the car, or always
+     * day / always night (quick settings on the car).
+     */
+    private fun carDark(): Boolean {
+        val prefs = Prefs(carContext.applicationContext)
+        return when (prefs.s(PreferenceKeys.CARTHEME, "sun")) {
+            "day" -> false
+            "night" -> true
+            "sun" -> {
+                val p = holder.engine?.fix?.pos ?: prefs.s(PreferenceKeys.LASTLAT, "").toDoubleOrNull()?.let { la -> prefs.s(PreferenceKeys.LASTLON, "").toDoubleOrNull()?.let { lo -> com.headunit.launcher.LL(la, lo) } }
+                if (p != null) !com.headunit.launcher.Sun.isDay(p.lat, p.lon, System.currentTimeMillis()) else carContext.isDarkMode
+            }
+            else -> carContext.isDarkMode
+        }
+    }
+
+    private var themeApplied: Boolean? = null
+    private val themeHandler = Handler(Looper.getMainLooper())
+    // with the sun setting, check every minute whether the sun has risen or set
+    private val themeTick = object : Runnable {
+        override fun run() {
+            try { if (holder.engine != null && carDark() != themeApplied) applyTheme() } catch (e: Exception) { }
+            themeHandler.postDelayed(this, 60_000L)
+        }
     }
 
     private fun applyTheme() {
         val d = carDark()
+        themeApplied = d
         holder.engine?.applyStyle(d)
         if (::surface.isInitialized) surface.dark.value = d
     }
@@ -169,6 +190,7 @@ class CarNavSession : Session() {
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onDestroy(owner: LifecycleOwner) {
                 screen.stop()
+                themeHandler.removeCallbacks(themeTick)
                 pendingNavWaitToken++
                 pendingNavWait?.interrupt()
                 pendingNavWait = null
@@ -218,6 +240,8 @@ class CarNavSession : Session() {
         surface.engine = engine
         CarTicks.tick = { surface.tick() }
         applyTheme()
+        themeHandler.removeCallbacks(themeTick)
+        themeHandler.postDelayed(themeTick, 60_000L)
         try { engine.startLocation() } catch (e: Exception) { }
         mapScreen?.start()
         // asked for a destination before the map was up (Android Auto opened the app for it)
@@ -983,11 +1007,11 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
             .addText(listOf("Toutes les instructions et alertes", "Alertes seules (radars, limitations, dangers)", "Désactivé")[sm.coerceIn(0, 2)])
             .setImage(CarIcon.Builder(IconCompat.createWithResource(carContext, when (sm) { 0 -> R.drawable.ic_car_sound_on; 1 -> R.drawable.ic_car_sound_alerts; else -> R.drawable.ic_car_sound_off })).build())
             .setOnClickListener { if (e != null) e.cycleSound() else prefs.put(PreferenceKeys.SOUND_MODE, (sm + 1) % 3); invalidate() }.build()
-        val th = prefs.s(PreferenceKeys.CARTHEME, "car")
+        val th = prefs.s(PreferenceKeys.CARTHEME, "sun")
         rows += Row.Builder().setTitle("Jour et nuit")
-            .addText(when (th) { "day" -> "Toujours jour"; "night" -> "Toujours nuit"; else -> "Suit la voiture" })
+            .addText(when (th) { "day" -> "Toujours jour"; "night" -> "Toujours nuit"; "car" -> "Suit la voiture"; else -> "Lever et coucher du soleil" })
             .setOnClickListener {
-                prefs.put(PreferenceKeys.CARTHEME, when (th) { "car" -> "day"; "day" -> "night"; else -> "car" })
+                prefs.put(PreferenceKeys.CARTHEME, when (th) { "sun" -> "car"; "car" -> "day"; "day" -> "night"; else -> "sun" })
                 onTheme(); invalidate()
             }.build()
         // Android Auto's templated UI does not expose a native continuous slider here,

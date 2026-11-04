@@ -88,7 +88,7 @@ fun CarOverlay(engine: NavEngine, area: State<android.graphics.Rect?>, dark: Sta
     CompositionLocalProvider(LocalDensity provides Density(base.density * scale.value * user, base.fontScale * textScale)) {
         // dark cards when the car says it's night, or when the map's light has gone dim (dusk) before the car switches
         // (not with "Toujours jour" picked in the car's settings)
-        VwTheme(dark.value || (engine.mapLooksDark && engine.prefs.s(PreferenceKeys.CARTHEME, "car") == "car")) { CarScreen(engine, area.value, actions, onCover) }
+        VwTheme(dark.value || (engine.mapLooksDark && engine.prefs.s(PreferenceKeys.CARTHEME, "sun") in setOf("car", "sun"))) { CarScreen(engine, area.value, actions, onCover) }
     }
 }
 

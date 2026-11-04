@@ -1118,6 +1118,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (candidateHits >= 2 && (fix?.speed ?: 0.0) > 3.0) {
             announcedLimit = n; candidateHits = 0; limitCandidate = -1
             chime()
+            LimitLog.add(ctx, "annonce : limitation $n @ ${LimitLog.pos(fix?.pos)}")
             raiseAlert("limit", "Limitation $n")
             speak("Limitation à $n", true)
             limitPulse = true
@@ -1180,6 +1181,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val shape = when { t.isBlank() -> "none"; !MapboxRest.looksValid(t) -> "not a token"; !MapboxRest.looksWhole(t) -> "looks incomplete"; else -> "looks whole" }
                 appendLine("Mapbox token: ${t.take(3)}… $shape" + (if (mbCheckNote.isNotBlank()) " · $mbCheckNote" else "") + (if (mbKeyRefused) " · refused" else ""))
             }
+            run { val ll = LimitLog.read(ctx); if (ll.isNotBlank()) { appendLine(); appendLine("Limitations (dernières) :"); appendLine(ll) } }
             if (crash != null) { appendLine(); appendLine("Last crash:"); appendLine(crash) }
             val freeze = try { FreezeWatch.file(ctx).takeIf { it.exists() }?.readText()?.take(2500) } catch (e: Exception) { null }
             if (freeze != null) { appendLine(); appendLine("Last freeze:"); appendLine(freeze) }
@@ -1961,9 +1963,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     @Volatile private var mbWay = 0L
     @Volatile private var mbLim: Double? = null
 
+    // fork FR : la dernière limitation lue dans la carte locale (OpenStreetMap), pour vérifier celles de l'itinéraire
+    @Volatile private var osmLimMs = -1.0
+    @Volatile private var osmLimAt = 0L
+    @Volatile private var osmLimPos: LL? = null
+    @Volatile private var routeCapLogged = -1.0
+
     private fun lookUpLimit(p: LL, hd: Double, routeHere: Boolean): Overpass.Limit? {
         // the country you're in (from where you are), not the head unit's language setting, which is often US English anywhere
         val osm = Overpass.speedLimit(p, hd, if (Overpass.countryAt(p) == "GB") "GB" else detectedCountry.ifBlank { Overpass.countryAt(p) })
+        osmLimMs = osm?.takeIf { !it.estimated && it.ms > 0.0 }?.ms ?: -1.0
+        osmLimAt = System.currentTimeMillis(); osmLimPos = p
         // your last few positions, for Mapbox to match to its roads
         synchronized(mbTrail) {
             if (mbTrail.isEmpty() || Geo.dist(mbTrail.last(), p) > 15.0) { mbTrail.add(p); while (mbTrail.size > 5) mbTrail.removeAt(0) }
@@ -2019,6 +2029,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             pendHits = 0; pendLimit = -2.0
             if (v <= 0.0) { speedLimit = null; limitEstimated = false }
             else { speedLimit = v; limitEstimated = r.estimated }
+            LimitLog.add(ctx, "carte ${if (r.sure) "sûr" else "probable"}${if (r.estimated) " estimé" else ""} : ${if (v > 0) Math.round(v * 3.6) else 0} km/h · ${r.road.ifBlank { "?" }} (way ${r.wayId}) @ ${LimitLog.pos(at)}")
         }
         if (v > 0.0) checkLimitChange(v, r.estimated)
         limitOkAt = System.currentTimeMillis(); limitOkPos = at
@@ -2039,8 +2050,21 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (hit == null) return      // no posted limit known for this stretch: the map data takes over
         routeLimitAt = System.currentTimeMillis()
         pendHits = 0; pendLimit = -2.0
-        if (speedLimit != hit.ms || limitEstimated) { speedLimit = hit.ms; limitEstimated = false }
-        checkLimitChange(hit.ms, false)
+        // fork FR : les limitations de l'itinéraire passent parfois à la valeur suivante trop tôt (sortie d'agglomération). Si la
+        // carte locale, lue il y a peu au même endroit, indique une limitation plus basse, on garde la plus basse jusqu'à ce
+        // que les deux soient d'accord.
+        var ms = hit.ms
+        val op = osmLimPos
+        val o = osmLimMs
+        if (o > 0.0 && op != null && System.currentTimeMillis() - osmLimAt < 10_000L && Geo.dist(op, p.pos) < 150.0 && ms > o + 0.3) {
+            if (abs(routeCapLogged - ms) > 0.3) { routeCapLogged = ms; LimitLog.add(ctx, "itinéraire ${Math.round(ms * 3.6)} km/h, carte ${Math.round(o * 3.6)} km/h : on garde ${Math.round(o * 3.6)} @ ${LimitLog.pos(p.pos)}") }
+            ms = o
+        }
+        if (speedLimit != ms || limitEstimated) {
+            if (speedLimit == null || abs((speedLimit ?: 0.0) - ms) > 0.3) LimitLog.add(ctx, "itinéraire : ${Math.round(ms * 3.6)} km/h @ ${LimitLog.pos(p.pos)}")
+            speedLimit = ms; limitEstimated = false
+        }
+        checkLimitChange(ms, false)
         limitOkAt = routeLimitAt; limitOkPos = p.pos
     }
 

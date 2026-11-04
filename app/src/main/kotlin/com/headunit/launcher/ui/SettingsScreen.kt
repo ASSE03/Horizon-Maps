@@ -936,6 +936,10 @@ private fun AndroidAutoSection(prefs: Prefs) {
             }
         } catch (e: Exception) { "Inconnu" }
     }
+    SGroup("Jour et nuit sur l'écran de la voiture") {
+        SChoice("Jour et nuit", listOf("sun" to "Soleil", "car" to "Voiture", "day" to "Jour", "night" to "Nuit"), prefs.s(PreferenceKeys.CARTHEME, "sun"),
+            when (prefs.s(PreferenceKeys.CARTHEME, "sun")) { "sun" -> "Passe en mode nuit au coucher du soleil et en mode jour à son lever, là où vous êtes"; "car" -> "Suit le réglage de la voiture (ses phares ou son propre mode)"; else -> null }) { prefs.put(PreferenceKeys.CARTHEME, it) }
+    }
     SGroup("Tailles sur l'écran de la voiture") {
         SSlider("Taille globale sur l'écran de la voiture", prefs.i(PreferenceKeys.CARSCALE, 100).toFloat(), 40f..300f, "%", sub = "Échelle de base de tout l'affichage", steps = 25, reset = 100f) { prefs.put(PreferenceKeys.CARSCALE, it) }
         SSlider("Taille du compteur et du panneau de limitation", prefs.i(PreferenceKeys.CAR_SPEED_SIZE, 100).toFloat(), 40f..180f, "%", sub = "Réduit automatiquement si la place à l'écran est insuffisante", reset = 100f) { prefs.put(PreferenceKeys.CAR_SPEED_SIZE, it) }
@@ -1112,7 +1116,7 @@ private fun FeedbackDialog(engine: NavEngine, onClose: () -> Unit) {
             Text("Avis ou problème", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Text("Que s'est-il passé, ou que souhaitez-vous ? Où vous étiez et ce que vous avez touché aide beaucoup.", color = c.sub, fontSize = 14.sp)
             SField(note, { note = it.take(600) }, placeholder = "ex. Mauvais recalcul près de Lyon", width = 516.dp, fill = true)
-            Text("Envoyés avec : la version de l'appli, votre autoradio, les principaux réglages, vos zones téléchargées et le dernier plantage (ni lieux ni clés API).", color = c.sub, fontSize = 12.sp)
+            Text("Envoyés avec : la version de l'appli, votre autoradio, les principaux réglages, vos zones téléchargées le dernier plantage et les derniers changements de limitation avec leur position (aucune clé API).", color = c.sub, fontSize = 12.sp)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                 SButton("Fermer") { onClose() }
                 SButton("Copier") {

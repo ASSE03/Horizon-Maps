@@ -152,6 +152,7 @@ internal val settingsIndex = listOf(
     SettingRef("Horloge", "Heures au format 12 ou 24 h", "Unités", 10),
     SettingRef("Température", "", "Unités", 10),
     SettingRef("Position du volant", "Volant à droite ou à gauche : met l'écran en miroir pour la conduite à droite", "Unités", 10),
+    SettingRef("Jour et nuit", "soleil voiture mode nuit", "Jour et nuit sur l'écran de la voiture", 11),
     SettingRef("Taille globale sur l'écran de la voiture", "", "Tailles sur l'écran de la voiture", 11),
     SettingRef("Taille du compteur et du panneau de limitation", "", "Tailles sur l'écran de la voiture", 11),
     SettingRef("Tailles avancées pour l'écran de la voiture", "", "Tailles sur l'écran de la voiture", 11),
