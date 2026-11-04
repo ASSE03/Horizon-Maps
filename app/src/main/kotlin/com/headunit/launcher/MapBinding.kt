@@ -177,9 +177,10 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // fork FR : une erreur Mapbox : on demande directement à Mapbox ce qui ne va pas (une fois), pour le rapport
             if (MapErrors.probe.isBlank()) try { MapErrors.runProbe(com.mapbox.common.MapboxOptions.accessToken) } catch (x: Throwable) { }
             // fork FR : les photos de Standard Satellite refusées (429) : on passe sur l'ancienne vue satellite de Mapbox
-            if (satellite && !satClassic && (e.sourceId ?: "").contains("satellitebasemap") && (e.message ?: "").contains("429")) {
-                satClassic = true
-                MapErrors.add("Repli", null, "vue satellite classique (satellite-streets-v12)")
+            if (satellite && !satIgn && (e.sourceId ?: "").contains("satellite") && (e.message ?: "").contains("429")) {
+                satIgn = true
+                try { Prefs(ctx).put("satign_at", System.currentTimeMillis().toString()) } catch (x: Throwable) { }
+                MapErrors.add("Repli", null, "photos aériennes de l'IGN (Mapbox refuse ses photos satellite à ce compte)")
                 main0.post { val r = onRestyle; if (r != null) r() else setStyleUrl(baseStyle()) }
             }
             // only the style itself failing is reported (a missing tile now and then is normal)
@@ -369,11 +370,27 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** Fork FR : le style chargé, pour les rapports. */
     val styleNote: String get() = (loadedStyle ?: "aucun") + (if (style == null) " (en chargement)" else "")
 
-    /** Fork FR : Standard Satellite refusé, l'ancienne vue satellite est utilisée jusqu'au prochain démarrage. */
-    @Volatile private var satClassic = false
-    private val SAT_CLASSIC = "mapbox://styles/mapbox/satellite-streets-v12"
+    /**
+     * Fork FR : Mapbox refuse ses photos satellite à certains comptes (HTTP 429, limite « -1 »), et l'appli les redemandait sans
+     * fin, au point de faire refuser aussi la carte normale. Dans ce cas, la vue satellite utilise les photos aériennes de l'IGN
+     * (Géoplateforme, libres et sans clé, France entière) sous les routes et les noms de la carte normale. Retenté chaque semaine.
+     */
+    @Volatile private var satIgn = try { System.currentTimeMillis() - (Prefs(ctx).s("satign_at", "0").toLongOrNull() ?: 0L) < 7L * 86_400_000L } catch (e: Throwable) { false }
+    private val IGN_ORTHO = "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal" +
+        "&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg"
 
-    private fun isMapboxStyle(u: String?) = u == SAT_CLASSIC || u == Style.STANDARD || u == Style.STANDARD_SATELLITE || u == Style.MAPBOX_STREETS || u == Style.DARK || u == NAV_DAY || u == NAV_NIGHT
+    /** Les photos de l'IGN sous les routes (vue satellite de repli), ou rien. */
+    private fun pushOrtho(st: Style) {
+        try {
+            if (st.styleLayerExists("dl-ortho")) st.removeStyleLayer("dl-ortho")
+            if (st.styleSourceExists("dl-ortho")) st.removeStyleSource("dl-ortho")
+            if (!(satellite && satIgn) || !slotsOn) return
+            addS(st, RasterSource.Builder("dl-ortho").tiles(listOf(IGN_ORTHO)).tileSize(256).minzoom(0).maxzoom(19).attribution("© IGN").build())
+            addL(st, RasterLayer("dl-ortho", "dl-ortho").inSlot("bottom").rasterOpacity(1.0).rasterFadeDuration(150.0).rasterEmissiveStrength(0.85))
+        } catch (e: Throwable) { android.util.Log.w("MapBinding", "ortho: ${e.message}") }
+    }
+
+    private fun isMapboxStyle(u: String?) = u == Style.STANDARD || u == Style.STANDARD_SATELLITE || u == Style.MAPBOX_STREETS || u == Style.DARK || u == NAV_DAY || u == NAV_NIGHT
 
     /** Standard's light: "day", "dawn", "dusk" or "night". Changing it fades smoothly, without reloading the map. */
     private var lightPreset = "night"
@@ -1957,6 +1974,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         installExtras(st)
         // the rain radar, if it's on, goes back under the route
         pushRadar()
+        pushOrtho(st)
     }
 
     fun setView(sat: Boolean, b3d: Boolean) {
@@ -1964,6 +1982,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         satellite = sat
         buildings3d = b3d
         // satellite is Mapbox's Standard Satellite style (a style of its own, so the map reloads); 3D buildings is one of Standard's settings
+        // fork FR : photos de l'IGN (même carte de base) : posées ou retirées sans recharger la carte
+        if (satChanged && satIgn) style?.let { pushOrtho(it) }
         if (satChanged && wantedStyle != null) { val r = onRestyle; if (r != null) r() else setStyleUrl(baseStyle()) }
         else if (!sat && slotsOn) setBase("show3dObjects", Value.valueOf(buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
         else if (!sat) style?.let { st ->
@@ -1977,7 +1997,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
 
     /** The style the map should show: Standard, or Standard Satellite when satellite is on. */
     fun baseStyle(): String = when (MapStylePolicy.choose(satellite, mapDetail, nightStyle)) {
-        BaseMapStyle.STANDARD_SATELLITE -> if (satClassic) SAT_CLASSIC else Style.STANDARD_SATELLITE
+        BaseMapStyle.STANDARD_SATELLITE -> if (satIgn) Style.STANDARD else Style.STANDARD_SATELLITE
         BaseMapStyle.DARK_STREETS -> Style.DARK
         BaseMapStyle.STREETS -> Style.MAPBOX_STREETS
         BaseMapStyle.STANDARD -> Style.STANDARD
