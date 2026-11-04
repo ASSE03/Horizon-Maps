@@ -1098,14 +1098,8 @@ private fun KeysSection(prefs: Prefs, engine: NavEngine) {
 private fun AboutSection(prefs: Prefs, engine: NavEngine) {
     val ctx = LocalContext.current
     val pkg = android.net.Uri.parse("package:" + ctx.packageName)
-    var donating by remember { mutableStateOf(false) }
-    if (donating) DonateDialog(LocalVw.current.dark) { donating = false }
-    // (here so the crash report further down can open it too)
-    var feedback by remember { mutableStateOf(false) }
-    if (feedback) FeedbackDialog(engine) { feedback = false }
-    SGroup("Soutenir Horizon Nav") {
-        SItem("Faire un don", "Gratuite, sans pub. Les dons aident à la faire vivre (PayPal)") { SButton("Faire un don", primary = true) { donating = true } }
-    }
+    // fork FR : plus de don, et le rapport part directement (sans texte à écrire)
+    val ctxR = LocalContext.current
     SGroup("Horizon Nav") {
         SItem("Version", BuildConfig.VERSION_NAME)
         if (com.headunit.launcher.Updater.enabled) {
@@ -1117,7 +1111,10 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
             SToggle(prefs, "Chercher les mises à jour automatiquement", "updcheck", true, "À l'ouverture de l'appli avec une connexion (au plus toutes les demi-heures)")
         }
         SItem("Configuration", "Refaire les étapes du premier lancement : clé de carte, domicile et travail, cartes hors ligne, autorisations") { SButton("Lancer la configuration") { prefs.put(PreferenceKeys.SETUP_DONE, false); prefs.put(PreferenceKeys.FORCESETUP, true) } }
-        SItem("Avis ou problème", "Envoie un rapport avec la version, votre appareil et le dernier plantage, pour une correction rapide") { SButton("Signaler", primary = true) { feedback = true } }
+        SItem("Rapport", if (com.headunit.launcher.DiagUpload.hasToken(ctxR)) "Envoie un rapport dans le dépôt GitHub : version, appareil, réglages, dernier plantage, erreurs de carte et derniers changements de limitation avec leur position (aucune clé API)"
+            else "Copie le rapport (version, appareil, réglages, dernier plantage) pour le coller où vous voulez. Avec un jeton GitHub ci-dessous, il est envoyé directement") {
+            SButton(if (com.headunit.launcher.DiagUpload.hasToken(ctxR)) "Envoyer" else "Copier", primary = true) { sendReport(ctxR, engine) }
+        }
         // fork FR : jeton pour déposer les rapports et les plantages dans le dépôt GitHub du fork
         SFieldItem("Jeton GitHub (rapports)", prefs.s(com.headunit.launcher.DiagUpload.TOKEN_KEY, ""),
             "Jeton « fine-grained » limité à ${BuildConfig.UPDATE_REPO}, droit « Contents : Read and write ». Les rapports et plantages sont alors envoyés tout seuls dans la branche « diagnostics »" +
@@ -1162,8 +1159,8 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
     if (rep.isNotBlank()) SGroup("Rapport de problème", footer = if (oldRep) "Il date d'une version plus ancienne, avant votre dernière mise à jour : c'est peut-être déjà corrigé. Effacez-le, et envoyez-le s'il revient." else "L'appli s'est fermée de façon inattendue la dernière fois. Envoyez ce rapport pour que ce soit corrigé.") {
         Text(rep.take(900), color = LocalVw.current.text, fontSize = 10.sp, modifier = Modifier.padding(vertical = 6.dp))
         // sent the same way as Feedback (the report includes this crash and the unit's details)
-        SItem("Ce plantage", "L'envoie avec les infos de votre appareil, comme Avis ou problème") {
-            SButton("Envoyer le rapport", primary = true) { feedback = true }
+        SItem("Ce plantage", "L'envoie avec les infos de votre appareil, comme Rapport") {
+            SButton("Envoyer le rapport", primary = true) { sendReport(ctxR, engine) }
             SButton("Effacer") { cf.delete(); rep = "" }
         }
     }
@@ -1187,6 +1184,24 @@ internal fun searchCountryValue(prefs: Prefs): String = if (prefs.s(PreferenceKe
  * Feedback: say what happened in a line or two, then send it as a GitHub issue (the browser opens with it filled in) or copy it to
  * paste anywhere (Reddit, a message). Either way the app version, unit, main settings and the last crash go with it.
  */
+/** Fork FR : envoie le rapport dans le dépôt (avec un jeton GitHub), sinon le copie. */
+internal fun sendReport(ctx: android.content.Context, engine: NavEngine) {
+    val report = engine.feedbackReport("")
+    if (com.headunit.launcher.DiagUpload.hasToken(ctx)) {
+        engine.toast("Envoi du rapport…", 2000)
+        Thread {
+            val msg = try { "Rapport envoyé : " + com.headunit.launcher.DiagUpload.send(ctx, "avis-${com.headunit.launcher.DiagUpload.stamp()}.txt", report) }
+                      catch (e: Exception) { "Envoi impossible : ${e.message}" }
+            android.os.Handler(android.os.Looper.getMainLooper()).post { engine.toast(msg, 5000) }
+        }.start()
+    } else {
+        val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        cm?.setPrimaryClip(android.content.ClipData.newPlainText("Horizon Nav report", report))
+        engine.toast("Rapport copié", 2500)
+    }
+}
+
+@Suppress("unused")
 @Composable
 private fun FeedbackDialog(engine: NavEngine, onClose: () -> Unit) {
     val c = LocalVw.current

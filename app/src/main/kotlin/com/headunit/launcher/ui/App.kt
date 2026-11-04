@@ -95,7 +95,7 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) {
         if (installed <= 0L || System.currentTimeMillis() - installed < 24L * 3600_000L) return@LaunchedEffect
         delay(20_000)   // let the map settle first
         while (true) {
-            if (!whatsNewVisible && (engine.fix?.speed ?: 0.0) < 2.0) { donateVisible = true; break }
+            if (!whatsNewVisible && (engine.fix?.speed ?: 0.0) < 2.0) { break }  // fork FR : plus de proposition de don
             delay(15_000)
         }
     }
