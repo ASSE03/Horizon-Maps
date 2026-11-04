@@ -1021,6 +1021,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     private fun handleLocationInner(l: Location, first: Boolean) {
+        // fork FR : limitations comme MG4Dash (OpenStreetMap seul, paquets France)
+        if (mgLimits()) try { MgSpeedLimit.init(ctx); MgSpeedLimit.onLocation(Location(l)) } catch (e: Exception) { }
         run {
             val t = System.currentTimeMillis()
             // where you are exactly (and which way you're facing), for the map to open right there next time
@@ -1184,6 +1186,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · dernière recherche : ${Overpass.camNote.ifBlank { "aucune" }.take(160)} · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)} · zones : ${Zones.status.take(120)}")
             appendLine("Carte : ${try { map.styleNote } catch (e: Exception) { "?" }} · satellite : ${if (map.isSatellite) "oui" else "non"}")
             run { val me = MapErrors.read(); if (me.isNotBlank()) { appendLine(); appendLine("Erreurs de chargement de la carte :"); appendLine(me) } }
+            if (mgLimits()) appendLine("Limitations (MG4Dash) : ${MgSpeedLimit.status.take(400)}")
             run { val ll = LimitLog.read(ctx); if (ll.isNotBlank()) { appendLine(); appendLine("Limitations (dernières) :"); appendLine(ll) } }
             if (crash != null) { appendLine(); appendLine("Last crash:"); appendLine(crash) }
             val freeze = try { FreezeWatch.file(ctx).takeIf { it.exists() }?.readText()?.take(2500) } catch (e: Exception) { null }
@@ -2039,7 +2042,26 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     /** While navigating a TomTom route: the posted limit for exactly where you are on it, updated with every GPS fix. */
+    /** Fork FR : limitations reprises de MG4Dash (réglage « Source des limitations », par défaut). */
+    fun mgLimits() = prefs.s("limitsrc", "mg4") == "mg4"
+    private var mgShown: Int? = -1
+
+    /** Fork FR : affiche la limitation trouvée par le moteur de MG4Dash. */
+    private fun applyMgLimit(p: Fix) {
+        val kmh = MgSpeedLimit.limit.value
+        if (kmh != mgShown) {
+            mgShown = kmh
+            LimitLog.add(ctx, "MG4Dash : ${kmh ?: "inconnue"} · ${MgSpeedLimit.status.take(140)} @ ${LimitLog.pos(p.pos)}")
+        }
+        if (kmh == null || kmh <= 0) { if (speedLimit != null) { speedLimit = null; limitEstimated = false }; return }
+        val ms = kmh / 3.6
+        if (speedLimit == null || abs((speedLimit ?: 0.0) - ms) > 0.3 || limitEstimated) { speedLimit = ms; limitEstimated = false }
+        checkLimitChange(ms, false)
+        limitOkAt = System.currentTimeMillis(); limitOkPos = p.pos
+    }
+
     private fun applyRouteLimit(r: Route, prog: Double, p: Fix) {
+        if (mgLimits()) return
         val secs = r.limits
         if (secs.isEmpty()) return
         // a few metres ahead, to make up for the GPS being about a second behind
@@ -2081,6 +2103,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             lastSpd = p.speed; lastSpdAt = now
         }
+        if (mgLimits()) try { applyMgLimit(p) } catch (e: Exception) { }
         run {
             val lim = speedLimit
             val tolUnits = prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5").toIntOrNull() ?: 5
@@ -2108,16 +2131,16 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     val r = withContext(Dispatchers.IO) { lookUpLimit(look, hd, routeHere) }
                     if (r != null) {
                         if (r.wayId != 0L || r.road.isNotBlank()) noteRoad(r.road, hd); limitFails = 0
-                        if (!routeLimitLive()) showLimit(r, p.pos)
+                        if (!routeLimitLive() && !mgLimits()) showLimit(r, p.pos)
                     } else if (Overpass.lastError == null) {
                         // looked fine, but you're not on a mapped road (a car park, a new estate): no road name or limit rather than the
                         // last road's
                         noteRoad("", hd)
-                        if (!routeLimitLive()) showLimit(Overpass.Limit(-1.0, true), p.pos)
+                        if (!routeLimitLive() && !mgLimits()) showLimit(Overpass.Limit(-1.0, true), p.pos)
                     } else {
                         // keep showing the last known limit through a failed lookup; only drop it once it is clearly out of date (10 minutes or 3 km)
                         val okPos = limitOkPos
-                        if (!routeLimitLive() && (System.currentTimeMillis() - limitOkAt > 600_000 || (okPos != null && Geo.dist(okPos, p.pos) > 3000))) { speedLimit = null; limitEstimated = false }
+                        if (!routeLimitLive() && !mgLimits() && (System.currentTimeMillis() - limitOkAt > 600_000 || (okPos != null && Geo.dist(okPos, p.pos) > 3000))) { speedLimit = null; limitEstimated = false }
                         // the lookup itself failed: try again soon instead of waiting until the car has moved (and let an old road name
                         // drop once it's out of date)
                         refreshRoad()

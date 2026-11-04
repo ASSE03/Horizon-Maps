@@ -519,6 +519,9 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Avertir en cas d'excès de vitesse", "speedwarn", true)
         if (prefs.b(PreferenceKeys.SPEEDWARN, true)) SChoice("Avertir au-delà de", listOf("0", "5", "10").map { it to it + if (engine.imperial) " mph" else " km/h" }, prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5")) { prefs.put(PreferenceKeys.TRAFFIC_WARNING, it) }
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
+        SChoice("Source des limitations", listOf("mg4" to "Comme MG4Dash", "auto" to "TomTom et Mapbox"), prefs.s("limitsrc", "mg4"),
+            if (prefs.s("limitsrc", "mg4") == "mg4") "OpenStreetMap seul, avec les paquets France de MG4Dash (jeton GitHub ayant accès à MG4Dash-SWI68), sinon par petites zones gardées 60 jours"
+            else "TomTom ou Mapbox d'abord, OpenStreetMap en secours (comme l'appli d'origine)") { prefs.put("limitsrc", it) }
         SToggle(prefs, "Afficher les limitations estimées", "limitest", false, "Sans limitation connue, affiche la limitation habituelle pour ce type de route (grisée). Désactivé : aucun panneau plutôt qu'une estimation")
     }
     SGroup("Radars") {

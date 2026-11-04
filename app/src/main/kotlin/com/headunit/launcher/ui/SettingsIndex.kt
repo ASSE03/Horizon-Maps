@@ -90,6 +90,7 @@ internal val settingsIndex = listOf(
     SettingRef("Avertir en cas d'excès de vitesse", "", "Vitesse", 5),
     SettingRef("Avertir au-delà de", "", "Vitesse", 5),
     SettingRef("Annoncer les changements de limitation", "", "Vitesse", 5),
+    SettingRef("Source des limitations", "MG4Dash OpenStreetMap TomTom Mapbox", "Vitesse", 5),
     SettingRef("Afficher les limitations estimées", "Sans limitation connue, affiche la limitation habituelle pour ce type de route (grisée). Désactivé : aucun panneau plutôt qu'une estimation", "Vitesse", 5),
     SettingRef("Radars", "", "Radars", 5),
     SettingRef("Désactivés là où c'est interdit", "La France, l'Allemagne et la Suisse interdisent les alertes radar : elles s'y coupent d'elles-mêmes", "Radars", 5),
