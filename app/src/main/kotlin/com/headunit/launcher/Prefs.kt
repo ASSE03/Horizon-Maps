@@ -136,6 +136,9 @@ internal object PreferenceKeys {
     const val LAMPGAP = "lampgap"
     const val LANDMARKS3D = "landmarks3d"
     const val LANEMAP = "lanemap"
+    /** How lanes show on the map: "lit" (the lane to use lit up; on motorways where the real lanes are known, the route line moves
+     *  into it), "closeup" (a drawn picture of the junction's lanes in a corner of the map) or "sign" (a sign over the road). */
+    const val LANE_MAP_STYLE = "lanemapstyle"
     const val LASTLAT = "lastlat"
     const val LASTLON = "lastlon"
     const val LIMITCHANGE = "limitchange"
@@ -176,6 +179,12 @@ internal object PreferenceKeys {
     const val CLUSTER_MAP = "clustermap"
     /** Where the speed limit and speedometer sit, on the side away from the cards: "bottom" (as it always was), "middle" or "top". */
     const val SPEED_POS = "speedpos"
+    /** The same for the Android Auto screen: "bottom" (as it always was), "middle" or "top" of the right-hand side. */
+    const val SPEED_POS_CAR = "speedposcar"
+    /** The Horizon theme at night: "dusk" or "night" light, the ground's brightness and how much lighter the buildings are (0-100). */
+    const val HZ_NIGHT_LIGHT = "hznightlight"
+    const val HZ_NIGHT_BRIGHT = "hznightbright"
+    const val HZ_NIGHT_BLD = "hznightbld"
     /** Electric car: still show the Fuel (petrol station) button on the map page. */
     const val EV_SHOW_FUEL = "evshowfuel"
     /** While navigating, the notification shows the next turn (arrow, distance, road) for launchers, watches and other screens. */
@@ -236,6 +245,15 @@ internal object PreferenceKeys {
     const val TT_MAP_FIX = "ttmapfix"
     const val VOICE_CHANNEL = "voicechan"
     const val TANKERKOENIG_KEY = "tkkey"
+    /** NSW FuelCheck (Australia: New South Wales and Tasmania): the API key and secret from api.nsw.gov.au. */
+    const val NSW_FUEL_KEY = "nswkey"
+    /** The 3D view's tilt in degrees on a wide screen, a tall screen and Android Auto (0 = Auto, as the app chooses). */
+    const val TILT_WIDE = "tiltwide"
+    const val TILT_TALL = "tilttall"
+    const val TILT_CAR = "tiltcar"
+    /** Full screen: the status and navigation bars hidden (off keeps a head unit's own bars showing). */
+    const val FULLSCREEN = "fullscreen"
+    const val NSW_FUEL_SECRET = "nswsecret"
     const val VOICE_ROADS = "voiceroads"
     const val AVOID_TOLL_COUNTRIES = "avoid_toll_cc"
     const val ROAD_NAME_SIZE = "roadnamesize"

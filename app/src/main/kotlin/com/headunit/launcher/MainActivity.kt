@@ -44,7 +44,11 @@ class MainActivity : ComponentActivity() {
         val boot = getSharedPreferences(CrashGuardPrefs.FILE, android.content.Context.MODE_PRIVATE)
         val startedAt = System.currentTimeMillis()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
-            try { crashFile.writeText("Thread ${t.name}\n" + android.util.Log.getStackTraceString(e).take(3000)) } catch (x: Throwable) { }
+            // (with the version and time, so a report left over from an older version can be told apart)
+            try {
+                val stamp = java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.UK).format(java.util.Date())
+                crashFile.writeText("Horizon Nav ${BuildConfig.VERSION_NAME} · $stamp\nThread ${t.name}\n" + android.util.Log.getStackTraceString(e).take(3000))
+            } catch (x: Throwable) { }
             // a crash in the first 25 seconds counts as "crashed while starting"
             try { if (System.currentTimeMillis() - startedAt < 25_000L) boot.edit().putInt(CrashGuardPrefs.START_FAILURES, boot.getInt(CrashGuardPrefs.START_FAILURES, 0) + 1).commit() } catch (x: Throwable) { }
             prev?.uncaughtException(t, e)
@@ -123,12 +127,19 @@ class MainActivity : ComponentActivity() {
                 }
         }
 
+        // Full screen switched on or off in Settings: the bars hide or come back straight away
+        lifecycleScope.launch {
+            snapshotFlow { prefs.b(PreferenceKeys.FULLSCREEN, true) }.distinctUntilChanged().collect { hideBars() }
+        }
+
         // the next turn in the navigation notification (for car launchers, watches and other screens that read it);
         // NavService only posts when what's shown changes, at most about once a second
         lifecycleScope.launch {
             snapshotFlow { if (guiding()) Pair(engine.turn, engine.eta) else null }
                 .collect { te ->
-                    if (te != null) try {
+                    // (with Android Auto on, the car screen's guidance keeps the notification up to date: one source, so it can't
+                    // flick between two slightly different distances)
+                    if (te != null && !RouteSync.carConnected()) try {
                         NavService.update(applicationContext, te.first, te.second, engine.imperial, !engine.mirrored,
                             prefs.b(PreferenceKeys.TURN_NOTIF, true))
                     } catch (e: Throwable) { }
@@ -143,8 +154,14 @@ class MainActivity : ComponentActivity() {
         if (missing.isNotEmpty()) perm.launch(missing.toTypedArray())
     }
 
-    /** Hides the status and navigation bars: the newer way, plus the older flags that Android 10 and older head units go by. */
+    /**
+     * Hides the status and navigation bars: the newer way, plus the older flags that Android 10 and older head units go by.
+     * With Full screen off (Settings > Screen & sizes) the bars stay and the app fits between them, so a head unit's own bar
+     * (climate, home button) isn't covered.
+     */
     private fun hideBars() {
+        val full = try { Prefs(applicationContext).b(PreferenceKeys.FULLSCREEN, true) } catch (e: Throwable) { true }
+        if (!full) { showBars(); return }
         try {
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -157,6 +174,18 @@ class MainActivity : ComponentActivity() {
                 window.decorView.systemUiVisibility = (android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
                     android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
                     android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
+            }
+        } catch (e: Exception) { }
+    }
+
+    private fun showBars() {
+        try {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            WindowCompat.setDecorFitsSystemWindows(window, true)
+            WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
+            if (Build.VERSION.SDK_INT < 30) {
+                @Suppress("DEPRECATION")
+                window.decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
             }
         } catch (e: Exception) { }
     }

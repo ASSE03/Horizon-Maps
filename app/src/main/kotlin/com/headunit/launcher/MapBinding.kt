@@ -380,11 +380,51 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         if (p == lightPreset) return
         lightPreset = p
         setBase("lightPreset", Value.valueOf(satLight(p)))
+        // Horizon at night: the buildings their own colour (below). Back to day, Mapbox's own building colours return; a colour once
+        // given can't be taken back while the map is showing, so the map is loaded again (only at that switch, once or twice a day)
+        if (horizonNightBuildings()) { setBase("colorBuildings", Value.valueOf(hzBuildings())); setBase("colorLand", Value.valueOf(hzLand())); buildingsTinted = true }
+        else if (buildingsTinted) { buildingsTinted = false; if (isMapboxStyle(wantedStyle)) { loadedStyle = null; setStyleUrl(baseStyle()) } }
     }
+
+    /**
+     * The Horizon theme at night and dusk: buildings a soft lavender-blue, a step lighter than the ground, rather than the same dark
+     * shade as it (walls and roofs still take the map's light and shadow). Day keeps Mapbox's own building colours.
+     */
+    // Horizon at night, set by eye in Settings > Map look > Horizon at night: the light (Mapbox's "dusk" is softer and brighter, with
+    // a gentle glow; "night" dims everything a lot more), how light the ground is, and how much lighter than it the buildings are
+    private var hzLight = "dusk"
+    private var hzBright = 60
+    private var hzBld = 40
+
+    fun setHorizonNight(light: String, bright: Int, bld: Int) {
+        val l = if (light == "night") "night" else "dusk"
+        val br = bright.coerceIn(0, 100); val bd = bld.coerceIn(0, 100)
+        if (l == hzLight && br == hzBright && bd == hzBld) return
+        hzLight = l; hzBright = br; hzBld = bd
+        setBase("lightPreset", Value.valueOf(satLight(lightPreset)))
+        if (horizonNightBuildings()) { setBase("colorBuildings", Value.valueOf(hzBuildings())); setBase("colorLand", Value.valueOf(hzLand())); buildingsTinted = true }
+    }
+
+    private fun mix(a: Int, b: Int, t: Double): String {
+        fun ch(x: Int, s: Int) = (x shr s) and 0xFF
+        fun m(s: Int) = Math.round(ch(a, s) + (ch(b, s) - ch(a, s)) * t).toInt().coerceIn(0, 255)
+        return String.format("#%02X%02X%02X", m(16), m(8), m(0))
+    }
+    /** The ground: from a deep blue-grey (0%) to near white (100%), before the night light dims it. */
+    private fun hzLand(): String = mix(0x3A4260, 0xE6EBFF, hzBright / 100.0)
+    /** The buildings: the ground's colour taken towards white by the Buildings setting (0% is only just lighter than the ground). */
+    private fun hzBuildings(): String {
+        val t = hzBright / 100.0
+        val land = (Math.round(0x3A + (0xE6 - 0x3A) * t).toInt() shl 16) or (Math.round(0x42 + (0xEB - 0x42) * t).toInt() shl 8) or Math.round(0x60 + (0xFF - 0x60) * t).toInt()
+        return mix(land, 0xFFFFFF, 0.15 + 0.85 * hzBld / 100.0)
+    }
+    private var buildingsTinted = false
+    private fun horizonNightBuildings(): Boolean = colours == "horizon" && !satellite && (lightPreset == "night" || lightPreset == "dusk")
 
     /** Satellite at "night" darkens the photos until there's next to nothing to see (it looked as if satellite wasn't working),
      *  so satellite goes no darker than dusk. */
-    private fun satLight(p: String): String = if (satellite && p == "night") "dusk" else p
+    private fun satLight(p: String): String = if (satellite && p == "night") "dusk"
+        else if (p == "night" && colours == "horizon" && hzLight == "dusk") "dusk" else p
 
     /** One of Standard's settings (only once a style is showing; they're also written into the style when it loads). */
     private fun setBase(key: String, v: Value) {
@@ -396,7 +436,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private fun baseConfig(): org.json.JSONObject {
         val sat = (wantedStyle ?: "") == Style.STANDARD_SATELLITE
         val c = org.json.JSONObject()
-        c.put("lightPreset", if (sat && lightPreset == "night") "dusk" else lightPreset)
+        c.put("lightPreset", if (sat && lightPreset == "night") "dusk" else if (!sat && lightPreset == "night" && colours == "horizon" && hzLight == "dusk") "dusk" else lightPreset)
         // shop and place labels rest on the light map and (on the full map) while you're on the move: placing them is the costly part
         c.put("showPointOfInterestLabels", !lite && !poiMoving)
         c.put("showTransitLabels", !lite)
@@ -408,6 +448,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // Mapbox's own colours with a gentle purple-blue hint (mostly at night), from a colour look-up table
             "horizon" -> if (!sat) { c.put("theme", "custom"); c.put("theme-data", HorizonLut.BASE64) }
         }
+        buildingsTinted = !sat && horizonNightBuildings()
+        if (buildingsTinted) { c.put("colorBuildings", hzBuildings()); c.put("colorLand", hzLand()) }
         return c
     }
 
@@ -1803,19 +1845,21 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // lane ribbons: the lane you need is a solid teal ribbon that fades away into the distance, the others are quiet road-coloured strips
         val night = nightStyle
         val onCol = if (night) "#2FC9B8" else "#1FB5A8"
-        val offCol = if (night) "#4A5062" else "#FBFAF7"
+        // the lanes not to use: a darker road-surface strip with clear white lines, so they stand out from the map's road under them
+        // (they used to be close to the road's own colour and faded into it)
+        val offCol = if (night) "#262C38" else "#AEB6C4"
         val isOn = Expression.eq(Expression.get("on"), lit(1))
         addL(st, FillLayer("dl-lane-fill", "dl-lane-bands").inSlot(MID)
             .fillColor(Expression.switchCase(isOn, col(onCol), col(offCol)))
-            .fillOpacity(Expression.product(Expression.toNumber(Expression.get("a")), Expression.switchCase(isOn, lit(0.95), lit(if (night) 0.75 else 0.85))))
+            .fillOpacity(Expression.product(Expression.toNumber(Expression.get("a")), Expression.switchCase(isOn, lit(0.95), lit(0.9))))
             .fillEmissiveStrength(1.0).minZoom(15.5))
-        val lineCol = if (night) "#FFFFFF" else "#6A7080"
+        val lineCol = "#FFFFFF"
         addL(st, LineLayer("dl-lane-edge", "dl-lane-divs").inSlot(MID).filter(Expression.eq(Expression.get("s"), lit(1)))
-            .lineColor(lineCol).lineOpacity(0.7).lineEmissiveStrength(1.0)
-            .lineWidth(zoomed(2.0, 15 to 0.15, 20 to 2.5)).minZoom(15.5))
+            .lineColor(lineCol).lineOpacity(0.95).lineEmissiveStrength(1.0)
+            .lineWidth(zoomed(2.0, 15 to 0.25, 20 to 3.5)).minZoom(15.5))
         addL(st, LineLayer("dl-lane-div", "dl-lane-divs").inSlot(MID).filter(Expression.eq(Expression.get("s"), lit(0)))
-            .lineColor(lineCol).lineOpacity(0.75).lineEmissiveStrength(1.0).lineDasharray(listOf(3.0, 4.0))
-            .lineWidth(zoomed(2.0, 15 to 0.15, 20 to 2.0)).minZoom(15.5))
+            .lineColor(lineCol).lineOpacity(0.9).lineEmissiveStrength(1.0).lineDasharray(listOf(3.0, 4.0))
+            .lineWidth(zoomed(2.0, 15 to 0.2, 20 to 2.8)).minZoom(15.5))
         for ((id, on) in listOf("dl-lanes-off" to 0, "dl-lanes-on" to 1)) {
             val l = SymbolLayer(id, "dl-lanes").inSlot(MID).filter(Expression.eq(Expression.get("on"), lit(on)))
                 .iconImage(Expression.get("img")).iconRotate(Expression.get("rot"))
@@ -2455,11 +2499,11 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             c.drawLine(32f, 18f, 42f, 28f, p)
             c.restore()
         }
-        val out = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = 12f; color = 0x66000000.toInt() }
+        val out = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = 12f; color = if (on) 0x66000000 else 0x99000000.toInt() }
         draw(out)
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = 8f
-            color = if (on) 0xFFFFFFFF.toInt() else 0x99FFFFFF.toInt()
+            color = if (on) 0xFFFFFFFF.toInt() else 0xDDFFFFFF.toInt()
         }
         draw(fill)
         return bmp
@@ -3722,7 +3766,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     @Volatile private var roadSegs: List<List<Point>> = emptyList()
 
     /** A road line from Mapbox's road data: its points, its kind ("motorway", "primary", "street"...) and whether it's one-way. */
-    class RoadPiece(val pts: List<Point>, val cls: String, val oneway: Boolean?)
+    class RoadPiece(val pts: List<Point>, val cls: String, val oneway: Boolean?, val name: String = "")
     @Volatile private var roadInfo: List<RoadPiece> = emptyList()
 
     /**
@@ -3772,9 +3816,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             val cls = try { f.getStringProperty("class") } catch (e: Throwable) { null } ?: ""
             val ow = try { f.getStringProperty("oneway") } catch (e: Throwable) { null }
             val one = when (ow) { "true" -> true; "false" -> false; else -> null }
+            // the road's name as the map shows it (or its number, "M27", when it has no name)
+            val nm = try { f.getStringProperty("name") } catch (e: Throwable) { null }?.takeIf { it.isNotBlank() }
+                ?: try { f.getStringProperty("ref") } catch (e: Throwable) { null }.orEmpty()
             when (val g = f.geometry()) {
-                is LineString -> info += RoadPiece(g.coordinates(), cls, one)
-                is MultiLineString -> for (c in g.coordinates()) info += RoadPiece(c, cls, one)
+                is LineString -> info += RoadPiece(g.coordinates(), cls, one, nm)
+                is MultiLineString -> for (c in g.coordinates()) info += RoadPiece(c, cls, one, nm)
                 else -> { }
             }
         }
@@ -3894,6 +3941,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         }
         return doubleArrayOf(t.latitude(), t.longitude(), c.bearing, c.pitch, c.zoom, pd.top / h, (pd.left - pd.right) / w)
     }
+
+    /** A tall (portrait) screen: taller than it is wide. */
+    fun isTall(): Boolean = try { mapView.height > mapView.width } catch (e: Throwable) { false }
 
     fun setTilt(tilt: Double) {
         tiltNow = tilt

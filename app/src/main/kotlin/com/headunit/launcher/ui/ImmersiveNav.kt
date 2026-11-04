@@ -68,6 +68,7 @@ import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.LocalCafe
 import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.LocalParking
+import androidx.compose.material.icons.rounded.LocalShipping
 import androidx.compose.material.icons.rounded.LocalPolice
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MyLocation
@@ -307,6 +308,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
                     }
                     engine.advice?.let { AdvicePill(it) }
                     LorryWarnCard(engine)
+                    JunctionCloseup(engine)
                     AvgSpeedCard(engine)
                     ServicesCard(engine)
                     ParkingCard(engine)
@@ -1101,7 +1103,9 @@ private fun ImmChips(engine: NavEngine, focusSearch: () -> Unit) {
             FindButton(Icons.Rounded.EvStation, Color(0xFF34A853), "Recharge à proximité") { engine.loadNearby("charging", false) }
             FindButton(Icons.Rounded.Restaurant, Color(0xFFF29900), "Restauration à proximité") { engine.loadNearby("food", false) }
             FindButton(Icons.Rounded.LocalCafe, Color(0xFFA56BFF), "Café à proximité") { engine.loadNearby("coffee", false) }
-            FindButton(Icons.Rounded.LocalParking, Color(0xFF4C8DFF), "Parking à proximité") { engine.loadNearby("parking", false) }
+            // (a lorry: lorry parks instead of car parks)
+            if (engine.prefs.s(PreferenceKeys.VEHICLE, "car") == "lorry") FindButton(Icons.Rounded.LocalShipping, Color(0xFF4C8DFF), "Parkings poids lourds à proximité") { engine.loadNearby("lorrypark", false) }
+            else FindButton(Icons.Rounded.LocalParking, Color(0xFF4C8DFF), "Parking à proximité") { engine.loadNearby("parking", false) }
             if (noFuel) FindButton(Icons.Rounded.Wc, Color(0xFF4C8DFF), "Toilettes à proximité") { engine.loadNearby("toilets", false) }
         }
     }
@@ -1168,7 +1172,9 @@ private fun ParkedCard(engine: NavEngine) {
     if (ageMin > 48 * 60) return
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val here = engine.fix?.pos
-    val ago = when { ageMin < 1 -> "à l'instant"; ageMin < 60 -> "il y a $ageMin min"; ageMin < 24 * 60 -> "il y a ${ageMin / 60} h"; else -> "yesterday" }
+    // (not while you're still at the car)
+    if (here != null && Geo.dist(here, spot) < 80.0) return
+    val ago = when { ageMin < 1 -> "à l'instant"; ageMin < 60 -> "il y a $ageMin min"; ageMin < 24 * 60 -> "il y a ${ageMin / 60} h"; else -> "hier" }
     Row(Modifier.fillMaxWidth().panel(10.dp, RoundedCornerShape(22.dp), c.surface).padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.size(38.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
@@ -1179,7 +1185,7 @@ private fun ParkedCard(engine: NavEngine) {
             Text("Garée $ago" + (if (here != null) " · " + Geo.fmtDist(Geo.dist(here, spot), engine.imperial) else ""), color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         // walking directions in the phone's maps app (Horizon Nav plans driving routes); just the spot if there's none
-        ImmPill("À pied", {
+        ImmPill("Y retourner à pied", {
             val walk = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "google.navigation:q=%.6f,%.6f&mode=w", spot.lat, spot.lon)))
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "geo:%.6f,%.6f?q=%.6f,%.6f(Your car)", spot.lat, spot.lon, spot.lat, spot.lon)))

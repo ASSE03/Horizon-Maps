@@ -1194,9 +1194,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             appendLine("Offline area: ${installedPackId() ?: "none"}")
             appendLine("Frame rate: ${prefs.s(PreferenceKeys.MAP_FPS, "auto")} · map detail: ${prefs.mapDetail()} · driving side: ${if (mirrored) "left-hand" else "right-hand"}")
             if (perfLine.isNotBlank()) appendLine("Performance: $perfLine")
+            try { appendLine(com.headunit.launcher.ui.NightWatch.line() + " · theme " + prefs.s(PreferenceKeys.THEME, "auto")) } catch (e: Exception) { }
             if (heatLevel >= 0) appendLine("Heat: ${listOf("cool", "light", "moderate", "severe", "critical", "emergency", "shutdown").getOrElse(heatLevel) { "$heatLevel" }}")
             try { append(SessionWatch.report(ctx)) } catch (e: Exception) { }
             if (laneDiag.isNotBlank()) appendLine(laneDiag)
+            if (laneNote.isNotBlank()) appendLine(laneNote)
             // (the report is made on the phone: the car screen's own figures, from the last time Android Auto was on)
             if (CarDiag.screen.isNotBlank() || CarDiag.shift.isNotBlank()) appendLine("Android Auto screen: ${CarDiag.screen} · ${CarDiag.shift}")
             run {
@@ -1229,8 +1231,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (nm.contains("parking") || nm.contains("car park") || nm.contains("multi-storey") || nm.contains("multistorey")) return
         scope.launch {
             val list = withContext(Dispatchers.IO) {
-                val tt = if (hasOnline && online()) try { netPoiNearby("parking", d.pos, 700) } catch (e: Exception) { null } else null
-                (tt?.takeIf { it.isNotEmpty() } ?: try { if (online()) Overpass.nearby("parking", d.pos, 700) else emptyList() } catch (e: Exception) { emptyList() })
+                // OpenStreetMap first: it has the prices, opening hours and spaces where they're mapped; TomTom or Mapbox if it finds none
+                val osm = try { if (online()) Overpass.nearby("parking", d.pos, 700) else emptyList() } catch (e: Exception) { emptyList() }
+                (osm.takeIf { it.isNotEmpty() } ?: (if (hasOnline && online()) try { netPoiNearby("parking", d.pos, 700) } catch (e: Exception) { null } else null) ?: emptyList())
                     .map { it.copy(dist = Geo.dist(d.pos, it.place.pos)) }.filter { it.dist < 800.0 }.sortedBy { it.dist }.take(3)
             }
             if (route === r && dest === d) parkingNear = list
@@ -1881,6 +1884,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         routeCams = emptyList(); camsRoute = null; camsAt = 0L; camsCount = -1; hazardSig = 0; policeSig = 0; map.setHazards(emptyList())
         via = emptyList(); stopMode = false; destRain = null; routeWx = emptyList()
         routes = emptyList(); active = 0; dest = null; turn = null; eta = null; lastIdx = 0; previewing = false; routeFrac = 0f; onRoad = ""
+        try { refreshRoad() } catch (e: Exception) { }
         departMin = 0; departAtMs = 0L
         fuelSuggestion = null; parkingNear = emptyList(); parkingFor = null
         turnArrowKey = -1; map.setTurnArrow(emptyList())
@@ -2137,6 +2141,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 chime(android.media.ToneGenerator.TONE_PROP_BEEP2)
             }
         }
+        try { refreshRoad() } catch (e: Exception) { }
         val lp = limitPos
         val moving = p.speed > 0.5
         // a quick local check every few seconds (the roads around you are downloaded a few hundred metres at a time, so most
@@ -2222,8 +2227,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val d = Geo.dist(p.pos, c)
                 if (d > warnAt || d >= bestD) continue
                 val diff = abs(((Geo.bearing(p.pos, c) - p.heading + 540.0) % 360.0) - 180.0)
-                // nearly straight ahead; close in, a wider angle (the camera is often beside the road)
-                if (diff < (if (d < 150.0) 60.0 else 35.0) && camFacesUs(c, p.heading)) { best = c; bestD = d }
+                // ahead of you and close to the line you're driving along (how far to the side, not an angle: 35 degrees is 280 m
+                // to the side at 500 m, so cameras on other roads set off alerts). A little more room close in, where the camera
+                // is often beside the road
+                val side = d * kotlin.math.sin(Math.toRadians(diff))
+                if (diff < 80.0 && side < (if (d < 150.0) 40.0 else 30.0) && camFacesUs(c, p.heading)) { best = c; bestD = d }
             }
         }
         cameraDist = if (best != null) bestD.toInt() else null
@@ -2271,12 +2279,23 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (tripOn && tripDistance > 300) {
                     trips.add(Trip(tripT0, stillSince, tripDistance, tripMoveSec, tripTop, tripDest))
                 }
+                // on a phone (not a head unit, which stays in the car): remember where the car is, for "Your car" once you've walked
+                // off (it used to be only when Android Auto disconnected)
+                if (tripOn && tripDistance > 300 && onPhone()) try {
+                    val old = prefs.s(PreferenceKeys.PARKED_SPOT, "").split(',').getOrNull(2)?.toLongOrNull() ?: 0L
+                    if (now - old > 10 * 60_000L) prefs.put(PreferenceKeys.PARKED_SPOT, String.format(java.util.Locale.US, "%.6f,%.6f,%d", p.pos.lat, p.pos.lon, now))
+                } catch (e: Exception) { }
                 tripOn = false
                 drove = false; stillSince = 0L
             }
         }
         if (dest != null) tripDest = dest?.name.orEmpty()
     }
+
+    /** A phone rather than a head unit: it has a phone line and a phone-sized screen (and isn't drawing the car screen). */
+    private fun onPhone(): Boolean = !isCar && try {
+        ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEPHONY) && ctx.resources.configuration.smallestScreenWidthDp < 600
+    } catch (e: Exception) { false }
 
     /** Finds [q] and starts routing there (used for calendar appointments). */
     fun routeToText(q: String, then: () -> Unit) {
@@ -2377,10 +2396,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                             if (alongRoute && rt != null) {
                                 val pr = RouteExtras.project(rt, s0.pos, 1500.0, progress) ?: continue
                                 if (pr.first < progress - 100) continue
-                                out += Nearby(Place(s0.name, s0.sub, s0.pos), pr.first - progress, "", s0.cents, detour(pr.second), true, unit = "€")
-                            } else if (Geo.dist(centre, s0.pos) <= radius) out += Nearby(Place(s0.name, s0.sub, s0.pos), Geo.dist(origin, s0.pos), "", s0.cents, unit = "€")
+                                out += Nearby(Place(s0.name, s0.sub, s0.pos), pr.first - progress, "", s0.cents, detour(pr.second), true, unit = EuFuel.unit(cc))
+                            } else if (Geo.dist(centre, s0.pos) <= radius) out += Nearby(Place(s0.name, s0.sub, s0.pos), Geo.dist(origin, s0.pos), "", s0.cents, unit = EuFuel.unit(cc))
                         }
                         if (out.isNotEmpty()) return@async out
+                    }
+                    // lorry parks and services that take lorries: OpenStreetMap only (TomTom's and Mapbox's place searches don't tell them apart)
+                    if (kind == "lorrypark") {
+                        return@async if (alongRoute && rt != null) {
+                            Overpass.nearbyAlong("lorrypark", RouteExtras.line(rt, progress, progress + 120_000.0, 1500.0, 60), 1500).mapNotNull { n ->
+                                val pr = RouteExtras.project(rt, n.place.pos, 2000.0, progress) ?: return@mapNotNull null
+                                if (pr.first < progress - 100) null else n.copy(dist = pr.first - progress, detourMin = detour(pr.second), ahead = true)
+                            }
+                        } else Overpass.nearby("lorrypark", centre, 25_000).map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
                     }
                     // bioethanol: only stations mapped as selling E85 (TomTom's search can't tell which do)
                     val e85 = kind == "fuel" && fuelType == "E85"
@@ -2431,6 +2459,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     return@launch
                 }
                 nearby = sortNearby(list).take(15)
+                if (kind == "charging") fillChargerAvailability()
                 if (nearby.isEmpty()) toast(if (alongRoute) "Rien trouvé sur l'itinéraire devant" else "Rien trouvé à proximité", 3000)
             } catch (e: Exception) { toast(searchFailText(e), 4500) }
             finally { nearbyBusy = false }
@@ -2502,6 +2531,23 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     private fun sortNearby(l: List<Nearby>): List<Nearby> =
         if (nearbySort == "cheap" && l.any { it.price != null }) l.sortedWith(compareBy<Nearby> { it.price ?: 9999.0 }.thenBy { it.dist }) else l.sortedBy { it.dist }
+
+    /**
+     * Live availability for the chargers in the list ("8 of 12 free"), asked of TomTom for the first 10 that have it, all at once in
+     * the background. The list shows straight away and the counts appear as they come; a charger without live data says so.
+     */
+    private fun fillChargerAvailability() {
+        val list = nearby
+        if (!hasKey || !online() || list.none { it.chargeId.isNotBlank() }) return
+        scope.launch {
+            val ids = list.map { it.chargeId }.filter { it.isNotBlank() }.distinct().take(10)
+            val got = withContext(Dispatchers.IO) {
+                ids.map { id -> async { id to TomTomRest.chargingFree(apiKey, id) } }.map { it.await() }.toMap()
+            }
+            if (nearbyKind != "charging" || nearby !== list) return@launch
+            nearby = list.map { n -> if (n.chargeId in got) n.copy(free = got[n.chargeId]?.let { (f, t) -> "$f sur $t libres" } ?: "Pas d'info en direct") else n }
+        }
+    }
 
     fun changeNearbySort(mode: String) { nearbySort = mode; nearby = sortNearby(nearby) }
 
@@ -3021,6 +3067,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val lite = prefs.mapDetail() != "full"
         // the full map stays a touch lower than it used to (fewer distant tiles to draw), the light map lower still
         tilt = minOf(tilt, if (lite) 52.0 else 54.0)
+        // your own tilt (Settings > Map look > 3D view): for a wide screen, a tall one and Android Auto separately
+        if (tilt3d) {
+            val key = if (isCar) PreferenceKeys.TILT_CAR else if (map.isTall()) PreferenceKeys.TILT_TALL else PreferenceKeys.TILT_WIDE
+            val mine = prefs.i(key, 0)
+            if (mine in 30..65) tilt = mine.toDouble()
+        }
         // tilt with speed: a little flatter when slow (easier to read streets), lower and further-looking at speed
         // (with the lighter map it only ever flattens, so it never draws more than before)
         if (tilt3d && prefs.b(PreferenceKeys.SPEEDTILT, true)) {
@@ -3306,9 +3358,15 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      * them to the route whenever more arrive or the route changes.
      */
     private fun updateRouteCams(r: Route, @Suppress("UNUSED_PARAMETER") progress: Double) {
-        val cams = knownCams
-        if (camsRoute === r && camsCount == cams.size) return
-        camsRoute = r; camsCount = cams.size
+        // the ones found along the route and the ones from the search round you: on a route only the matched ones are shown and
+        // warned about, so a camera the route search missed (a busy server, a stretch not searched yet) used to be left out
+        // altogether even though the search round you had it
+        val cams = knownCams + aroundCams
+        // (redone when either list is replaced, not just when the count changes: a fresh search round you can have as many
+        // cameras as the last one but different ones)
+        val sig = System.identityHashCode(knownCams) * 31 + System.identityHashCode(aroundCams)
+        if (camsRoute === r && camsCount == sig) return
+        camsRoute = r; camsCount = sig
         if (cams.isEmpty()) { routeCams = emptyList(); return }
         scope.launch {
             val found = withContext(Dispatchers.Default) {
@@ -3322,18 +3380,29 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     pts += r.pts[n]; offs += r.cum[n]; last = r.cum[n]
                 }
                 val out = ArrayList<Pair<LL, Double>>()
+                val kx = 111_320.0 * cos(Math.toRadians(c0Lat(r))); val ky = 110_540.0
                 for (c in cams) {
-                    var bestD = 45.0; var off = -1.0
+                    // the distance from the camera to the route's line itself (not just its nearest point, which could be 25 m
+                    // away along the road): within 30 m it's on the route. It used to be 45 m from a point, which took in
+                    // cameras on a road alongside and gave alerts with no camera coming up
+                    var bestD = 30.0; var off = -1.0
                     val k = key(c.lat, c.lon)
                     var bi = -1
                     for (dy in -1..1) for (dx in -1..1) grid[k + dy * 1000003L + dx]?.forEach { i ->
-                        val d = Geo.dist(pts[i], c)
-                        if (d < bestD) { bestD = d; off = offs[i]; bi = i }
+                        if (i + 1 >= pts.size) return@forEach
+                        val ax = (pts[i].lon - c.lon) * kx; val ay = (pts[i].lat - c.lat) * ky
+                        val bx = (pts[i + 1].lon - c.lon) * kx; val by = (pts[i + 1].lat - c.lat) * ky
+                        val dx2 = bx - ax; val dy2 = by - ay
+                        val l2 = dx2 * dx2 + dy2 * dy2
+                        val t = if (l2 > 0.01) (-(ax * dx2 + ay * dy2) / l2).coerceIn(0.0, 1.0) else 0.0
+                        val d = Math.hypot(ax + dx2 * t, ay + dy2 * t)
+                        if (d < bestD) { bestD = d; off = offs[i] + (offs[i + 1] - offs[i]) * t; bi = i }
                     }
                     // a camera that checks the other carriageway (it's known which way it points): not on your route
                     val cd = Overpass.camDir[Overpass.camKey(c)]
                     if (off >= 0 && cd != null && bi >= 0 && bi + 1 < pts.size && abs(angDiff(cd, Geo.bearing(pts[bi], pts[bi + 1]))) > 75.0) off = -1.0
-                    if (off >= 0) out += c to off
+                    // (the same camera mapped twice, on the road and beside it, is one camera: one alert)
+                    if (off >= 0 && out.none { abs(it.second - off) < 40.0 && Geo.dist(it.first, c) < 60.0 }) out += c to off
                 }
                 out.sortBy { it.second }
                 out
@@ -3341,6 +3410,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (camsRoute === r) { routeCams = found; hazardSig = 0; mergeCams() }
         }
     }
+
+    private fun c0Lat(r: Route): Double = r.pts.firstOrNull()?.lat ?: 0.0
 
     /** A report you made from the map: what it is, where, and when. They are kept on this device only. */
     class Report(val kind: String, val pos: LL, val t: Long)
@@ -3479,6 +3550,51 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             speak("${LorryLimits.title(l.kind)}, $said $unit", true)
         }
         if (lorrySpoken.size > 200) lorrySpoken.clear()
+    }
+
+    /**
+     * The lorry check on the route choice: the height, weight, width and length limits along the whole route (the first 400 km),
+     * looked up 25 km at a time in the background. [Route] with "" while it's checking, then the line to show.
+     */
+    var lorryCheck by mutableStateOf<Pair<Route, String>?>(null)
+    @Volatile private var lorryCheckToken = 0
+
+    fun lorryRouteCheck(r: Route?) {
+        Vehicle.load(prefs)
+        if (r == null || !Vehicle.lorry) return
+        if (lorryCheck?.first === r) return
+        val token = ++lorryCheckToken
+        lorryCheck = r to ""
+        scope.launch {
+            val over = ArrayList<LorryLimits.Lim>()
+            var failed = false
+            val end = min(r.len, 400_000.0)
+            withContext(Dispatchers.IO) {
+                var o = 0.0
+                while (o < end && token == lorryCheckToken) {
+                    val got = LorryLimits.along(r, o, 25_000.0)
+                    if (got == null) { failed = true; break }
+                    over += got.filter { it.over }
+                    o += 25_000.0
+                }
+            }
+            if (token != lorryCheckToken) return@launch
+            val text = when {
+                over.isEmpty() && failed -> "Vérification poids lourd inachevée (pas de réseau, ou serveur de carte occupé)"
+                over.isEmpty() -> "Vérification poids lourd : aucune limite sous votre gabarit" + (if (r.len > end) " sur les premiers ${Geo.fmtDist(end, imperial)}" else "")
+                else -> {
+                    // each kind once, with how many and the lowest ("1 low bridge (3.9 m)")
+                    val parts = over.groupBy { it.kind }.map { (k, list) ->
+                        val n = list.size
+                        val name = when (k) { "height" -> if (n == 1) "pont bas" else "ponts bas"; "weight" -> if (n == 1) "limite de poids" else "limites de poids"; "width" -> if (n == 1) "limite de largeur" else "limites de largeur"; else -> if (n == 1) "limite de longueur" else "limites de longueur" }
+                        val lowest = LorryLimits.signText(list.minBy { it.value }, imperial).replace(Regex("([0-9])([mt])$"), "$1 $2")
+                        "$n $name ($lowest)"
+                    }
+                    "Vérification poids lourd : " + parts.joinToString(", ") + " sur cet itinéraire"
+                }
+            }
+            lorryCheck = r to text
+        }
     }
 
     fun clearReports() { prefs.put(PreferenceKeys.REPORTS, ""); prefs.put(PreferenceKeys.POLICEREP, ""); pushHazards(hzProgress); toast("Signalements effacés", 2000) }
@@ -3861,7 +3977,15 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // on motorways and dual carriageways the lanes are looked at (and shown, and spoken) much earlier, as there's further to move over
             val fastRoad = cur.exitNo.isNotBlank() || (fix?.let { f -> try { map.roadAt(f.pos, f.heading)?.cls } catch (e: Throwable) { null } }?.let { it.startsWith("motorway") || it.startsWith("trunk") } == true)
             laneFast = fastRoad
-            val realSec = if (d < (if (fastRoad) 1900 else 1000) && !arriving) r.lanes.filter { progress < it.end + 5 && abs(it.end - cur.off) < 200 }.sortedWith(compareByDescending<LaneSec> { it.lanes.size }.thenBy { abs(it.end - cur.off) }).firstOrNull() else null
+            val realSec = if (d < (if (fastRoad) 1900 else 1000) && !arriving) r.lanes.filter {
+                progress < it.end + 5 && abs(it.end - cur.off) < 200
+            }.sortedWith(compareByDescending<LaneSec> { it.lanes.size }.thenBy { abs(it.end - cur.off) }).firstOrNull() else null
+            // for the feedback report: the lane list in use, as the route data gives it (so a junction with the wrong arrows can be
+            // traced to the data or the app)
+            laneNote = realSec?.let { s0 ->
+                "Lanes for the next turn (${provider.ifBlank { "offline" }}, ${Math.round(s0.off - cur.off)} to ${Math.round(s0.end - cur.off)} m from it): " +
+                    s0.lanes.joinToString(" | ") { ln -> ln.dirs.joinToString("+") { it.lowercase() } + (ln.follow?.let { f -> " (use: ${f.lowercase()})" } ?: "") }
+            } ?: laneNote
             val laneSec = realSec
             val laneAdv = laneSec?.let { Geo.laneAdvice(it, cur.maneuver) }
             // the early lane call on fast roads, about a mile out (once per junction): "In about a mile, move into the left two lanes"
@@ -4332,7 +4456,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         out.filter { it.detourMin >= 0 }.minByOrNull { it.detourMin }?.let { n ->
                             val arr = Math.round(startPct - n.dist / 1000.0 * cons / batt * 100.0).toInt().coerceAtLeast(0)
                             val mins = Math.round((80 - arr).coerceAtLeast(10) / 100.0 * batt / 50.0 * 60.0).toInt()
-                            n.copy(extra = "arrivée vers $arr % · charge à 80 %, environ $mins min")
+                            // how many are free there now, where the operator shares it
+                            val freeNow = if (n.chargeId.isNotBlank() && hasKey) TomTomRest.chargingFree(apiKey, n.chargeId)?.let { (f, t) -> " · $f sur $t libres maintenant" } ?: "" else ""
+                            n.copy(extra = "arrivée vers $arr % · charge à 80 %, environ $mins min$freeNow")
                         }
                     } catch (e: Exception) { null }
                 }
@@ -4362,7 +4488,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         for (s0 in EuFuel.along(cc, prefs, RouteExtras.line(r, a, b, 1500.0, 45), fuel, maxAsks = 5)) {
                             val pr = RouteExtras.project(r, s0.pos, 1200.0) ?: continue
                             if (pr.first !in a..b) continue
-                            out += Nearby(Place(s0.name, s0.sub, s0.pos), pr.first, "", s0.cents, detour(pr.second), true, unit = "€")
+                            out += Nearby(Place(s0.name, s0.sub, s0.pos), pr.first, "", s0.cents, detour(pr.second), true, unit = EuFuel.unit(cc))
                         }
                     }
                     if (out.isEmpty() && hasKey && online() && fuel != "E85") {
@@ -4835,11 +4961,30 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         refreshRoad()
     }
 
-    /** Name of the road you are on: from the route while navigating, otherwise from the map data around you. */
+    /** The name of the road under the arrow as the map itself draws it, once it has been the same for two checks in a row. */
+    private var drawnRoad = ""
+    private var drawnCand = ""
+
+    private fun drawnRoadNow(): String {
+        val f = fix ?: return ""
+        val here = try { map.roadAt(mPos ?: f.pos, f.heading, 12.0, 35.0)?.name } catch (e: Throwable) { null }
+        if (here == null) { drawnRoad = ""; drawnCand = ""; return "" }
+        if (here == drawnRoad) drawnCand = ""
+        else if (here == drawnCand || drawnRoad.isEmpty()) { drawnRoad = here; drawnCand = "" }
+        else drawnCand = here
+        return drawnRoad
+    }
+
+    /**
+     * Name of the road you are on. First the road the map draws under the arrow (it changes as soon as the real road does, and
+     * needs no lookup), then the route's step while navigating, then the map data round you. The route's step used to come first:
+     * where the name changed without a turn it stayed on the old road until the next turn (GitHub #35, #36).
+     */
     private fun refreshRoad() {
         // the map-data name is dropped once it's 45 seconds old (lookups that kept failing used to leave the last road up)
         val mapRoad = if (System.currentTimeMillis() - limitRoadAt < 45_000L) limitRoad else ""
-        val n = Geo.shortRoad(if (route != null && !previewing && onRoad.isNotBlank()) onRoad else mapRoad)
+        val drawn = if (fix != null && (fix?.speed ?: 0.0) > 1.0) drawnRoadNow() else drawnRoad
+        val n = Geo.shortRoad(drawn.ifBlank { if (route != null && !previewing && onRoad.isNotBlank()) onRoad else mapRoad })
         if (n != roadShown) { roadShown = n; map.setRoadName(n) }
         if (roadNow != n) roadNow = n
     }
@@ -4861,7 +5006,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var earlyLaneFor = -1.0
 
     private fun updateLaneMarks(r: Route, cur: Step, sec: LaneSec?, d: Double) {
-        val key = if (sec != null && d < (if (laneFast) 1300.0 else 400.0) && prefs.b(PreferenceKeys.LANEMAP, true)) Pair(cur.off, sec) else null
+        // how lanes show on the map (Settings > Turn card & lanes): the close-up picture is drawn by the screen itself, so nothing
+        // goes on the map for it
+        val style = prefs.s(PreferenceKeys.LANE_MAP_STYLE, "lit")
+        if (style != laneStyleSeen) { laneStyleSeen = style; laneKey = null; map.setLaneSign(null, emptyList()); laneSignFor = -1.0 }
+        val key = if (sec != null && d < (if (laneFast) 1300.0 else 400.0) && prefs.b(PreferenceKeys.LANEMAP, true) && style != "closeup") Pair(cur.off, sec) else null
         // the route line stays in its lane until you're past the end of its ease back after the junction (clearing it as soon as
         // the lane guidance ended made the line just ahead of you jump sideways)
         if (laneShiftEnd > 0.0 && key == null && curProgress >= laneShiftEnd) { map.setRouteShift(emptyList()); laneLatAt = null; laneShiftEnd = 0.0; turnArrowKey = -2 }
@@ -4896,7 +5045,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         // the lane sign goes once you're up to it
         if (laneSignFor >= 0.0 && curProgress > laneSignFor - 15.0) { map.setLaneSign(null, emptyList()); laneSignFor = -1.0 }
-        if (key == laneKey) return
+        if (key == laneKey) {
+            // lanes drawn without the junction's road (the map hadn't shown it yet): look again, cheaply, and redraw only once it's
+            // there (redrawing on every update restarted the lane blink and resent the lanes to the map each second)
+            if (key == null || laneRoadFor != cur.off || d <= 80.0) return
+            val (ap, ab) = pointAt(r, max(0.0, cur.off - 45.0))
+            if (map.roadAt(ap, ab, maxDistance = 10.0, headingTolerance = 25.0) == null) return
+            laneRoadFor = -1.0
+        }
         laneKey = key
         if (key == null || sec == null) {
             map.setLaneSign(null, emptyList()); laneSignFor = -1.0
@@ -4910,8 +5066,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // Lined up with the real lanes (the ones Mapbox's map paints where it has them): the route line runs down the middle of the
         // road as mapped, so the lanes are laid out from there, at real lane widths. On a one-way road or a dual carriageway the
         // lanes are centred on the line; on a two-way road they're all on your side of it (the left in the UK).
-        val (approach, approachB) = pointAt(r, max(0.0, cur.off - 45.0))
-        val road = map.roadAt(approach, approachB, maxDistance = 10.0, headingTolerance = 25.0)
+        // the road on the approach, looked for a few places back from the junction (the nearest one may be under the junction itself)
+        var road: MapBinding.RoadPiece? = null
+        for (back in listOf(45.0, 80.0, 120.0, 25.0)) {
+            if (road != null) break
+            val (approach, approachB) = pointAt(r, max(0.0, cur.off - back))
+            road = map.roadAt(approach, approachB, maxDistance = 10.0, headingTolerance = 25.0)
+        }
         // Require a close, direction-compatible road match here: at exits and junctions a nearby ramp or cross-road can
         // otherwise supply the wrong one-way/road-centre metadata and offset the highlighted lane away from the route.
         // If the match is ambiguous, use the lane-relative fallback below so the route remains in the selected lane.
@@ -4921,14 +5082,21 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // that the mapped line doesn't follow, which put the lanes (and the route line moved into them) off the road; there the
         // lanes are laid out with the lane to be in under the route line, and the route line stays where it is.
         val big = road?.cls?.let { (it == "motorway" || it == "trunk") } == true
-        val aligned = road != null && road.oneway == true && big
-        val laneW = if (!aligned) 3.6 else if (big) 3.65 else 3.5
+        // (the map's roads are only read close in: on a motorway, zoomed further out, they often aren't there. A motorway junction
+        // is then taken as a one-way carriageway too, so its lanes are still laid out on the road)
+        val aligned = (road != null && road.oneway == true && big) || (road == null && laneFast)
+        // Lit lane on a road the map has: the lanes are laid out on the road itself (centred on a one-way road's line; on a two-way
+        // road all on your side of its middle line) at a slimmer 3 m, rather than around the route line, which is what pushed
+        // them over the verge before. Only where the map has no road there is just your lane drawn, under the route line.
+        val roadLaid = style == "lit" && road != null && !aligned
+        val laneW = if (!aligned) (if (roadLaid) 3.0 else 3.6) else if (big) 3.65 else 3.5
         // Lined up: before a junction the mapped line runs down the middle of the main carriageway, which is the lanes that carry
         // straight on. The lanes peeling off to an exit are extra lanes beside it (at the junction Mapbox lists them all together),
         // so the straight-on lanes are centred on the line and the exit lanes sit off to their side. Centring all of them on the
         // line put every lane a lane or two out towards the exit, over the verge. A true split (no straight-on lane) stays centred.
         val throughIdx = sec.lanes.indices.filter { i -> sec.lanes[i].dirs.any { it == "STRAIGHT" } }
-        val centre = if (!aligned) (if (activeIdx.isEmpty()) (n - 1) / 2.0 else activeIdx.average())
+        val centre = if (roadLaid) (if (road?.oneway == true) (n - 1) / 2.0 else if (mirrored) -0.5 else n - 0.5)
+            else if (!aligned) (if (activeIdx.isEmpty()) (n - 1) / 2.0 else activeIdx.average())
             else if (throughIdx.isNotEmpty() && throughIdx.size < n && isContiguous(throughIdx)) throughIdx.average()
             else (n - 1) / 2.0
         // each lane's middle and edges, sideways from the route line (metres, + to the right): the real ones read off the map when
@@ -4938,7 +5106,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // instead, like a motorway gantry, so nothing is drawn that might not sit on the painted lanes.
         val prof = if (hdLanesFor == cur.off && hdProfileFor == cur.off) hdProfile.filter { it.second.size == n } else emptyList()
         val lined = prof.isNotEmpty()
-        if (!lined && curProgress < cur.off - 15.0) {
+        if (!lined && style == "sign" && curProgress < cur.off - 15.0) {
             map.setLaneSign(pointAt(r, max(0.0, cur.off - 10.0)).first, sec.lanes.mapIndexed { i, lane ->
                 val active = i in activeIdx
                 lane.dirs.map { dir -> dir to (active && (if (anyFollow) dir == lane.follow else laneHit(dir, cur.maneuver))) } to active
@@ -4963,7 +5131,21 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             return LL(p.lat + lateral * Math.cos(rad) / 111320.0, p.lon + lateral * Math.sin(rad) / (111320.0 * Math.cos(Math.toRadians(p.lat))))
         }
         val marks = ArrayList<MapBinding.LaneMark>()
-        for (back in if (lined) listOf(28.0, 65.0) else emptyList()) {
+        // Lit lane, where the real lanes aren't known: only the lane to use is drawn, as a lit strip under the route line itself
+        // (which is on the road), with its arrows. No other lanes, so nothing can end up over the verge.
+        // every lane painted: where the real lanes are known (any style but the sign), or laid out on the road (lit lane)
+        val paint = lined || (style == "lit" && (road != null || aligned) && activeIdx.isNotEmpty())
+        val litOnly = style == "lit" && !paint && activeIdx.isNotEmpty()
+        if (litOnly) {
+            val lane = sec.lanes[activeIdx.first()]
+            for (back in listOf(28.0, 65.0)) {
+                val off = cur.off - back
+                if (off < 0) continue
+                val (p, brg) = pointAt(r, off)
+                lane.dirs.forEach { dir -> marks += MapBinding.LaneMark(p, brg, dir, if (anyFollow) dir == lane.follow else laneHit(dir, cur.maneuver)) }
+            }
+        }
+        for (back in if (paint) listOf(28.0, 65.0) else emptyList()) {
             val off = cur.off - back
             if (off < 0) continue
             val (p, brg) = pointAt(r, off)
@@ -4981,11 +5163,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // TomTom's lane section can be short, but the lanes carry on back along the approach, so the strips do not stop where the section starts
         // (only the last stretch before the junction, where the lanes really are: about 110 m on motorways, 60 m elsewhere,
         // so lanes aren't painted far back along a road that only widens at the junction)
-        val from = max(0.0, cur.off - (if (lined) 110.0 else 60.0))
+        val from = max(0.0, cur.off - (if (lined || aligned) 110.0 else 60.0))
         val to = cur.off - 6.0
         val bands = ArrayList<MapBinding.LaneBand>()
         val divs = ArrayList<MapBinding.LaneEdge>()
-        if (lined && to - from > 20.0) {
+        if (paint && to - from > 20.0) {
             val samples = ArrayList<Pair<LL, Double>>()
             val sampleMids = ArrayList<DoubleArray>()
             var o = from
@@ -5005,6 +5187,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             val outer = ArrayList<LL>(); for ((j, sp) in samples.withIndex()) outer += shifted(sp.first, sp.second, leftE(sampleMids[j], 0))
             divs += MapBinding.LaneEdge(outer, true)
+        } else if (litOnly && to - from > 20.0) {
+            // the lit strip: one lane wide (3.2 m), centred on the route line, over the last 60 m (fading in at its start)
+            val samples = ArrayList<Pair<LL, Double>>()
+            var o = from
+            while (o < to) { samples += pointAt(r, o); o += 10.0 }
+            samples += pointAt(r, to)
+            for (k in 0 until samples.size - 1) {
+                val l = ArrayList<LL>(); val rt = ArrayList<LL>()
+                for (m in k..k + 1) { val (p, brg) = samples[m]; l += shifted(p, brg, -1.6); rt += shifted(p, brg, 1.6) }
+                bands += MapBinding.LaneBand(l + rt.asReversed(), true, 0.5 + 0.5 * min(1.0, k / 3.0))
+            }
         }
         map.setLaneBands(bands, divs)
         // the route line moved into the lane you need (when the lanes are lined up with the road). One sideways offset along the
@@ -5014,14 +5207,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // last 8 m while the turn arrow, drawn on the road's own line from 38 m out, left a gap and a step where they met.
         val shift = ArrayList<LL>()
         laneLatAt = null; laneShiftEnd = 0.0
-        if (lined && activeIdx.isNotEmpty()) {
+        // (wherever the lanes are painted, so the lit lane and the route line always line up: on ordinary roads the lanes sit on
+        // your side of the road's middle line, and the route line, which follows that middle line, used to stay beside them)
+        if (paint && activeIdx.isNotEmpty()) {
             // the middle of the lit-up lanes, wherever they are along the approach
             fun midAt(o: Double): Double { val m = mids(o); return activeIdx.map { m[it] }.average() }
             val mid = midAt(cur.off - 40.0)
-            val s0 = max(0.0, max(sec.off, cur.off - 250.0))
+            // (on ordinary roads the move across starts only 100 m out, just before the lanes appear)
+            // (from where the lanes are known when they've been read off the map; otherwise from just before the lanes appear: the
+            // lane list often only starts at the junction itself, which left too little room and the line didn't move over at all)
+            val s0 = max(0.0, if (lined) max(sec.off, cur.off - 250.0) else cur.off - (if (aligned) 250.0 else 100.0))
             val s1 = min(r.len, cur.off + 25.0)
             // (fully in the lane by the time the lane strips start, 110 m out, when there's room; else over the first half)
-            val stripStart = cur.off - 110.0
+            val stripStart = from
             val ramp = if (stripStart - s0 >= 20.0) min(60.0, stripStart - s0) else max(10.0, (cur.off - s0) * 0.5)
             if (maxOf(Math.abs(mid), Math.abs(midAt(cur.off - 100.0)), Math.abs(midAt(cur.off - 10.0))) > 0.3 && cur.off - s0 > 30.0) {
                 val fn: (Double) -> Double = { o ->
@@ -5042,17 +5240,29 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         map.setRouteShift(shift)
         map.setLanes(marks)
+        // The map's roads are only known close in (they're read off the screen), so 400 m out the junction's road often isn't there
+        // yet, and the lanes fell back to just your lane, with the route line left where it was, for that whole junction ("sometimes
+        // the route line moves over and sometimes it doesn't"). Until the road is found, the lanes are worked out again on the next
+        // update, until 80 m out.
+        laneRoadFor = if (road == null && !lined && !aligned && style == "lit" && d > 80.0) cur.off else -1.0
     }
 
     /** The sideways offset (metres, + to the right) of the route line in the lane you need, by distance along the route; null when none. */
     private var laneLatAt: ((Double) -> Double)? = null
     /** The real lanes' middles (sideways from the route line, left to right) read off the map for the junction at [hdLanesFor]. */
     private var hdProfile: List<Pair<Double, List<Double>>> = emptyList()
+    /** The last lane list shown, as the route data gave it (for the feedback report). */
+    var laneNote = ""
+        private set
     /** What the last look for the real lanes found (for Demo mode and the feedback report). */
     var laneDiag = ""
         private set
     private var laneDiagFor = -1.0
     private var hdProfileFor = -1.0
+    /** The junction whose lanes were drawn before its road was found on the map (looked for again as you get closer); −1 for none. */
+    private var laneRoadFor = -1.0
+    /** The lane style last drawn with ("lit", "closeup" or "sign"): a change redraws the junction's lanes. */
+    private var laneStyleSeen = ""
     /** The junction the lane sign is standing at (−1 for none). */
     private var laneSignFor = -1.0
     private var hdLanesFor = -1.0

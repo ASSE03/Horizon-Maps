@@ -131,7 +131,7 @@ class CarNavSession : Session() {
                     p != null -> e.startRoute(Place(t?.name ?: "Destination", "Depuis l'Assistant Google", p))
                     q.equals("home", true) && e.places.slot("home") != null -> e.startRoute(e.places.slot("home")!!)
                     q.equals("work", true) && e.places.slot("work") != null -> e.startRoute(e.places.slot("work")!!)
-                    q.isNotEmpty() -> ms.screenManager.push(SearchScreen(carContext, holder, q))
+                    q.isNotEmpty() -> ms.screenManager.push(SearchScreen(carContext, holder, q, autoGo = true))
                     else -> try { androidx.car.app.CarToast.makeText(carContext, "Impossible de lire un lieu dans ce message", androidx.car.app.CarToast.LENGTH_LONG).show() } catch (x: Exception) { }
                 }
             }
@@ -231,6 +231,7 @@ class CarNavSession : Session() {
         map.setCarModel(prefs.s(PreferenceKeys.CAR_MODEL, "saloon"))
         map.setRoadNameScale(prefs.i(PreferenceKeys.CAR_ROAD_NAME_SIZE, 100).coerceIn(70, 200) / 100f)
         map.setColours(prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox"))
+        map.setHorizonNight(prefs.s(PreferenceKeys.HZ_NIGHT_LIGHT, "dusk"), prefs.i(PreferenceKeys.HZ_NIGHT_BRIGHT, 60), prefs.i(PreferenceKeys.HZ_NIGHT_BLD, 40))
         map.setLogoCorner(prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"))
         map.setExtras(prefs.b(PreferenceKeys.FACADES, true), prefs.b(PreferenceKeys.LANDMARKS3D, true), prefs.b(PreferenceKeys.PATHS, true), prefs.b(PreferenceKeys.TERRAIN, false),
             false, prefs.b(PreferenceKeys.FURNITURE3D, true), prefs.b(PreferenceKeys.CLEARVIEW, true))
@@ -887,14 +888,34 @@ class ReportScreen(carContext: CarContext, private val holder: CarHolder) : Scre
 }
 
 /** Search with the car's keyboard or voice: results from the same search as the app (TomTom, or offline when there's no signal). */
-class SearchScreen(carContext: CarContext, private val holder: CarHolder, initial: String = "") : Screen(carContext) {
+/**
+ * Search on the car screen. [autoGo]: a place asked for by voice ("Hey Google, navigate to …"): the top result's route starts by
+ * itself (the route choice shows where to, and Cancel), like other navigation apps, instead of a list to tap while driving.
+ * If nothing comes back within about 10 seconds the list stays, to search again.
+ */
+class SearchScreen(carContext: CarContext, private val holder: CarHolder, initial: String = "", private var autoGo: Boolean = false) : Screen(carContext) {
     private var query = initial
     private var shown: List<Place> = emptyList()
     private val handler = Handler(Looper.getMainLooper())
+    /** The results that were there before this search (so old ones aren't taken for the answer). */
+    private val before: List<Place>? = holder.engine?.results
+    private val askedAt = android.os.SystemClock.uptimeMillis()
     private val poll = object : Runnable {
         override fun run() {
-            val r = holder.engine?.results ?: emptyList()
+            val e = holder.engine
+            val r = e?.results ?: emptyList()
             if (r !== shown) { shown = r; invalidate() }
+            if (autoGo) {
+                if (e != null && r !== before && r.isNotEmpty()) {
+                    autoGo = false
+                    val p = r.first()
+                    e.startRoute(p)
+                    try { androidx.car.app.CarToast.makeText(carContext, "Direction ${p.name}", androidx.car.app.CarToast.LENGTH_LONG).show() } catch (x: Exception) { }
+                    try { screenManager.popToRoot() } catch (x: Exception) { }
+                    return
+                }
+                if (android.os.SystemClock.uptimeMillis() - askedAt > 10_000L) autoGo = false
+            }
             handler.postDelayed(this, 500)
         }
     }
@@ -975,7 +996,9 @@ class NearbyScreen(carContext: CarContext, private val holder: CarHolder, privat
             val r = Row.Builder().setTitle(n.place.name).setImage(rowIcon(carContext, iconRes, tint))
             val bits = ArrayList<String>()
             bits += com.headunit.launcher.Geo.fmtDist(n.dist, e?.imperial ?: true)
-            n.price?.let { bits += String.format(java.util.Locale.UK, "%.1fp", it) }
+            // (the local way: 139.9p, €1.789, 189.9c; it always said "p" before, even for euro prices)
+            n.price?.let { bits += com.headunit.launcher.fmtFuelPrice(it, n.unit) }
+            if (n.free.isNotBlank()) bits += n.free
             if (n.detourMin >= 0) bits += "+${n.detourMin} min"
             if (n.extra.isNotBlank()) bits += n.extra
             r.addText(bits.joinToString(" · "))
@@ -996,7 +1019,7 @@ class NearbyScreen(carContext: CarContext, private val holder: CarHolder, privat
  * Quick settings on the car: voice guidance, day / night, what shows on the map and the route options, without picking up the phone.
  * They're the app's own settings (the phone shows the same).
  */
-class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, private val onTheme: () -> Unit) : Screen(carContext) {
+class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, private val page: Int = 0, private val onTheme: () -> Unit) : Screen(carContext) {
     private val prefs = Prefs(carContext.applicationContext)
 
     private fun toggleRow(title: String, key: String, def: Boolean, sub: String?, after: (Boolean) -> Unit = {}): Row {
@@ -1009,12 +1032,19 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
     override fun onGetTemplate(): Template {
         val e = holder.engine
         val limit = try { carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST) } catch (x: Exception) { 6 }
+        // most needed first: some cars only allow a few rows in a list, so what doesn't fit goes on a second page ("More settings")
+        // rather than being left off (the last rows used to be cut off altogether on those cars)
         val rows = ArrayList<Row>()
         val sm = e?.soundMode ?: prefs.i(PreferenceKeys.SOUND_MODE, 0)
         rows += Row.Builder().setTitle("Guidage vocal")
             .addText(listOf("Toutes les instructions et alertes", "Alertes seules (radars, limitations, dangers)", "Désactivé")[sm.coerceIn(0, 2)])
             .setImage(CarIcon.Builder(IconCompat.createWithResource(carContext, when (sm) { 0 -> R.drawable.ic_car_sound_on; 1 -> R.drawable.ic_car_sound_alerts; else -> R.drawable.ic_car_sound_off })).build())
             .setOnClickListener { if (e != null) e.cycleSound() else prefs.put(PreferenceKeys.SOUND_MODE, (sm + 1) % 3); invalidate() }.build()
+        // north up or turning with you (GitHub #39)
+        val nu = e?.northUp ?: prefs.b(PreferenceKeys.NORTH_UP_CAR, false)
+        rows += Row.Builder().setTitle("Orientation de la carte")
+            .addText(if (nu) "Nord en haut · touchez pour tourner avec vous" else "Tourne avec vous · touchez pour le nord en haut")
+            .setOnClickListener { if (e != null) e.toggleNorthUp() else prefs.put(PreferenceKeys.NORTH_UP_CAR, !nu); invalidate() }.build()
         val th = prefs.s(PreferenceKeys.CARTHEME, "sun")
         rows += Row.Builder().setTitle("Jour et nuit")
             .addText(when (th) { "day" -> "Toujours jour"; "night" -> "Toujours nuit"; "car" -> "Suit la voiture"; else -> "Lever et coucher du soleil" })
@@ -1030,10 +1060,16 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
                 try { holder.map?.setView(!satOn, prefs.b(PreferenceKeys.BUILDINGS_3D, true)) } catch (x: Exception) { }
                 invalidate()
             }.build()
+        val reroute: (Boolean) -> Unit = { holder.engine?.rerouteForSettings() }
+        rows += toggleRow("Éviter les autoroutes", "avoid_motorway", false, null, reroute)
+        rows += toggleRow("Éviter les péages", "avoid_toll", false, null, reroute)
+        rows += toggleRow("Radars", "cameras", true, "Afficher et avertir")
+        rows += toggleRow("Feux tricolores", "signals", true, "Sur votre itinéraire") { on -> try { holder.map?.signalsEnabled(on) } catch (x: Exception) { } }
+        rows += toggleRow("Éviter les ferries", "avoid_ferry", false, null, reroute)
         // Android Auto's templated UI does not expose a native continuous slider here,
-        // so these map-accessible controls step through sensible values on each tap.
+        // so these step through sensible values on each tap (the same settings as the app's Settings > Android Auto)
         val uiScale = prefs.i(PreferenceKeys.CARSCALE, 100).coerceIn(40, 300)
-        rows += Row.Builder().setTitle("Échelle de l'interface")
+        rows += Row.Builder().setTitle("Taille globale")
             .addText("${uiScale} % · touchez pour varier de 40 % à 300 %")
             .setOnClickListener {
                 val levels = listOf(40, 60, 80, 100, 120, 140, 160, 180, 200, 225, 250, 275, 300)
@@ -1041,22 +1077,22 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
                 prefs.put(PreferenceKeys.CARSCALE, next)
                 invalidate()
             }.build()
-        val arrowScale = (prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240).coerceIn(100, 500)
+        // the car screen's own arrow size (it used to change the phone's arrow size too)
+        val arrowSize = prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(60, 180)
         rows += Row.Builder().setTitle("Taille de la flèche")
-            .addText("${arrowScale} % · touchez pour agrandir ; revient au début après 300 %")
+            .addText("${arrowSize} % · touchez pour changer (60 % à 180 %)")
             .setOnClickListener {
-                val next = when (arrowScale) { in 0..149 -> 150; in 150..199 -> 200; in 200..249 -> 250; in 250..299 -> 300; else -> 100 }
-                prefs.put(PreferenceKeys.ARROW_PERCENT, next)
-                try { holder.map?.setArrowScale((next / 100f).coerceIn(1f, 5f) * 0.9f * (prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(60, 180) / 100f)) } catch (_: Exception) { }
+                val levels = listOf(60, 80, 100, 120, 140, 160, 180)
+                val next = levels[(levels.indexOf(arrowSize).takeIf { it >= 0 } ?: 2).let { (it + 1) % levels.size }]
+                prefs.put(PreferenceKeys.CAR_ARROW_SIZE, next)
+                try { holder.map?.setArrowScale(((prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(1f, 5f) * 0.9f * (next / 100f)) } catch (_: Exception) { }
                 invalidate()
             }.build()
-        val reroute: (Boolean) -> Unit = { holder.engine?.rerouteForSettings() }
-        rows += toggleRow("Éviter les autoroutes", "avoid_motorway", false, null, reroute)
-        rows += toggleRow("Éviter les péages", "avoid_toll", false, null, reroute)
-        rows += toggleRow("Radars", "cameras", true, "Afficher et avertir")
-        rows += toggleRow("Feux tricolores", "signals", true, "Sur votre itinéraire") { on -> try { holder.map?.signalsEnabled(on) } catch (x: Exception) { } }
-        rows += toggleRow("Éviter les ferries", "avoid_ferry", false, null, reroute)
-        // (at the end: some cars only show the first few rows while driving, and these are the least needed on the move)
+        // where the speed sign sits on the car screen (the same setting as the app's Settings > Android Auto)
+        val spPos = prefs.s(PreferenceKeys.SPEED_POS_CAR, "bottom")
+        rows += Row.Builder().setTitle("Position du panneau de vitesse")
+            .addText(when (spPos) { "middle" -> "Milieu"; "top" -> "Haut"; else -> "Bas" } + " · touchez pour changer")
+            .setOnClickListener { prefs.put(PreferenceKeys.SPEED_POS_CAR, when (spPos) { "bottom" -> "middle"; "middle" -> "top"; else -> "bottom" }); invalidate() }.build()
         // 12 or 24-hour times (the same setting as the app's Settings > Units)
         val clock = prefs.s(PreferenceKeys.CLOCK, "auto")
         rows += Row.Builder().setTitle("Horloge")
@@ -1067,8 +1103,15 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
         rows += Row.Builder().setTitle("Carte sur l'écran du conducteur")
             .addText(if (cluster) "Activée (sur les voitures compatibles) · touchez pour désactiver" else "Désactivée · touchez pour activer")
             .setOnClickListener { prefs.put(PreferenceKeys.CLUSTER_MAP, !cluster); invalidate() }.build()
+        val max = limit.coerceIn(2, 12)
         val list = ItemList.Builder()
-        for (r in rows.take(limit.coerceIn(1, 12))) list.addItem(r)
-        return ListTemplate.Builder().setTitle("Réglages").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
+        val start = page * (max - 1)
+        val rest = rows.drop(start)
+        if (rest.size > max) {
+            for (r in rest.take(max - 1)) list.addItem(r)
+            list.addItem(Row.Builder().setTitle("Plus de réglages").addText("${rest.size - (max - 1)} de plus")
+                .setBrowsable(true).setOnClickListener { screenManager.push(CarSettingsScreen(carContext, holder, page + 1, onTheme)) }.build())
+        } else for (r in rest) list.addItem(r)
+        return ListTemplate.Builder().setTitle(if (page == 0) "Réglages" else "Plus de réglages").setHeaderAction(Action.BACK).setSingleList(list.build()).build()
     }
 }

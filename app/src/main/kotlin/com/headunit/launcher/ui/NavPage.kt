@@ -183,6 +183,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         Text("Étapes", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 10.dp))
         Pill("+ Carburant", engine.stopMode && engine.nearbyKind == "fuel", { engine.stopMode = true; engine.loadNearby("fuel", false) })
         Pill("+ Borne", engine.stopMode && engine.nearbyKind == "charging", { engine.stopMode = true; engine.loadNearby("charging", false) })
+        if (engine.prefs.s(PreferenceKeys.VEHICLE, "car") == "lorry") Pill("+ Parking PL", engine.stopMode && engine.nearbyKind == "lorrypark", { engine.stopMode = true; engine.loadNearby("lorrypark", false) })
         Pill(if (engine.via.isEmpty()) "+ Étape" else "Modifier les étapes", false, { engine.stopsEditor = true })
         if (engine.via.isNotEmpty()) Text(engine.via.joinToString(" › ") { it.name }, color = c.text, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
         if (costText != null) Text(costText, color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp))
@@ -270,6 +271,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
                     color = if (delayMin >= 10) Bad else if (delayMin >= 1) Warn else c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 LorryBadge(r)
+                if (i == engine.active) LorryCheck(engine, r)
             }
         }
     }
@@ -328,6 +330,20 @@ internal fun LorryBadge(r: com.headunit.launcher.Route) {
         Icon(Icons.Rounded.LocalShipping, null, tint = fg, modifier = Modifier.size(14.dp))
         Text(text, color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 4.dp))
     }
+}
+
+/** The lorry check for the chosen route: green with no limits under your lorry, red with the ones it found, grey while checking. */
+@Composable
+internal fun LorryCheck(engine: NavEngine, r: com.headunit.launcher.Route) {
+    if (r.lorry.isEmpty()) return
+    androidx.compose.runtime.LaunchedEffect(r) { engine.lorryRouteCheck(r) }
+    val res = engine.lorryCheck?.takeIf { it.first === r }?.second ?: ""
+    val text = res.ifBlank { "Vérification poids lourd…" }
+    val ok = res.contains("aucune limite"); val bad = res.contains(" sur cet itinéraire")
+    val fg = if (ok) Color(0xFF9BE3B0) else if (bad) Color(0xFFF2C2BF) else Color(0xFFBDC1C6)
+    val bg = if (ok) Color(0xFF1E3A28) else if (bad) Color(0xFF3A2224) else Color(0xFF2C313A)
+    Text(text, color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(8.dp)).background(bg).padding(horizontal = 7.dp, vertical = 3.dp))
 }
 
 /** "Survoler l'itinéraire": a 3D flight along the whole drive before you set off. */
@@ -406,12 +422,13 @@ private fun nearbyIcon(kind: String?): androidx.compose.ui.graphics.vector.Image
     "food" -> Icons.Rounded.Restaurant
     "coffee", "services" -> Icons.Rounded.LocalCafe
     "toilets" -> Icons.Rounded.Wc
+    "lorrypark" -> Icons.Rounded.LocalShipping
     else -> Icons.Rounded.LocalParking
 }
 
 private fun nearbyTitle(kind: String?): String = when (kind) {
     "fuel" -> "Stations-service"; "charging" -> "Bornes de recharge"; "food" -> "Restauration"; "coffee" -> "Café"
-    "toilets" -> "Toilettes"; "services" -> "Aires"; else -> "Parkings"
+    "toilets" -> "Toilettes"; "services" -> "Aires"; "lorrypark" -> "Parkings poids lourds"; else -> "Parkings"
 }
 
 @Composable
@@ -446,6 +463,14 @@ internal fun NearbyCard(engine: NavEngine) {
                         if (sub.isNotBlank()) Text(sub, color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     if (n.price != null) Text(com.headunit.launcher.fmtFuelPrice(n.price, n.unit), color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
+                    // a charger's live availability: green with some free, red with none, grey without live data
+                    if (n.free.isNotBlank()) {
+                        val none = n.free.startsWith("0 sur"); val unknown = n.free.startsWith("Pas")
+                        val fg = if (unknown) c.sub else if (none) Color(0xFFF2C2BF) else Color(0xFF9BE3B0)
+                        val bg = if (unknown) c.tile else if (none) Color(0xFF3A2224) else Color(0xFF1E3A28)
+                        Text(n.free, color = fg, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                            modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(8.dp)).background(bg).padding(horizontal = 8.dp, vertical = 3.dp))
+                    }
                     Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 10.dp)) {
                         Text(Geo.fmtDist(n.dist, engine.imperial), color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 4.dp))
                         if (n.detourMin >= 0) Text("+${n.detourMin} min", color = c.sub, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
@@ -527,6 +552,25 @@ internal fun LaneRow(sec: LaneSec, maneuver: String, near: Boolean = false) {
  * Lane hero view: the lanes drawn big across the turn card, like a stylised gantry picture: dark road, dashed lane lines,
  * the lane(s) you need lit with a glow and a large arrow, the others dimmed. Used before junctions with two or more lanes.
  */
+/**
+ * The junction close-up picture (Settings > Turn card & lanes > Lanes on the map > Close-up picture): for the last 400 m before a
+ * junction with lane data, a drawn picture of its lanes with the ones to use lit and the distance, under the turn card. Nothing is
+ * drawn on the map itself in this style, so it can never sit in the wrong place.
+ */
+@Composable
+internal fun JunctionCloseup(engine: NavEngine, modifier: Modifier = Modifier) {
+    if (!engine.prefs.b(PreferenceKeys.LANEMAP, true) || engine.prefs.s(PreferenceKeys.LANE_MAP_STYLE, "lit") != "closeup") return
+    if (engine.route == null || engine.previewing) return
+    val t = engine.turn ?: return
+    val sec = t.lanes ?: return
+    if (t.dist > 400.0 || t.dist < 5.0 || sec.lanes.size < 2) return
+    val shape = RoundedCornerShape(18.dp)
+    Column(modifier.widthIn(max = 420.dp).fillMaxWidth().shadow(8.dp, shape).clip(shape).background(Color(0xFF0E2A30))) {
+        Text(Geo.fmtDist(t.dist, engine.imperial), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 14.dp, top = 10.dp))
+        LaneHero(sec, t.maneuver, null)
+    }
+}
+
 @Composable
 internal fun LaneHero(sec: LaneSec, maneuver: String, advice: String?) {
     val anyFollow = sec.lanes.any { it.follow != null }
