@@ -105,6 +105,7 @@ private fun barIcon(kind: String): ImageVector = when (kind) {
     "services" -> Icons.Rounded.LocalCafe
     "avg" -> Icons.Rounded.Speed
     "stop" -> Icons.Rounded.Place
+    "charge" -> Icons.Rounded.EvStation
     "zone" -> Icons.Rounded.Eco
     else -> Icons.Rounded.Flag
 }
@@ -113,7 +114,7 @@ private fun barColor(kind: String): Color = when (kind) {
     "camera", "avg" -> Bad
     "works", "incident" -> Warn
     "services" -> Color(0xFF4C8DFF)
-    "zone" -> Good
+    "zone", "charge" -> Good
     else -> Color(0xFF8E5CF0)
 }
 
@@ -518,16 +519,19 @@ fun PlannedCard(engine: NavEngine) {
 fun FuelSuggestionRow(engine: NavEngine) {
     val n = engine.fuelSuggestion ?: return
     val c = LocalVw.current
-    Row(
-        Modifier.floating(50.dp).padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    // fork FR : le texte sur toute la largeur, le bouton en dessous (côte à côte, le texte était coupé en portrait)
+    Column(
+        Modifier.floating(26.dp).padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 8.dp).widthIn(max = 640.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(if (engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV") "Arrêt recharge" else "Arrêt carburant", color = Good, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Text(
             n.place.name + " · dans " + Geo.fmtDist(n.dist, engine.imperial) + (if (n.price != null) " · " + com.headunit.launcher.fmtFuelPrice(n.price, n.unit) else "") + (if (n.detourMin >= 0) " · +${n.detourMin} min" else "") + (if (n.extra.startsWith("arrivée")) " · " + n.extra else ""),
-            color = c.text, fontSize = 13.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).widthIn(max = 420.dp),
+            color = c.text, fontSize = 13.sp, maxLines = 5, overflow = TextOverflow.Ellipsis,
         )
-        Pill("Ajouter une étape", false, { engine.addStop(n.place); engine.fuelSuggestion = null })
+        Row(Modifier.align(Alignment.End)) {
+            Pill("Ajouter une étape", false, { engine.addChargeStop(n.place); engine.fuelSuggestion = null })
+        }
     }
 }
 

@@ -1768,6 +1768,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         addS(st, GeoJsonSource.Builder("dl-flow").featureCollection(empty()).lineMetrics(true).build())
         addS(st, GeoJsonSource.Builder("dl-done").featureCollection(empty()).build())
         addS(st, GeoJsonSource.Builder("dl-dest").featureCollection(empty()).build())
+        // fork FR : les étapes de l'itinéraire (vertes pour un arrêt recharge)
+        addS(st, GeoJsonSource.Builder("dl-via").featureCollection(viaFeatures()).build())
         addS(st, GeoJsonSource.Builder("dl-hazards").featureCollection(empty()).build())
         addS(st, GeoJsonSource.Builder("dl-me").featureCollection(empty()).build())
         // the arrow at the next turn, drawn on the route; no simplification, so small shapes keep their corners
@@ -1945,6 +1947,10 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                 .iconAllowOverlap(true).iconIgnorePlacement(true).iconSize(0.6))
         } else addL(st, CircleLayer("dl-dest-dot", "dl-dest")
             .circleRadius(10.0).circleColor("#ff3b30").circleStrokeColor("#ffffff").circleStrokeWidth(3.0).circleEmissiveStrength(1.0))
+        addL(st, CircleLayer("dl-via-dot", "dl-via")
+            .circleRadius(zoomed(1.0, 8 to 6.0, 14 to 9.0, 17 to 11.0)).circleColor(Expression.fromRaw("[\"case\",[\"==\",[\"get\",\"c\"],1],\"#34A853\",\"#8E5CF0\"]"))
+            .circleStrokeColor("#ffffff").circleStrokeWidth(3.0).circleEmissiveStrength(1.0)
+            .circlePitchAlignment(CirclePitchAlignment.VIEWPORT))
         if (!im) {
             addL(st, CircleLayer("dl-me-halo", "dl-me")
                 .circleRadius(15.0 * 0.625 * arrowScale).circleColor("#2e8bff").circleOpacity(0.25).circleEmissiveStrength(1.0)
@@ -3693,6 +3699,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             start()
         }
     }
+
+    private var vias: List<Pair<LL, Boolean>> = emptyList()
+    private fun viaFeatures(): FeatureCollection = FeatureCollection.fromFeatures(vias.map { (p, charge) ->
+        Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)).also { it.addNumberProperty("c", if (charge) 1 else 0) } })
+    /** Fork FR : les étapes à montrer sur la carte ([Boolean] : arrêt recharge). */
+    fun setVias(v: List<Pair<LL, Boolean>>) { vias = v; main0.post { try { src("dl-via")?.featureCollection(viaFeatures()) } catch (e: Exception) { } } }
 
     private fun pushDest() {
         val s = src("dl-dest") ?: return

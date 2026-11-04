@@ -1162,6 +1162,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    /** Fork FR : les étapes ajoutées comme arrêt recharge (proposé par l'appli), pour la carte, la barre et la batterie. */
+    var chargeVias: List<LL> = emptyList()
+    fun addChargeStop(p: Place) { if (isEv) chargeVias = chargeVias + p.pos; addStop(p) }
+
     fun addStop(p: Place) {
         val d = dest ?: return
         via = via + p
@@ -1754,6 +1758,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0
                 turn = null; eta = null; routeFrac = 0f
                 map.setDest(to.pos)
+                map.setVias(via.map { v -> v.pos to chargeVias.any { Geo.dist(it, v.pos) < 50.0 } })
                 drawRoutes()
                 following = false
                 previewing = true
@@ -1924,6 +1929,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         sessionAvoid.clear(); routeZones = emptyList(); avgInfo = null; avgIn = null; servicesAhead = emptyList(); barEvents = emptyList()
         rawServices = emptyList(); servicesFor = null; rawHz = emptyList(); rawAvg = emptyList(); hzWinRoute = null; hzWinEnd = -1.0
         placed = null; placedSig = 0; avgAlerted.clear(); hzAlerted.clear(); zoneAlerted.clear(); stopsEditor = false
+        map.setVias(emptyList()); chargeVias = emptyList()
         map.setRoute(emptyList(), emptyList()); map.setDest(null); map.setTurnPulse(false); laneKey = null; map.setLanes(emptyList()); map.setLaneSign(null, emptyList()); laneSignFor = -1.0; map.setRouteShift(emptyList()); laneLatAt = null; laneShiftEnd = 0.0
         map.highlightDestination(null)
         stopSim()
@@ -4475,6 +4481,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (!isEv) return null
         val e = eta ?: return null
         refreshHaBattery()
+        // fork FR : un arrêt recharge encore devant : on y recharge à 80 %, l'arrivée se compte à partir de là
+        route?.let { r ->
+            val off = chargeVias.mapNotNull { RouteExtras.project(r, it, 300.0)?.first }.filter { it > curProg + 100.0 }.maxOrNull()
+            if (off != null) return Math.round(80.0 - (r.len - off) / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(-50, 100)
+        }
         // fork FR : avec la batterie réelle relue en route, l'estimation part d'elle (moins ce qui a été roulé depuis)
         if (haLivePct >= 0 && System.currentTimeMillis() - haLiveAt < 20 * 60_000L) {
             val since = max(0.0, tripDist - haLiveDist)
@@ -4928,7 +4939,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             for ((inc, off, _) in incMatches) ev += BarEvent(off, if (inc.cat.contains("work", true)) "works" else "incident")
             for (s in pl.services) if (s.side < 400.0) ev += BarEvent(s.off, "services")
             for (a in pl.avg) ev += BarEvent(a.start, "avg")
-            for (o in pl.stops) ev += BarEvent(o, "stop")
+            // fork FR : un arrêt recharge a sa propre icône
+            val chargeOffs = chargeVias.mapNotNull { RouteExtras.project(r, it, 300.0)?.first }
+            for (o in pl.stops) ev += BarEvent(o, if (chargeOffs.any { kotlin.math.abs(it - o) < 300.0 }) "charge" else "stop")
             for ((_, o) in pl.zones) ev += BarEvent(o, "zone")
             val shown = ev.filter { it.off >= progress - 30.0 && it.off <= span }
             var bs = shown.size
