@@ -136,6 +136,7 @@ internal val settingsIndex = listOf(
     SettingRef("Consommation (miles par kWh)", "", "Votre voiture électrique", 8),
     SettingRef("Afficher aussi les stations-service", "Voiture électrique : le bouton Carburant sur la carte aussi", "Votre voiture électrique", 8),
     SettingRef("Batterie utile (kWh)", "", "Votre voiture électrique", 8),
+    SettingRef("Puissance de charge maximale (kW)", "temps de recharge", "Votre voiture électrique", 8),
     SettingRef("Prix de l'électricité (pence par kWh)", "", "Votre voiture électrique", 8),
     SettingRef("Consommation (miles par gallon)", "", "Coût du carburant dans les options d'itinéraire", 8),
     SettingRef("Prix du carburant (pence par litre)", "", "Coût du carburant dans les options d'itinéraire", 8),

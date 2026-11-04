@@ -848,6 +848,7 @@ private fun FuelSection(prefs: Prefs, engine: NavEngine) {
             prefs.put(PreferenceKeys.EVMPK, num(s).toDoubleOrNull()?.takeIf { it > 0 }?.let { String.format(java.util.Locale.US, "%.3f", it / 1.609344) } ?: "")
         }
         SFieldItem("Batterie utile (kWh)", prefs.s(PreferenceKeys.EV_BATTERY_KWH, ""), "Pour l'estimation de batterie et les arrêts recharge (60 si vide)", placeholder = "ex. 64", number = true) { s -> prefs.put(PreferenceKeys.EV_BATTERY_KWH, s.filter { it.isDigit() || it == '.' }.take(5)) }
+        SFieldItem("Puissance de charge maximale (kW)", prefs.s("ev_max_kw", ""), "Pour le temps de recharge aux arrêts proposés (135 si vide). Voir la fiche technique de la voiture", placeholder = "ex. 135", number = true) { s -> prefs.put("ev_max_kw", s.filter { it.isDigit() }.take(3)) }
         SFieldItem(if (mi) "Prix de l'électricité (pence par kWh)" else "Prix de l'électricité (centimes par kWh)", prefs.s(PreferenceKeys.EVPPK, ""), placeholder = "ex. 28", number = true) { s -> prefs.put(PreferenceKeys.EVPPK, s.filter { it.isDigit() || it == '.' }.take(6)) }
     } else SGroup("Coût du carburant dans les options d'itinéraire", footer = "Avec les deux renseignés, chaque itinéraire indique à peu près son coût en carburant.") {
         if (mi) SFieldItem("Consommation (miles par gallon)", prefs.s(PreferenceKeys.FUELMPG, ""), placeholder = "ex. 45", number = true) { s -> prefs.put(PreferenceKeys.FUELMPG, num(s).take(5)) }

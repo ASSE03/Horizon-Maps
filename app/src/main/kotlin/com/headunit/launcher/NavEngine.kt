@@ -4409,10 +4409,34 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun evBatteryKwh(): Double = (prefs.s(PreferenceKeys.EV_BATTERY_KWH, "").toDoubleOrNull() ?: 60.0).coerceIn(10.0, 200.0)
     /** kWh used per km: from the efficiency in Settings > Fuel (miles per kWh), or a typical 0.18. */
     private fun evKwhPerKm(): Double = prefs.s(PreferenceKeys.EVMPK, "").toDoubleOrNull()?.takeIf { it in 1.0..8.0 }?.let { 1.0 / (it * 1.609344) } ?: 0.18
+    /** Fork FR : puissance de charge maximale de la voiture (kW), 135 par défaut (MG4 grande batterie). */
+    private fun evMaxKw(): Double = (prefs.s("ev_max_kw", "135").toDoubleOrNull() ?: 135.0).coerceIn(20.0, 350.0)
+
+    /** Fork FR : batterie réelle relue dans Home Assistant pendant le trajet (%, et la distance parcourue à ce moment). */
+    @Volatile private var haLivePct = -1
+    @Volatile private var haLiveDist = 0.0
+    @Volatile private var haLiveAt = 0L
+    private fun refreshHaBattery() {
+        if (!isEv || !HaBattery.configured(prefs) || route == null || previewing) return
+        val now = System.currentTimeMillis()
+        if (now - haLiveAt < 5 * 60_000L) return
+        haLiveAt = now
+        scope.launch {
+            val v = withContext(Dispatchers.IO) { try { HaBattery.fetch(ctx) } catch (e: Exception) { null } }
+            if (v != null) { haLivePct = v; haLiveDist = tripDist }
+        }
+    }
+
     /** Roughly how much battery (%) you'll arrive with: the charge you set before the trip, less what's been driven and what's left. */
     fun evArrivalPct(): Int? {
         if (!isEv) return null
         val e = eta ?: return null
+        refreshHaBattery()
+        // fork FR : avec la batterie réelle relue en route, l'estimation part d'elle (moins ce qui a été roulé depuis)
+        if (haLivePct >= 0 && System.currentTimeMillis() - haLiveAt < 20 * 60_000L) {
+            val since = max(0.0, tripDist - haLiveDist)
+            return Math.round(haLivePct - (since + e.dist) / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(-50, 100)
+        }
         val start = prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80).coerceIn(1, 100)
         val driven = if (navStartMs > 0) max(0.0, tripDist - navStartDist) else 0.0
         val usedPct = (driven + e.dist) / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0
@@ -4454,12 +4478,27 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                                 if (pr.first in a..b) out += n.copy(dist = pr.first, detourMin = detour(pr.second), ahead = true)
                             }
                         }
-                        out.filter { it.detourMin >= 0 }.minByOrNull { it.detourMin }?.let { n ->
+                        // fork FR : la borne choisie selon sa puissance, ses places libres maintenant et sa position (plus loin = moins
+                        // d'arrêts), pas seulement le plus petit détour. Les 8 plus proches du trajet sont comparées.
+                        fun kwOf(n: Nearby) = Regex("(\\d+) kW").find(n.extra)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                        val cands = out.filter { it.detourMin >= 0 }.sortedBy { it.detourMin }.take(8)
+                        val freeMap = if (hasKey) cands.filter { it.chargeId.isNotBlank() }.associate { it.chargeId to TomTomRest.chargingFree(apiKey, it.chargeId) } else emptyMap()
+                        fun score(n: Nearby): Double {
+                            val kw = kwOf(n)
+                            val fr = freeMap[n.chargeId]
+                            return n.detourMin +
+                                (if (kw <= 0.0) 6.0 else if (kw < 50.0) 25.0 else if (kw < 100.0) 5.0 else 0.0) +
+                                (if (fr == null) 3.0 else if (fr.first == 0) 30.0 else 0.0) -
+                                ((n.dist - a) / max(1.0, b - a)).coerceIn(0.0, 1.0) * 6.0
+                        }
+                        cands.minByOrNull { score(it) }?.let { n ->
                             val arr = Math.round(startPct - n.dist / 1000.0 * cons / batt * 100.0).toInt().coerceAtLeast(0)
-                            val mins = Math.round((80 - arr).coerceAtLeast(10) / 100.0 * batt / 50.0 * 60.0).toInt()
-                            // how many are free there now, where the operator shares it
-                            val freeNow = if (n.chargeId.isNotBlank() && hasKey) TomTomRest.chargingFree(apiKey, n.chargeId)?.let { (f, t) -> " · $f sur $t libres maintenant" } ?: "" else ""
-                            n.copy(extra = "arrivée vers $arr % · charge à 80 %, environ $mins min$freeNow")
+                            val kw = kwOf(n)
+                            // puissance moyenne réelle jusqu'à 80 % : environ 70 % de la puissance de la borne, limitée à ce que la voiture accepte
+                            val rate = (if (kw > 0.0) min(kw, evMaxKw()) else 50.0) * 0.7
+                            val mins = Math.round((80 - arr).coerceAtLeast(10) / 100.0 * batt / rate * 60.0).toInt()
+                            val freeNow = freeMap[n.chargeId]?.let { (f, t) -> " · $f sur $t libres maintenant" } ?: ""
+                            n.copy(extra = "arrivée vers $arr %" + (if (kw > 0.0) " · ${Math.round(kw)} kW" else "") + " · charge à 80 %, environ $mins min$freeNow")
                         }
                     } catch (e: Exception) { null }
                 }
