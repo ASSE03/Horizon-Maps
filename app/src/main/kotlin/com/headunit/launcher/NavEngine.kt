@@ -990,6 +990,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 m.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper())
             if (m.allProviders.contains(LocationManager.NETWORK_PROVIDER))
                 m.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 3000L, 0f, this, Looper.getMainLooper())
+            // fork FR : la position combinée d'Android (GPS + Wi-Fi + réseau, comme Google Maps), plus juste à l'arrêt et dans un bâtiment
+            if (android.os.Build.VERSION.SDK_INT >= 31 && m.allProviders.contains(LocationManager.FUSED_PROVIDER))
+                m.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 2000L, 0f, this, Looper.getMainLooper())
             (m.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: m.getLastKnownLocation(LocationManager.NETWORK_PROVIDER))
                 ?.let { handleLocation(it, true) }
         } catch (e: SecurityException) {
@@ -1016,6 +1019,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     private var startSavedAt = 0L
 
+    @Volatile private var lastGpsAcc = 99f
+    @Volatile private var fusedAt = 0L
+    @Volatile private var fusedAcc = 99f
+
     private fun handleLocation(l: Location, first: Boolean) {
         try { handleLocationInner(l, first) } catch (e: Exception) { android.util.Log.w("NavEngine", "location handling failed", e) }
     }
@@ -1039,7 +1046,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (simMode != 0) return
         detectCountry(l.latitude, l.longitude)
         val now = System.currentTimeMillis()
-        if (l.provider == LocationManager.GPS_PROVIDER) lastGpsTime = now
+        val slow = !l.hasSpeed() || l.speed < 1.0f
+        if (l.provider == LocationManager.GPS_PROVIDER) {
+            lastGpsTime = now; lastGpsAcc = if (l.hasAccuracy()) l.accuracy else 99f
+            // fork FR : à l'arrêt, une position combinée récente et plus précise (Wi-Fi dans un bâtiment) passe avant le GPS qui dérive
+            if (slow && (fix?.speed ?: 0.0) < 1.0 && now - fusedAt < 8000 && fusedAcc + 3f < lastGpsAcc) return
+        }
+        else if (l.provider == "fused" && now - lastGpsTime < 10000) {
+            if (!l.hasAccuracy()) return
+            fusedAt = now; fusedAcc = l.accuracy
+            // seulement à l'arrêt et quand elle est nettement plus précise : en roulant, le GPS seul reste le plus réactif
+            if (!(slow && (fix?.speed ?: 0.0) < 1.0 && l.accuracy + 3f < lastGpsAcc && lastGpsAcc > 10f)) return
+        }
         else if (now - lastGpsTime < 10000) return
         // with the GPS gone (a tunnel) a rough mobile-network position would throw the route off: keep estimating along the route instead
         else if (route != null && !previewing && glideOnRoute && now - lastGpsTime < 120_000 && (!l.hasAccuracy() || l.accuracy > 30f)) return
@@ -1049,7 +1067,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         else lastRaw?.let { if (Geo.dist(it, cur) > 6) h = Geo.bearing(it, cur) }
         val prev = lastRaw
         if (prev == null || Geo.dist(prev, cur) > 6) lastRaw = cur
-        val speed = if (l.hasSpeed()) l.speed.toDouble() else 0.0
+        // fork FR : une vitesse plus petite que son incertitude (le GPS qui dérive à l'arrêt, « 2 km/h » assis au salon) compte pour 0
+        val sAcc = if (android.os.Build.VERSION.SDK_INT >= 26 && l.hasSpeedAccuracy()) l.speedAccuracyMetersPerSecond.toDouble() else 0.0
+        val rawSpeed = if (l.hasSpeed()) l.speed.toDouble() else 0.0
+        val speed = if (rawSpeed < maxOf(0.8, sAcc)) 0.0 else rawSpeed
         if (prev != null && speed > 0.8) {
             val d = Geo.dist(prev, cur)
             if (d in 3.0..200.0) { tripDist += d; tripMoving += 1.0 }
