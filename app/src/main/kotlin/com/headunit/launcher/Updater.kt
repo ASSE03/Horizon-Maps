@@ -474,5 +474,21 @@ object Updater {
             val b = Regex("1\\.0\\.(\\d+)").find(f.name)?.groupValues?.get(1)?.toIntOrNull() ?: return@forEach
             if (b <= thisBuild) f.delete()
         }
+        // fork FR : la copie gardée dans Téléchargements pour AAEnabler, une fois cette version (ou une plus récente) installée
+        if (android.os.Build.VERSION.SDK_INT >= 29) try {
+            val res = ctx.contentResolver
+            val coll = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            res.query(coll, arrayOf(android.provider.MediaStore.MediaColumns._ID, android.provider.MediaStore.MediaColumns.DISPLAY_NAME),
+                "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?", arrayOf("HorizonNav-%.apk"), null)?.use { cur ->
+                while (cur.moveToNext()) {
+                    val name = cur.getString(1) ?: continue
+                    val b = Regex("1\\.0\\.(\\d+)").find(name)?.groupValues?.get(1)?.toIntOrNull() ?: continue
+                    if (b > thisBuild) continue
+                    try {
+                        if (res.delete(android.content.ContentUris.withAppendedId(coll, cur.getLong(0)), null, null) > 0) UpdLog.add(ctx, "supprimé de Téléchargements : $name")
+                    } catch (e: Exception) { }
+                }
+            }
+        } catch (e: Exception) { }
     }
 }

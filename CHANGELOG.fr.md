@@ -21,6 +21,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Téléchargements rangés : une fois la mise à jour installée, sa copie dans Téléchargements est supprimée au démarrage suivant.
 - Choix de l'arrêt recharge : la borne proposée tient compte de sa puissance, de ses places libres en ce moment et de sa position sur le trajet, et le temps de charge de la puissance de votre voiture (nouveau réglage, 135 kW par défaut).
 - Batterie à l'arrivée : pendant le trajet, elle est recalculée à partir de la vraie batterie lue dans Home Assistant toutes les 5 minutes, et à partir de 80 % après un arrêt recharge.
 - Position à l'arrêt : dans un bâtiment, la position combinée d'Android (GPS, Wi-Fi et réseau) place la flèche plus juste, et le compteur affiche 0 au lieu de quelques km/h.
