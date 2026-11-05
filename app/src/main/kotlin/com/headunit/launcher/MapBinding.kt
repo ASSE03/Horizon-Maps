@@ -1740,11 +1740,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val dayLook = !nightStyle
         bubImgs.clear(); laneImgs.clear()
         // the classic map in the Horizon colours
-<<<<<<< HEAD
-        if (!slotsOn && !satellite && (colours == "horizon" || recolourBase)) try { recolourClassic(st) } catch (e: Throwable) { }
-=======
-        if (!slotsOn && (hzFamily() || recolourBase)) try { recolourClassic(st) } catch (e: Throwable) { }
->>>>>>> upstream/main
+        if (!slotsOn && !satellite && (hzFamily() || recolourBase)) try { recolourClassic(st) } catch (e: Throwable) { }
         // Standard's newer settings are set once it's loaded (so a style that doesn't know one can't stop the map loading)
         if (!satellite) {
             setBase("show3dTrees", Value.valueOf(treesOn)); setBase("showLandmarkIcons", Value.valueOf(!lite))
