@@ -5111,7 +5111,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val f = Fix(pt, hd, demoSpeed, 0.0)
                 onPosition(f, false)
                 // fork FR : démo lancée sur le téléphone avec Android Auto branché : l'écran de la voiture (son propre moteur) suit aussi
-                try { com.headunit.launcher.car.ClusterLink.engine?.takeIf { it !== this }?.mirrorFix(f) } catch (e: Exception) { }
+                try { com.headunit.launcher.car.ClusterLink.engine?.takeIf { it !== this@NavEngine }?.mirrorFix(f) } catch (e: Exception) { }
                 if (simDist >= cur.len) break
                 delay(1000)
             }
