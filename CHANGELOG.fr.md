@@ -34,6 +34,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Démo lancée sur le téléphone : l'écran Android Auto suit maintenant le trajet simulé au lieu de rester au départ.
 - Flèche à côté de la rue à l'arrêt : la position est aussi recalée sur la route à l'arrêt et au pas (12 m au plus), plus seulement en roulant.
 - « Vérifier maintenant » ne faisait rien quand la vérification automatique du lancement était en cours : le bouton affiche maintenant « Vérification… » puis le résultat.
 - Toilettes introuvables quand les serveurs Overpass sont saturés : la recherche passe d'abord par Nominatim (la recherche d'OpenStreetMap), plus rapide et disponible.
