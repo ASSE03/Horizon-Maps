@@ -2474,6 +2474,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                             }
                         } else Overpass.nearby("fuel_e85", centre, 15_000).map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
                     }
+                    // fork FR : toilettes : OpenStreetMap d'abord (la base la plus complète en France, les recherches Mapbox/TomTom
+                    // en connaissent très peu) ; autour de vous, le rayon s'élargit à 10 km si rien n'est trouvé à 3 km
+                    if (kind == "toilets" && online()) {
+                        val osm = try {
+                            if (alongRoute && rt != null) Overpass.nearbyAlong(kind, RouteExtras.line(rt, progress, progress + 60_000.0, 1500.0, 45), 900).mapNotNull { n ->
+                                val pr = RouteExtras.project(rt, n.place.pos, 1200.0, progress) ?: return@mapNotNull null
+                                if (pr.first < progress - 100) null else n.copy(dist = pr.first - progress, detourMin = detour(pr.second), ahead = true)
+                            } else Overpass.nearby(kind, centre, radius).ifEmpty { if (nearDest) emptyList() else Overpass.nearby(kind, centre, 10_000) }
+                                .map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
+                        } catch (e: Exception) { null }
+                        if (!osm.isNullOrEmpty()) return@async osm
+                    }
                     // TomTom's place search first (quick, and it knows the detour time along a route); OpenStreetMap if that fails
                     if (hasOnline && online()) {
                         val tt = try {

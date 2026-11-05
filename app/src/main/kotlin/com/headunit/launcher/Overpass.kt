@@ -462,6 +462,9 @@ object Overpass {
     private fun filtersOf(kind: String): List<String> = when (kind) {
         "lorrypark" -> listOf("[\"amenity\"=\"parking\"][\"hgv\"~\"^(designated|yes)$\"]", "[\"highway\"=\"services\"][\"hgv\"~\"^(designated|yes)$\"]",
             "[\"amenity\"=\"parking\"][\"parking\"=\"truck\"]")
+        // fork FR : les toilettes publiques, plus celles des stations-service et des aires (toilets=yes)
+        "toilets" -> listOf("[\"amenity\"=\"toilets\"][\"access\"!~\"^(private|no)$\"]",
+            "[\"amenity\"=\"fuel\"][\"toilets\"=\"yes\"]", "[\"highway\"~\"^(services|rest_area)$\"][\"toilets\"=\"yes\"]")
         else -> listOf(oneFilter(kind))
     }
 
@@ -525,7 +528,9 @@ object Overpass {
             val pos = if (e.has("lat")) LL(e.getDouble("lat"), e.getDouble("lon"))
             else e.optJSONObject("center")?.let { LL(it.getDouble("lat"), it.getDouble("lon")) } ?: continue
             val label = kindLabel(kind)
-            val name = tags.optString("name").ifBlank { tags.optString("brand") }.ifBlank { tags.optString("operator") }.ifBlank { label }
+            val name = if (kind == "toilets" && tags.optString("amenity") != "toilets")
+                    "Toilettes" + (tags.optString("name").ifBlank { tags.optString("brand") }.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "")
+                else tags.optString("name").ifBlank { tags.optString("brand") }.ifBlank { tags.optString("operator") }.ifBlank { label }
             val extra = ArrayList<String>()
             when (kind) {
                 "fuel", "fuel_e85" -> {
@@ -567,6 +572,8 @@ object Overpass {
                     tags.optString("opening_hours").takeIf { it.isNotBlank() }?.let { extra += it }
                 }
                 "toilets" -> {
+                    when { tags.optString("amenity") == "fuel" -> extra += "Dans une station-service"; tags.has("highway") -> extra += "Sur une aire"
+                        tags.optString("access") == "customers" -> extra += "Réservées aux clients" }
                     when (tags.optString("fee")) { "yes" -> extra += "Payantes"; "no" -> extra += "Gratuites" }
                     if (tags.optString("wheelchair") == "yes") extra += "Accessibles PMR"
                 }
