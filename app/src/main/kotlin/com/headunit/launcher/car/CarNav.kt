@@ -496,6 +496,8 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
         }
     }
 
+    /** Fork FR : une démo lancée depuis le téléphone tourne aussi sur cet écran. */
+    private var phoneDemoOn = false
     fun start() { if (!running) { running = true; handler.post(tick) } }
     fun stop() {
         running = false; handler.removeCallbacks(tick)
@@ -522,6 +524,11 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             } catch (x: Exception) { }
         }
         if (autoDrive && guiding && e.simMode == 0) e.cycleSim()
+        // fork FR : démo lancée sur le téléphone : l'écran de la voiture la lance aussi dès que son trajet est prêt, et l'arrête avec
+        val pd = com.headunit.launcher.DemoLink.phone
+        if (pd != 0 && guiding && e.simMode == 0 && !phoneDemoOn) { phoneDemoOn = true; e.chooseDemoSpeed(pd); e.cycleSim() }
+        else if (pd == 0 && phoneDemoOn) { phoneDemoOn = false; if (e.simMode != 0) e.stopSim() }
+        else if (pd != 0 && phoneDemoOn && e.simMode != 0 && e.simMode != pd) e.chooseDemoSpeed(pd)
         val t = e.turn; val eta = e.eta
         // Android Auto's buttons only change with the state (rebuilding them every second while the distance counts down made the
         // host redo its layout for nothing); the turn and distance go to the car's displays through updateTrip
