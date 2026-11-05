@@ -1175,26 +1175,32 @@ private fun ParkedCard(engine: NavEngine) {
     // (not while you're still at the car)
     if (here != null && Geo.dist(here, spot) < 80.0) return
     val ago = when { ageMin < 1 -> "à l'instant"; ageMin < 60 -> "il y a $ageMin min"; ageMin < 24 * 60 -> "il y a ${ageMin / 60} h"; else -> "hier" }
-    Row(Modifier.fillMaxWidth().panel(10.dp, RoundedCornerShape(22.dp), c.surface).padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxWidth().panel(10.dp, RoundedCornerShape(22.dp), c.surface).padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.size(38.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.DirectionsCar, null, tint = c.accent, modifier = Modifier.size(21.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("Votre voiture", color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Garée $ago" + (if (here != null) " · " + Geo.fmtDist(Geo.dist(here, spot), engine.imperial) else ""), color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Garée $ago" + (if (here != null) " · " + Geo.fmtDist(Geo.dist(here, spot), engine.imperial) else ""), color = c.sub, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        // walking directions in the phone's maps app (Horizon Nav plans driving routes); just the spot if there's none
-        ImmPill("À pied", {
-            val walk = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "google.navigation:q=%.6f,%.6f&mode=w", spot.lat, spot.lon)))
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "geo:%.6f,%.6f?q=%.6f,%.6f(Votre voiture)", spot.lat, spot.lon, spot.lat, spot.lon)))
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            try { ctx.startActivity(walk) } catch (e: Exception) { try { ctx.startActivity(geo) } catch (x: Exception) { engine.toast("Aucune appli de carte piétonne sur ce téléphone", 3000) } }
-        }, filled = true)
         Box(Modifier.size(40.dp).clip(CircleShape).clickable { engine.prefs.put(PreferenceKeys.PARKED_SPOT, "") }, contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.Close, "Oublier l'emplacement de la voiture", tint = c.sub, modifier = Modifier.size(22.dp))
         }
+      }
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        // fork FR : itinéraire à pied dans Horizon Nav (Mapbox, profil piéton) ; sans jeton Mapbox, l'appli de cartes du téléphone
+        ImmPill("À pied", {
+          if (!engine.walkTo(com.headunit.launcher.Place("Votre voiture", "", spot))) {
+              val walk = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "google.navigation:q=%.6f,%.6f&mode=w", spot.lat, spot.lon)))
+                  .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+              val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "geo:%.6f,%.6f?q=%.6f,%.6f(Votre voiture)", spot.lat, spot.lon, spot.lat, spot.lon)))
+                  .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+              try { ctx.startActivity(walk) } catch (e: Exception) { try { ctx.startActivity(geo) } catch (x: Exception) { engine.toast("Aucune appli de carte piétonne sur ce téléphone", 3000) } }
+          }
+        }, filled = true)
+      }
     }
 }
 

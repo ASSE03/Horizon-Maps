@@ -406,6 +406,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun netRoutes(from: LL, to: LL, alternatives: Boolean, departAtMs: Long = 0L, via: List<LL> = emptyList(), headingDeg: Double = -1.0, quick: Boolean = false,
                           askBoth: Boolean = false): List<Route> {
         val now = System.currentTimeMillis()
+        // fork FR : à pied, seulement Mapbox (profil piéton)
+        if (walking && hasMapbox) return routesFrom("mapbox", from, to, false, 0L, via, -1.0, quick).also { lastRouteProvider = "mapbox" }
         val both = askBoth && !quick && hasKey && hasMapbox && refusedKey != apiKey && prefs.s(PreferenceKeys.DATAPROV, "auto") == "auto" &&
             !prefs.b(PreferenceKeys.ROUTE_ECO, false) && now >= ttDownUntil && now >= mbDownUntil
         if (!both) return withBackup { p -> lastRouteProvider = p; routesFrom(p, from, to, alternatives, departAtMs, via, headingDeg, quick) }
@@ -1706,6 +1708,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun startRoute(to0: Place, departInMin: Int = 0, keepVia: Boolean = false, startNow: Boolean = false) {
         var to = to0
+        walking = walkNext; walkNext = false; MapboxRest.walkProfile = walking
         // fork FR : choix du départ de la démo : le lieu cherché (ou posé d'un appui long) devient le départ, la destination reste
         if (pickDemoStart) {
             pickDemoStart = false
@@ -1726,10 +1729,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 var usedOffline = false
                 val rs = withContext(Dispatchers.IO) {
                     val haveOffline = OfflineRouter.installed(ctx)
-                    if (haveOffline && (!hasOnline || !online())) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, via.map { it.pos }) }
+                    if (haveOffline && !walking && (!hasOnline || !online())) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, via.map { it.pos }) }
                     else try { netRoutes(from, to.pos, true, departMs, via.map { it.pos }, askBoth = true) }
                     catch (e: Exception) {
-                        if (haveOffline && NavigationFallbackPolicy.shouldUseOffline(e)) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, via.map { it.pos }) } else throw e
+                        if (haveOffline && !walking && NavigationFallbackPolicy.shouldUseOffline(e)) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, via.map { it.pos }) } else throw e
                     }
                 }
                 if (rs.isEmpty()) throw IllegalStateException("aucun itinéraire trouvé")
@@ -1740,7 +1743,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (departInMin > 0 && !usedOffline && !departApplied) toast("Heure de départ non prise en charge ici : trafic en direct affiché", 4000)
                 departMin = departInMin
                 departAtMs = if (!usedOffline && departApplied) departMs else 0L
-                if (to.name != "Repère posé") places.addRecent(to)
+                if (to.name != "Repère posé" && !walking) places.addRecent(to)
                 if (!keepVia) habits.record(to)
                 loadRain(to, rs[0].time)
                 loadBison(rs[0], if (departMs > 0) departMs else System.currentTimeMillis())
@@ -1888,10 +1891,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         var offlineNow = false
                         val rs = withContext(Dispatchers.IO) {
                             val haveOffline = OfflineRouter.installed(ctx)
-                            if (haveOffline && (!hasOnline || !online())) { offlineNow = true; OfflineRouter.routes(ctx, f.pos, d.pos, via.map { it.pos }, hd) }
+                            if (haveOffline && !walking && (!hasOnline || !online())) { offlineNow = true; OfflineRouter.routes(ctx, f.pos, d.pos, via.map { it.pos }, hd) }
                             else try { netRoutes(f.pos, d.pos, false, 0L, via.map { it.pos }, hd, true) }
                             catch (e: Exception) {
-                                if (haveOffline && NavigationFallbackPolicy.shouldUseOffline(e)) { offlineNow = true; OfflineRouter.routes(ctx, f.pos, d.pos, via.map { it.pos }, hd) } else throw e
+                                if (haveOffline && !walking && NavigationFallbackPolicy.shouldUseOffline(e)) { offlineNow = true; OfflineRouter.routes(ctx, f.pos, d.pos, via.map { it.pos }, hd) } else throw e
                             }
                         }
                         if (rs.isNotEmpty()) shortRoute = offlineNow && OfflineRouter.endsShort
@@ -1906,7 +1909,21 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    /** Fork FR : itinéraire à pied en cours (retour à la voiture garée). */
+    var walking by mutableStateOf(false)
+        private set
+    private var walkNext = false
+
+    /** Fork FR : un itinéraire à pied vers [p] (Mapbox, profil piéton). Faux sans jeton Mapbox. */
+    fun walkTo(p: Place): Boolean {
+        if (!hasMapbox) return false
+        walkNext = true
+        startRoute(p)
+        return true
+    }
+
     fun endRoute() {
+        if (walking) { walking = false; MapboxRest.walkProfile = false }
         shortRoute = false
         // fork FR : le départ de démo ne sert qu'à ce trajet (le suivant repart de votre position)
         demoFrom = null; pickDemoStart = false

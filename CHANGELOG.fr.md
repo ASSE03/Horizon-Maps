@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Retour à la voiture à pied : « À pied » sur la carte « Votre voiture » calcule maintenant un itinéraire piéton dans Horizon Nav (Mapbox) au lieu d'ouvrir une autre appli.
 - Limitations comme MG4Dash : les limitations de vitesse viennent maintenant d'OpenStreetMap seul, avec les paquets France de MG4Dash gardés sur le téléphone, la route la plus proche orientée dans votre sens et les règles françaises (50 en ville, 80 ailleurs, 110 sur voie rapide, 130 sur autoroute). L'ancien fonctionnement reste dans Réglages › Alertes › Vitesse › Source des limitations.
 - Bison Futé : au choix de l'itinéraire, une ligne prévient quand le jour du départ est orange, rouge ou noir sur les départements traversés, dans le sens des départs et dans celui des retours.
 - Tarif des bornes : en France, la liste des bornes et l'arrêt recharge proposé affichent le tarif tiré de la base nationale des bornes (par exemple « 0,49 €/kWh ») ou « Gratuit ».
@@ -32,6 +33,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Carte « Votre voiture » : le titre et « Garée il y a… » ne sont plus coupés, le bouton « À pied » passe en dessous.
 - Carte « Votre voiture » écrasée : le bouton s'appelle maintenant « À pied », et « Votre voiture » ne s'écrit plus lettre par lettre à la verticale.
 - Carte voilée par le brouillard : le brouillard ajouté selon la météo ne recouvre plus la vue satellite et est plus léger sur la carte normale.
 - Carte bloquée par Mapbox : les photos satellite refusées n'étaient plus redemandées en boucle, ce qui faisait aussi refuser la carte normale et le trafic.

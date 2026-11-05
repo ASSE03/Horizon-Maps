@@ -263,20 +263,27 @@ object MapboxRest {
      * Driving routes with live traffic (Mapbox's driving-traffic profile): the line, turn by turn (roundabout exits, motorway exits,
      * lanes), traffic along it, the speed limit of each stretch, and incidents on it. [leftHand]: driving on the left (for U-turn lanes).
      */
+    /** Fork FR : les prochains itinéraires sont à pied (profil « walking »). */
+    @Volatile var walkProfile = false
+
     fun routes(token: String, from: LL, to: LL, alternatives: Boolean, departAtMs: Long = 0L, via: List<LL> = emptyList(),
                headingDeg: Double = -1.0, quick: Boolean = false, leftHand: Boolean = false): List<Route> {
         val pts = listOf(from) + via + listOf(to)
         val coords = pts.joinToString(";") { String.format(java.util.Locale.US, "%.6f,%.6f", it.lon, it.lat) }
         val ex = excludes(TomTomRest.avoid)
         val lang = "fr"
-        var base = "$API/directions/v5/mapbox/driving-traffic/$coords?geometries=geojson&overview=full&steps=true" +
+        // fork FR : à pied (retour à la voiture garée) : profil piéton, sans trafic ni limitations ni options véhicule
+        val walk = walkProfile
+        var base = if (walk) "$API/directions/v5/mapbox/walking/$coords?geometries=geojson&overview=full&steps=true" +
+                "&annotations=duration,distance&language=$lang&alternatives=false&access_token=${enc(token)}"
+            else "$API/directions/v5/mapbox/driving-traffic/$coords?geometries=geojson&overview=full&steps=true" +
             "&annotations=maxspeed,congestion,duration,distance,freeflow_speed&language=$lang&alternatives=${alternatives && via.isEmpty()}&access_token=${enc(token)}" + Vehicle.mapbox()
         // the way you're facing, so a reroute doesn't send you the wrong way down the road you're on
         if (headingDeg >= 0) base += "&bearings=" + enc((listOf("${headingDeg.toInt() % 360},45") + List(pts.size - 1) { "" }).joinToString(";"))
         val dep = if (departAtMs > 0) "&depart_at=" + enc(java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm", java.util.Locale.US).format(java.util.Date(departAtMs))) else ""
         val attempts = ArrayList<String>()
-        if (dep.isNotEmpty() && !quick) { if (ex.isNotEmpty()) attempts += "$base&exclude=$ex$dep"; attempts += "$base$dep" }
-        if (ex.isNotEmpty()) attempts += "$base&exclude=$ex"
+        if (!walk && dep.isNotEmpty() && !quick) { if (ex.isNotEmpty()) attempts += "$base&exclude=$ex$dep"; attempts += "$base$dep" }
+        if (!walk && ex.isNotEmpty()) attempts += "$base&exclude=$ex"
         attempts += base
         // (the same without the free-flow speeds, should Mapbox ever refuse them: the route matters more than the delay)
         attempts += base.replace(",freeflow_speed", "")
