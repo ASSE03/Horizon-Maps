@@ -147,5 +147,5 @@ Le plus simple : **Réglages › À propos et sauvegarde › Avis ou problème**
 ## Pour les développeurs
 
 - Chaque modification envoyée sur `main` compile l'APK (workflow **Build Horizon Nav FR**, onglet Actions) et le publie sur la release `app`, où l'appli cherche ses mises à jour.
-- Chaque version a aussi sa propre release `v1.0.N`, dont les notes alimentent la carte « Nouveautés ». Seules les 10 dernières sont gardées.
+- Chaque version a aussi sa propre release `v1.0.N`, dont les notes alimentent la carte « Nouveautés ». Ces notes viennent de la section « Non publié » de [CHANGELOG.fr.md](CHANGELOG.fr.md) (lignes « Titre : ce que ça fait », sans répéter celles déjà parues), ou à défaut des messages des commits. Seules les 10 dernières versions sont gardées.
 - Le secret `SIGNING_KEYSTORE_BASE64` (keystore de signature) est nécessaire pour que les mises à jour s'installent par-dessus la version précédente.

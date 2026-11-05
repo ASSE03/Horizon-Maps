@@ -109,6 +109,14 @@ internal fun parseNotes(notes: String): List<NoteItem> {
 }
 
 private fun iconFor(low: String): ImageVector = when {
+    // fork FR : les mots français d'abord (les notes viennent de CHANGELOG.fr.md)
+    low.contains("borne") || low.contains("recharge") || low.contains("batterie") -> Icons.Rounded.BatteryChargingFull
+    low.contains("radar") || low.contains("limitation") || low.contains("vitesse") -> Icons.Rounded.Speed
+    low.contains("bison") || low.contains("trafic") -> Icons.Rounded.Traffic
+    low.contains("mise à jour") || low.contains("aaenabler") -> Icons.Rounded.SystemUpdate
+    low.contains("itinéraire") || low.contains("étape") || low.contains("démo") -> Icons.Rounded.Route
+    low.contains("carte") || low.contains("satellite") || low.contains("photo") || low.contains("flèche") || low.contains("3d") -> Icons.Rounded.Map
+    low.contains("réglage") || low.contains("rapport") -> Icons.Rounded.Settings
     low.contains("android auto") || low.contains("car screen") -> Icons.Rounded.DirectionsCar
     low.contains("electric") || low.contains("charg") || low.contains("battery") -> Icons.Rounded.BatteryChargingFull
     low.contains("fuel") || low.contains("petrol") || low.contains("diesel") || low.contains("e85") -> Icons.Rounded.LocalGasStation

@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths:
       - "app/**"
+      - "CHANGELOG.fr.md"
+      - "tools/notes_fr.py"
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "gradle.properties"
@@ -55,13 +57,24 @@ jobs:
         with:
           gradle-version: 8.14.4
 
-      - name: Release notes from the commits since the last published version
+      - name: Release notes (CHANGELOG.fr.md, or the commits since the last published version)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git fetch --tags --force -q || true
           PREV="$(git tag -l 'v1.0.*' --sort=-v:refname | head -n1)"
-          if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="-15"; fi
-          git log $RANGE --first-parent --format='- %s' | grep -v -i -E 'skip ci|^- Merge |Add files via upload|Sync Horizon Nav source' > "$RUNNER_TEMP/notes.md" || true
+          # les notes des versions déjà publiées, pour ne pas répéter une ligne du changelog
+          : > "$RUNNER_TEMP/old.md"
+          for t in $(git tag -l 'v1.0.*' --sort=-v:refname | head -n 12); do
+            gh release view "$t" --repo "${{ github.repository }}" --json body -q .body >> "$RUNNER_TEMP/old.md" 2>/dev/null || true
+            echo >> "$RUNNER_TEMP/old.md"
+          done
+          python3 tools/notes_fr.py CHANGELOG.fr.md "$RUNNER_TEMP/old.md" > "$RUNNER_TEMP/notes.md" || true
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="-15"; fi
+            git log $RANGE --first-parent --format='- %s' | grep -v -i -E 'skip ci|^- Merge |Add files via upload|Sync Horizon Nav source' > "$RUNNER_TEMP/notes.md" || true
+          fi
           [ -s "$RUNNER_TEMP/notes.md" ] || printf -- "- Petites améliorations\n" > "$RUNNER_TEMP/notes.md"
           mkdir -p app/src/main/assets
           cp "$RUNNER_TEMP/notes.md" app/src/main/assets/whatsnew.md
