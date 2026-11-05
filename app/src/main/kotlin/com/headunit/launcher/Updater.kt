@@ -429,6 +429,13 @@ object Updater {
             .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
         ii.clipData = android.content.ClipData.newRawUri("Mise à jour d'Horizon Nav", uri)
         grantToInstallers(ctx, uri)
+        // fork FR : directement l'installateur d'Android : AAEnabler répond aussi à cette demande, mais se ferme sans installer
+        // (d'où les mises à jour en deux fois). L'installateur d'Android, lui, réussit du premier coup
+        try {
+            val sys = listOf("com.google.android.packageinstaller", "com.android.packageinstaller", "com.samsung.android.packageinstaller")
+            val found = ctx.packageManager.queryIntentActivities(ii, 0).map { it.activityInfo.packageName }
+            sys.firstOrNull { it in found }?.let { ii.setPackage(it) }
+        } catch (e: Exception) { }
         val target = try { ctx.packageManager.resolveActivity(ii, 0)?.activityInfo?.packageName } catch (e: Exception) { null }
         UpdLog.add(ctx, "installation lancée vers ${target ?: "?"} (${uri})")
         ctx.startActivity(ii)

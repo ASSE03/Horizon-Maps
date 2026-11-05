@@ -62,7 +62,8 @@ object RouteSync {
     fun started(from: NavEngine, dest: Place, via: List<Place>) {
         if (applying) return
         current = dest to via
-        for (e in others(from)) apply { e.followRoute(dest, via) }
+        val demo = from.demoFrom?.takeIf { from.prefs.b(PreferenceKeys.DEMO, false) }
+        for (e in others(from)) apply { e.followRoute(dest, via, demo) }
     }
 
     /** True when some engine still connected is guiding (so the background GPS service must stay on). */

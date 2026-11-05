@@ -5039,9 +5039,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun shadow() = quiet() && !showingMap
 
     /** Joins a trip started on the other screen (the phone or the car): the same destination and stops, straight into guidance. */
-    fun followRoute(to: Place, stops: List<Place>) {
+    fun followRoute(to: Place, stops: List<Place>, demo: Place? = null) {
         val d = dest
-        if (d != null && Geo.dist(d.pos, to.pos) < 30.0 && route != null) {
+        // fork FR : départ de démo choisi sur l'autre écran : celui-ci part du même endroit (sinon il partait de votre position)
+        val demoChanged = demo?.pos != demoFrom?.pos
+        demoFrom = demo
+        if (d != null && Geo.dist(d.pos, to.pos) < 30.0 && route != null && !demoChanged) {
             // already showing this route's choice (a place shared to both screens): set off with it
             if (previewing) beginNavigation()
             return

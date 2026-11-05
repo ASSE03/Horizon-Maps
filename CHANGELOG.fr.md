@@ -34,6 +34,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Mise à jour en deux fois : l'installation passe directement par l'installateur d'Android au lieu d'AAEnabler, qui se fermait sans installer.
+- Démo avec Android Auto : l'écran de la voiture part du départ de démo choisi sur le téléphone, et non plus de votre position.
 - Démo lancée sur le téléphone : l'écran Android Auto suit maintenant le trajet simulé au lieu de rester au départ.
 - Flèche à côté de la rue à l'arrêt : la position est aussi recalée sur la route à l'arrêt et au pas (12 m au plus), plus seulement en roulant.
 - « Vérifier maintenant » ne faisait rien quand la vérification automatique du lancement était en cours : le bouton affiche maintenant « Vérification… » puis le résultat.
