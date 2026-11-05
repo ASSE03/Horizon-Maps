@@ -768,7 +768,9 @@ private fun ImmCompass(engine: NavEngine) {
         (if (LocalInRail.current) Modifier.size(52.dp) else Modifier.size(52.dp).panel(6.dp, CircleShape, c.surface)).pressClick { engine.toggleNorthUp() },
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // fork FR : la boussole tourne avec la carte, le trait rouge montre toujours le nord
+        val rot = -engine.map.camBearing
+        Column(Modifier.graphicsLayer { rotationZ = rot }, horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(width = 4.dp, height = 8.dp).clip(RoundedCornerShape(2.dp)).background(Bad))
             Text("N", color = if (engine.northUp) c.accent else c.text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }

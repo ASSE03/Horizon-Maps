@@ -1,5 +1,7 @@
 package com.headunit.launcher
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -96,6 +98,8 @@ import com.mapbox.android.gestures.StandardScaleGestureDetector
  *   so a map that isn't drawing (hidden, in the background) can't leave anything waiting.
  */
 class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1f, ratio: Float = 0f) : DefaultLifecycleObserver {
+    /** Fork FR : orientation actuelle de la carte (degrés), lue par la boussole. */
+    var camBearing by androidx.compose.runtime.mutableFloatStateOf(0f)
     val mapView: MapView
     private val mbMap: MapboxMap get() = mapView.mapboxMap
     private val prefs = Prefs(ctx)
@@ -217,6 +221,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             override fun onShoveEnd(detector: ShoveGestureDetector) { }
         })
         subs += mbMap.subscribeCameraChanged {
+            // fork FR : orientation de la carte pour la boussole (au degré près, pour ne pas redessiner sans cesse)
+            try { val b = mbMap.cameraState.bearing.toFloat(); if (kotlin.math.abs(b - camBearing) >= 1f) camBearing = b } catch (e: Throwable) { }
             // zooming across the level where the turn arrow appears or goes: put the route back together (or cut it for the arrow)
             if (turnCut != null && cutZoomOk() != cutActive) try { setLine(main) } catch (e: Exception) { }
             placeAltCards(false)
