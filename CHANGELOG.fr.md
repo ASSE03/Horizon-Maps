@@ -31,6 +31,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Carte « Votre voiture » écrasée : le bouton s'appelle maintenant « À pied », et « Votre voiture » ne s'écrit plus lettre par lettre à la verticale.
 - Carte voilée par le brouillard : le brouillard ajouté selon la météo ne recouvre plus la vue satellite et est plus léger sur la carte normale.
 - Carte bloquée par Mapbox : les photos satellite refusées n'étaient plus redemandées en boucle, ce qui faisait aussi refuser la carte normale et le trafic.
 - Serveurs OpenStreetMap bloqués : le téléchargement des zones à faibles émissions n'est plus relancé à chaque ouverture après un échec.

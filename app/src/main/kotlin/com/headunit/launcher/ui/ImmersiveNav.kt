@@ -1181,14 +1181,14 @@ private fun ParkedCard(engine: NavEngine) {
             Icon(Icons.Rounded.DirectionsCar, null, tint = c.accent, modifier = Modifier.size(21.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text("Votre voiture", color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("Votre voiture", color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("Garée $ago" + (if (here != null) " · " + Geo.fmtDist(Geo.dist(here, spot), engine.imperial) else ""), color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         // walking directions in the phone's maps app (Horizon Nav plans driving routes); just the spot if there's none
-        ImmPill("Y retourner à pied", {
+        ImmPill("À pied", {
             val walk = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "google.navigation:q=%.6f,%.6f&mode=w", spot.lat, spot.lon)))
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "geo:%.6f,%.6f?q=%.6f,%.6f(Your car)", spot.lat, spot.lon, spot.lat, spot.lon)))
+            val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "geo:%.6f,%.6f?q=%.6f,%.6f(Votre voiture)", spot.lat, spot.lon, spot.lat, spot.lon)))
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             try { ctx.startActivity(walk) } catch (e: Exception) { try { ctx.startActivity(geo) } catch (x: Exception) { engine.toast("Aucune appli de carte piétonne sur ce téléphone", 3000) } }
         }, filled = true)
