@@ -1048,8 +1048,6 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
         }
         if (simMode != 0) return
-        // fork FR : démo lancée sur le téléphone : l'écran de la voiture la suit, sa vraie position attend
-        if (System.currentTimeMillis() < mirrorUntil) return
         // fork FR : guidage lancé depuis un départ de démo : la vraie position ne le recalcule pas depuis chez vous en attendant la démo
         if (demoFrom != null && route != null && !previewing && prefs.b(PreferenceKeys.DEMO, false)) return
         detectCountry(l.latitude, l.longitude)
@@ -5076,7 +5074,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Fork FR : vitesse de la démo (×1, ×2, ×4, ×8), réglable avant et pendant. */
     var demoSpeed by mutableIntStateOf(1)
 
-    fun chooseDemoSpeed(x: Int) { demoSpeed = x.coerceIn(1, 16); if (simMode != 0) simMode = demoSpeed }
+    fun chooseDemoSpeed(x: Int) { demoSpeed = x.coerceIn(1, 16); if (simMode != 0) simMode = demoSpeed; carEngine()?.let { if (it.simMode != 0) it.simMode = demoSpeed } }
 
     /** Le départ de la démo revient à votre position, et l'itinéraire est recalculé depuis là. */
     fun clearDemoStart() { demoFrom = null; pickDemoStart = false; dest?.let { if (previewing) startRoute(it) } }
@@ -5094,7 +5092,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    /** Fork FR : l'écran Android Auto a son propre moteur : la démo lancée sur le téléphone y tourne aussi, à la même vitesse. */
+    private fun carEngine(): NavEngine? = if (isCar) null else try { com.headunit.launcher.car.ClusterLink.engine?.takeIf { it !== this } } catch (e: Exception) { null }
+
     private fun startSim(r: Route) {
+        carEngine()?.let { c -> val cr = c.route; if (cr != null && c.simMode == 0) { c.simMode = simMode; c.startSim(cr) } }
         simJob?.cancel()
         // fork FR : avec un départ de démo choisi, la démo part du début de l'itinéraire
         simDist = if (demoFrom != null && prefs.b(PreferenceKeys.DEMO, false)) 0.0 else fix?.let { snap(r, it.pos).progress } ?: 0.0
@@ -5108,10 +5110,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val demoSpeed = (if (td < 150) 7.0 else if (td < 400) 13.0 else if (td < 1200) 20.0 else 27.0) * simMode
                 simDist = min(cur.len, simDist + demoSpeed)
                 val (pt, hd) = pointAt(cur, simDist)
-                val f = Fix(pt, hd, demoSpeed, 0.0)
-                onPosition(f, false)
-                // fork FR : démo lancée sur le téléphone avec Android Auto branché : l'écran de la voiture (son propre moteur) suit aussi
-                try { com.headunit.launcher.car.ClusterLink.engine?.takeIf { it !== this@NavEngine }?.mirrorFix(f) } catch (e: Exception) { }
+                onPosition(Fix(pt, hd, demoSpeed, 0.0), false)
                 if (simDist >= cur.len) break
                 delay(1000)
             }
@@ -5119,16 +5118,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
-    fun stopSim() { simJob?.cancel(); simJob = null; simMode = 0 }
+    fun stopSim() { simJob?.cancel(); simJob = null; simMode = 0; carEngine()?.let { if (it.simMode != 0) it.stopSim() } }
 
-    /** Fork FR : jusqu'à quand la vraie position est ignorée parce que la démo du téléphone pilote cet écran. */
-    @Volatile private var mirrorUntil = 0L
-
-    /** Fork FR : une position de la démo du téléphone, montrée sur l'écran de la voiture. */
-    fun mirrorFix(p: Fix) {
-        mirrorUntil = System.currentTimeMillis() + 3000L
-        scope.launch { try { onPosition(p, false) } catch (e: Exception) { } }
-    }
 
     var onRoad by mutableStateOf("")
     private var limitRoad = ""
