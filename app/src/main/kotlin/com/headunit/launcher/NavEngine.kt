@@ -1225,7 +1225,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val shape = when { t.isBlank() -> "none"; !MapboxRest.looksValid(t) -> "not a token"; !MapboxRest.looksWhole(t) -> "looks incomplete"; else -> "looks whole" }
                 appendLine("Mapbox token: ${t.take(3)}… $shape" + (if (mbCheckNote.isNotBlank()) " · $mbCheckNote" else "") + (if (mbKeyRefused) " · refused" else ""))
             }
-            appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · dernière recherche : ${Overpass.camNote.ifBlank { "aucune" }.take(160)} · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)} · zones : ${Zones.status.take(120)}")
+            appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · dernière recherche : ${Overpass.camNote.ifBlank { "aucune" }.take(160)} · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)}" + " · Nominatim : ${NominatimPoi.lastNote.ifBlank { "-" }} · zones : ${Zones.status.take(120)}")
             appendLine("Carte : ${try { map.styleNote } catch (e: Exception) { "?" }} · satellite : ${if (map.isSatellite) "oui" else "non"}")
             if (BisonFute.status.isNotBlank()) appendLine(BisonFute.status)
             run { val ul = UpdLog.read(ctx); if (ul.isNotBlank()) { appendLine("Mises à jour :"); appendLine(ul) } }
@@ -2477,6 +2477,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     // fork FR : toilettes : OpenStreetMap d'abord (la base la plus complète en France, les recherches Mapbox/TomTom
                     // en connaissent très peu) ; autour de vous, le rayon s'élargit à 10 km si rien n'est trouvé à 3 km
                     var osmFailed = false
+                    // fork FR : toilettes : Nominatim d'abord (rapide et disponible même quand Overpass est saturé)
+                    if (kind == "toilets" && online()) {
+                        val nom = try {
+                            if (alongRoute && rt != null) NominatimPoi.toiletsAlong(RouteExtras.line(rt, progress, progress + 40_000.0, 1500.0, 45), 1200).mapNotNull { n ->
+                                val pr = RouteExtras.project(rt, n.place.pos, 1500.0, progress) ?: return@mapNotNull null
+                                if (pr.first < progress - 100) null else n.copy(dist = pr.first - progress, detourMin = detour(pr.second), ahead = true)
+                            } else NominatimPoi.toilets(centre, radius).ifEmpty { if (nearDest) emptyList() else NominatimPoi.toilets(centre, 10_000) }
+                                .map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
+                        } catch (e: Exception) { null }
+                        if (!nom.isNullOrEmpty()) return@async nom
+                    }
                     if (kind == "toilets" && online()) {
                         val osm = try {
                             if (alongRoute && rt != null) Overpass.nearbyAlong(kind, RouteExtras.line(rt, progress, progress + 60_000.0, 1500.0, 45), 900).mapNotNull { n ->
