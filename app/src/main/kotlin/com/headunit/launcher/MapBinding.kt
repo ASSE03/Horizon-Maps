@@ -409,20 +409,11 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
      * The Horizon theme at night and dusk: buildings a soft lavender-blue, a step lighter than the ground, rather than the same dark
      * shade as it (walls and roofs still take the map's light and shadow). Day keeps Mapbox's own building colours.
      */
-    // Horizon at night, set by eye in Settings > Map look > Horizon at night: the light (Mapbox's "dusk" is softer and brighter, with
-    // a gentle glow; "night" dims everything a lot more), how light the ground is, and how much lighter than it the buildings are
-    private var hzLight = "dusk"
-    private var hzBright = 60
-    private var hzBld = 40
-
-    fun setHorizonNight(light: String, bright: Int, bld: Int) {
-        val l = if (light == "night") "night" else "dusk"
-        val br = bright.coerceIn(0, 100); val bd = bld.coerceIn(0, 100)
-        if (l == hzLight && br == hzBright && bd == hzBld) return
-        hzLight = l; hzBright = br; hzBld = bd
-        setBase("lightPreset", Value.valueOf(satLight(lightPreset)))
-        if (horizonNightBuildings()) { setBase("colorBuildings", Value.valueOf(hzBuildings())); setBase("colorLand", Value.valueOf(hzLand())); buildingsTinted = true }
-    }
+    // Horizon at night (chosen by eye on the head unit): Mapbox's night light, the ground at 60% of the way from a deep blue-grey to
+    // near white, and the buildings as far towards white as they go, so they stand out lighter than the ground
+    private val hzLight = "night"
+    private val hzBright = 60
+    private val hzBld = 100
 
     private fun mix(a: Int, b: Int, t: Double): String {
         fun ch(x: Int, s: Int) = (x shr s) and 0xFF

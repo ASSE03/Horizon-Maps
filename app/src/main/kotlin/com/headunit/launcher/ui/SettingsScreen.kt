@@ -268,13 +268,6 @@ private fun MapLookSection(prefs: Prefs, engine: NavEngine) {
         SChoice("Position du logo Mapbox", listOf("tl" to "En haut à gauche", "tr" to "En haut à droite", "bl" to "En bas à gauche", "br" to "En bas à droite"), prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"),
             "Mapbox impose son logo sur la carte ; choisissez le coin qui vous convient") { prefs.put(PreferenceKeys.MAPBOX_LOGO, it) }
     }
-    // the Horizon theme at night, set by eye (the map changes as the sliders move)
-    if (prefs.mapSource() == "mapbox" && prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox") == "horizon") SGroup("Horizon la nuit") {
-        SChoice("Lumière de nuit", listOf("night" to "Nuit", "dusk" to "Crépuscule"), prefs.s(PreferenceKeys.HZ_NIGHT_LIGHT, "dusk"),
-            "Crépuscule : une lumière plus douce et plus claire, avec une légère lueur, comme la carte de nuit de Google") { prefs.put(PreferenceKeys.HZ_NIGHT_LIGHT, it) }
-        SSlider("Luminosité de la carte", prefs.i(PreferenceKeys.HZ_NIGHT_BRIGHT, 60).toFloat(), 0f..100f, "%", sub = "Le sol et les routes", steps = 19, reset = 60f, live = true) { prefs.put(PreferenceKeys.HZ_NIGHT_BRIGHT, it) }
-        SSlider("Bâtiments", prefs.i(PreferenceKeys.HZ_NIGHT_BLD, 40).toFloat(), 0f..100f, "%", sub = "À quel point plus clairs que le sol", steps = 19, reset = 40f, live = true) { prefs.put(PreferenceKeys.HZ_NIGHT_BLD, it) }
-    }
     SGroup("Vue 3D", footer = "De 30° à 65°. Auto est le choix de l'appli (54°, ou 52° avec une carte allégée). L'inclinaison selon la vitesse et la vue à plat dans les virages s'y ajoutent.") {
         STilt("Inclinaison sur écran large", "Autoradios en paysage. Plus haut montre plus loin devant (plus à dessiner pour un autoradio lent)", prefs, PreferenceKeys.TILT_WIDE)
         STilt("Inclinaison sur écran haut", "Écrans en portrait et téléphones", prefs, PreferenceKeys.TILT_TALL)

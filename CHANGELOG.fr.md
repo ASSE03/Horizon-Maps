@@ -26,7 +26,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Position à l'arrêt : dans un bâtiment, la position combinée d'Android (GPS, Wi-Fi et réseau) place la flèche plus juste, et le compteur affiche 0 au lieu de quelques km/h.
 - Alerte radar : elle annonce la distance (« Radar dans 500 mètres ») au lieu de « Radar devant ».
 - Radars dès l'ouverture : les derniers radars trouvés s'affichent tout de suite, puis sont mis à jour, et une réponse vide d'un serveur est redemandée à un autre.
-- Thème Horizon la nuit : une lumière plus douce, avec la luminosité de la carte et des bâtiments réglable.
+- Thème Horizon la nuit simplifié : les bâtiments ressortent toujours plus clairs que le sol, sur le téléphone, l'autoradio et Android Auto. Les réglages de lumière, de luminosité et de bâtiments de nuit sont retirés.
 - Liste des bornes : le nom n'est plus coupé, les places libres sont en dessous, l'adresse et le tarif tiennent sur 2 lignes.
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
