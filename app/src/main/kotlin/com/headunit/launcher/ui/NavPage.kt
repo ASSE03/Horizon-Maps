@@ -204,6 +204,8 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         Modifier.floating(50.dp).horizontalScroll(rememberScrollState()).padding(6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // (en premier, pour qu'il soit toujours visible sans faire défiler la ligne)
+        Pill("▶ Lancer la démo", true, { engine.beginNavigation(); if (engine.simMode == 0) engine.cycleSim() })
         Text("Démo depuis", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 10.dp))
         Pill("Ma position", engine.demoFrom == null && !engine.pickDemoStart, { engine.clearDemoStart() })
         Pill(if (engine.pickDemoStart) "Cherchez ou appui long…" else engine.demoFrom?.name?.take(24) ?: "Choisir un départ", engine.demoFrom != null || engine.pickDemoStart, {
@@ -212,7 +214,6 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         })
         Text("Vitesse", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 14.dp, end = 4.dp))
         for (x in listOf(1, 2, 4, 8)) Pill("×$x", engine.demoSpeed == x, { engine.chooseDemoSpeed(x) })
-        Pill("Lancer la démo", false, { engine.beginNavigation(); engine.cycleSim() })
     }
     Row(
         Modifier.floating(50.dp).horizontalScroll(rememberScrollState()).padding(6.dp),

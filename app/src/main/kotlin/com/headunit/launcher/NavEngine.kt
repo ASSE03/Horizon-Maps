@@ -1846,6 +1846,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (f != null) onPosition(f, true)
         else { updateGuidance(0.0); toast("Pas encore de position GPS. Utilisez le bouton lecture pour une démo.", 5000) }
         cardsForStartAlts()
+        // fork FR : guidage lancé par « Démarrer » avec un départ de démo choisi : la vraie position est ignorée, la flèche restait
+        // donc au départ sans bouger. La démo démarre d'elle-même
+        if (!isCar && demoFrom != null && prefs.b(PreferenceKeys.DEMO, false) && simMode == 0 && route != null) cycleSim()
     }
 
     private fun drawRoutes() {

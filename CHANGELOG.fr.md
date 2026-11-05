@@ -34,6 +34,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Démo avec un départ choisi : lancer le guidage avec « Démarrer » lance aussi la démo (la flèche restait au départ). Le bouton « Lancer la démo » est maintenant en tête de la ligne, toujours visible.
 - Incidents en anglais (« Heavy rain ») : les plus courants s'affichent et s'annoncent en français.
 - Démo : une erreur sur une position ne la bloque plus, et le rapport indique où elle en est.
 - Mise à jour en deux fois : l'installation passe directement par l'installateur d'Android au lieu d'AAEnabler, qui se fermait sans installer.
