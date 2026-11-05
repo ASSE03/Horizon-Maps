@@ -302,6 +302,7 @@ private fun OnTheMapSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Sur votre itinéraire") {
         SToggle(prefs, "Feux tricolores", "signals", true, if (prefs.b(PreferenceKeys.SIGNALS, true)) "Seulement ceux de votre itinéraire. Actuellement : " + engine.map.signalInfo() else null)
         SToggle(prefs, "Icônes des radars et travaux", "hazardicons", true, "Leurs icônes sur la carte. Les alertes sont dans Réglages > Alertes")
+        if (prefs.b("hazardicons", true)) SPercent("Taille des radars", "Le badge rouge des radars sur la carte", prefs, PreferenceKeys.CAM_SIZE, 50, 350)
         SToggle(prefs, "Passages piétons", "zebras", true, "Passages piétons de votre itinéraire peints sur la route, avec balises lumineuses (de près)")
         SToggle(prefs, "Panneaux stop", PreferenceKeys.STOP_SIGNS, true, "Stops de votre itinéraire affichés sur la carte, avec un petit signal sonore avant chacun (là où OpenStreetMap les connaît)")
         SToggle(prefs, "Caméras de lecture de plaques", PreferenceKeys.ALPR_CAMS, true, "Caméras Flock et autres lecteurs automatiques de plaques recensés sur OpenStreetMap. Affichées sur la carte seulement, sans alerte")
@@ -468,6 +469,25 @@ private fun STilt(title: String, sub: String, prefs: Prefs, key: String) {
         androidx.compose.material3.Slider(
             value = v, onValueChange = { v = it; moving = true }, onValueChangeFinished = { prefs.put(key, v.roundToInt().coerceIn(30, 65)) },
             valueRange = 30f..65f, steps = 34,
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.tile),
+        )
+    }
+}
+
+/** A size in percent with a slider ([min] to [max], in steps of 10), and Reset back to 100%. Saved when you let go. */
+@Composable
+private fun SPercent(title: String, sub: String, prefs: Prefs, key: String, min: Int, max: Int) {
+    val c = LocalVw.current
+    val saved = prefs.i(key, 100).coerceIn(min, max)
+    var v by remember(key, saved) { mutableStateOf(saved.toFloat()) }
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        SItem(title, sub) {
+            Text("${v.roundToInt()}%", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            if (saved != 100) SButton("Reset") { prefs.put(key, 100) }
+        }
+        androidx.compose.material3.Slider(
+            value = v, onValueChange = { v = (it / 10f).roundToInt() * 10f }, onValueChangeFinished = { prefs.put(key, v.roundToInt().coerceIn(min, max)) },
+            valueRange = min.toFloat()..max.toFloat(), steps = (max - min) / 10 - 1,
             colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.tile),
         )
     }
@@ -1249,11 +1269,12 @@ private fun MapColoursPicker(value: String, onPick: (String) -> Unit) {
     val sets = listOf(
         Triple("mapbox", "Mapbox", listOf(0xFFEDEFE9, 0xFF9CCBF0, 0xFFC6E4B4, 0xFFFFFFFF, 0xFFDCDCE0)),
         Triple("horizon", "Horizon", listOf(0xFFF4F2EE, 0xFFAADAF5, 0xFFCDEBC4, 0xFFFFFFFF, 0xFFE7E5E1)),
+        Triple("twilight", "Crépuscule", listOf(0xFFF1F0F5, 0xFFAAD4F5, 0xFFCDEBC4, 0xFFFFFFFF, 0xFFE5E3EA)),
         Triple("faded", "Pastel", listOf(0xFFF1F1F1, 0xFFD9E2EA, 0xFFE2E8DE, 0xFFFFFFFF, 0xFFE6E6E6)),
         Triple("grey", "Gris", listOf(0xFFE8E8E8, 0xFFCFCFCF, 0xFFDADADA, 0xFFFFFFFF, 0xFFD4D4D4)),
     )
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        SItem("Couleurs", "Horizon : la carte Mapbox aux couleurs douces de l'appli. Couleurs de jour affichées ; chacune a une version de nuit")
+        SItem("Couleurs", "Horizon : la carte Mapbox aux couleurs douces de l'appli, bleu ardoise la nuit. Crépuscule : la même avec une nuit plus violette. Couleurs de jour affichées ; chacune a une version de nuit")
         Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             for ((id, name, cols) in sets) {
                 val sel = id == value

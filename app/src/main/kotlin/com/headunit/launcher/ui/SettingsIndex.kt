@@ -33,6 +33,7 @@ internal val settingsIndex = listOf(
     SettingRef("Feux tricolores", "", "Sur votre itinéraire", 1),
     SettingRef("Caméras de lecture de plaques", "Caméras Flock / LAPI sur la carte", "Sur votre itinéraire", 1),
     SettingRef("Icônes des radars et travaux", "Leurs icônes sur la carte", "Sur votre itinéraire", 1),
+    SettingRef("Taille des radars", "Badge rouge des radars sur la carte, plus grand ou plus petit", "Sur votre itinéraire", 1),
     SettingRef("Passages piétons", "Peints sur la route avec balises", "Sur votre itinéraire", 1),
     SettingRef("Panneaux stop", "Stops sur votre itinéraire, avec un signal sonore", "Sur votre itinéraire", 1),
     SettingRef("Lampadaires, feux et radars en 3D", "Vrais modèles 3D", "Mobilier urbain 3D", 1),
@@ -205,7 +206,7 @@ internal val settingsIndex = listOf(
     SettingRef("Work", "Définir ou effacer votre lieu de travail", "Lieux enregistrés", 7),
     SettingRef("Journal des trajets", "Chaque trajet, enregistré quand vous vous garez", "Journal des trajets", 7),
     SettingRef("Compteur et panneau de limitation", "Taille de la limitation et du compteur", "En conduite", 10),
-    SettingRef("Couleurs", "Mapbox, Horizon, pastel ou gris", "La carte", 0),
+    SettingRef("Couleurs", "Mapbox, Horizon, crépuscule, pastel ou gris", "La carte", 0),
     SettingRef("Taille du texte et des boutons", "La taille de tout ce qui est à l'écran", "Tailles", 10),
     SettingRef("Vos lieux", "Vos lieux nommés : renommer, réordonner ou retirer", "Vos lieux", 7),
 )

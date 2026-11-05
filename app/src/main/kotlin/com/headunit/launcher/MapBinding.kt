@@ -333,7 +333,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** "full" (Standard in 3D), "lite" (Standard, flat, fewer labels) or "lightest" (Mapbox's classic 2D map). Settings > Map. */
     var mapDetail = "full"
         private set
-    /** "mapbox", "horizon" (the app's own soft colours), "faded" or "grey". Settings > Map. */
+    /** "mapbox", "horizon" (the app's own soft colours, slate blue at night), "twilight" (the same, with the original purple night), "faded" or "grey". Settings > Map. */
     private var colours = "mapbox"
     /** Whether the style has Standard's slots (classic styles don't: the app's layers then simply go on top). */
     private var slotsOn = true
@@ -362,7 +362,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     }
 
     fun setColours(c: String) {
-        val v = if (c in setOf("mapbox", "horizon", "faded", "grey")) c else "mapbox"
+        val v = if (c in setOf("mapbox", "horizon", "twilight", "faded", "grey")) c else "mapbox"
         if (v == colours) return
         colours = v
         // the colours are part of how the map loads (and Horizon is a different base map), so it's loaded again
@@ -426,21 +426,26 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         fun m(s: Int) = Math.round(ch(a, s) + (ch(b, s) - ch(a, s)) * t).toInt().coerceIn(0, 255)
         return String.format("#%02X%02X%02X", m(16), m(8), m(0))
     }
-    /** The ground: from a deep blue-grey (0%) to near white (100%), before the night light dims it. */
-    private fun hzLand(): String = mix(0x3A4260, 0xE6EBFF, hzBright / 100.0)
-    /** The buildings: the ground's colour taken towards white by the Buildings setting (0% is only just lighter than the ground). */
+    /** Horizon or Twilight: the two sets of the app's own colours (they differ only in the night tint). */
+    private fun hzFamily() = colours == "horizon" || colours == "twilight"
+    private fun twilight() = colours == "twilight"
+    /** The ground's two ends: Twilight from a deep violet-blue to a pale lavender; Horizon the same brightness in slate blue with a touch of purple. */
+    private fun landDark() = if (twilight()) 0x3A4260 else 0x3D4662
+    private fun landLight() = if (twilight()) 0xE6EBFF else 0xEAEFFB
+    /** The ground: from deep (0%) to pale (100%), before the night light dims it. */
+    private fun hzLand(): String = mix(landDark(), landLight(), hzBright / 100.0)
+    /** The buildings: the ground's colour taken towards white (Twilight) or a very pale slate blue (Horizon) by the Buildings level. */
     private fun hzBuildings(): String {
-        val t = hzBright / 100.0
-        val land = (Math.round(0x3A + (0xE6 - 0x3A) * t).toInt() shl 16) or (Math.round(0x42 + (0xEB - 0x42) * t).toInt() shl 8) or Math.round(0x60 + (0xFF - 0x60) * t).toInt()
-        return mix(land, 0xFFFFFF, 0.15 + 0.85 * hzBld / 100.0)
+        val land = Integer.parseInt(hzLand().substring(1), 16)
+        return mix(land, if (twilight()) 0xFFFFFF else 0xF2F5FC, 0.15 + 0.85 * hzBld / 100.0)
     }
     private var buildingsTinted = false
-    private fun horizonNightBuildings(): Boolean = colours == "horizon" && !satellite && (lightPreset == "night" || lightPreset == "dusk")
+    private fun horizonNightBuildings(): Boolean = hzFamily() && !satellite && (lightPreset == "night" || lightPreset == "dusk")
 
     /** Satellite at "night" darkens the photos until there's next to nothing to see (it looked as if satellite wasn't working),
      *  so satellite goes no darker than dusk. */
     private fun satLight(p: String): String = if (satellite && p == "night") "dusk"
-        else if (p == "night" && colours == "horizon" && hzLight == "dusk") "dusk" else p
+        else if (p == "night" && hzFamily() && hzLight == "dusk") "dusk" else p
 
     /** One of Standard's settings (only once a style is showing; they're also written into the style when it loads). */
     private fun setBase(key: String, v: Value) {
@@ -452,7 +457,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private fun baseConfig(): org.json.JSONObject {
         val sat = (wantedStyle ?: "") == Style.STANDARD_SATELLITE
         val c = org.json.JSONObject()
-        c.put("lightPreset", if (sat && lightPreset == "night") "dusk" else if (!sat && lightPreset == "night" && colours == "horizon" && hzLight == "dusk") "dusk" else lightPreset)
+        c.put("lightPreset", if (sat && lightPreset == "night") "dusk" else if (!sat && lightPreset == "night" && hzFamily() && hzLight == "dusk") "dusk" else lightPreset)
         // shop and place labels rest on the light map and (on the full map) while you're on the move: placing them is the costly part
         c.put("showPointOfInterestLabels", !lite && !poiMoving)
         c.put("showTransitLabels", !lite)
@@ -463,6 +468,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             "grey" -> c.put("theme", "monochrome")
             // Mapbox's own colours with a gentle purple-blue hint (mostly at night), from a colour look-up table
             "horizon" -> if (!sat) { c.put("theme", "custom"); c.put("theme-data", HorizonLut.BASE64) }
+            // the same with the original deeper purple-blue night
+            "twilight" -> if (!sat) { c.put("theme", "custom"); c.put("theme-data", TwilightLut.BASE64) }
         }
         buildingsTinted = !sat && horizonNightBuildings()
         if (buildingsTinted) { c.put("colorBuildings", hzBuildings()); c.put("colorLand", hzLand()) }
@@ -1733,7 +1740,11 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val dayLook = !nightStyle
         bubImgs.clear(); laneImgs.clear()
         // the classic map in the Horizon colours
+<<<<<<< HEAD
         if (!slotsOn && !satellite && (colours == "horizon" || recolourBase)) try { recolourClassic(st) } catch (e: Throwable) { }
+=======
+        if (!slotsOn && (hzFamily() || recolourBase)) try { recolourClassic(st) } catch (e: Throwable) { }
+>>>>>>> upstream/main
         // Standard's newer settings are set once it's loaded (so a style that doesn't know one can't stop the map loading)
         if (!satellite) {
             setBase("show3dTrees", Value.valueOf(treesOn)); setBase("showLandmarkIcons", Value.valueOf(!lite))
@@ -1921,10 +1932,10 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         addL(st, SymbolLayer("dl-cams", "dl-cams")
             .iconImage("dl-hz-cam").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
-            .iconSize(zoomed(1.0, 8 to 0.36, 12 to 0.44, 15 to 0.68, 18 to 0.9)))
+            .iconSize(Expression.fromRaw(camsSize())))
         addL(st, SymbolLayer("dl-hazards", "dl-hazards")
             .iconImage(Expression.get("img")).iconAllowOverlap(true).iconIgnorePlacement(true).iconEmissiveStrength(1.0)
-            .iconSize(zoomed(1.0, 11 to 0.45, 15 to 0.75, 18 to 1.0)))
+            .iconSize(Expression.fromRaw(HAZ_SIZE)))
         // where you parked (on the phone, after Android Auto disconnects)
         addImg(st, "dl-car-pin", parkedBitmap())
         addS(st, GeoJsonSource.Builder("dl-parked").featureCollection(FeatureCollection.fromFeatures(
@@ -1993,7 +2004,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // the Horizon colours' own 3D buildings
             try {
                 if (st.styleLayerExists("dl-building-3d")) st.setStyleLayerProperty("dl-building-3d", "visibility", Value.valueOf(if (b3d) "visible" else "none"))
-                else if (b3d && colours == "horizon") recolourClassic(st)
+                else if (b3d && hzFamily()) recolourClassic(st)
             } catch (e: Throwable) { }
         }
     }
@@ -2383,16 +2394,43 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     }
 
     private var hazards: List<Pair<LL, Int>> = emptyList()
+    /** The route's badges' size by zoom, times each one's own scale ("sc": the camera size setting for speed cameras, 1 for the rest). */
+    private val HAZ_SIZE = "[\"interpolate\",[\"linear\"],[\"zoom\"]," +
+        listOf(11 to 0.45, 15 to 0.75, 18 to 1.0).joinToString(",") { (z, v) -> "$z,[\"*\",$v,[\"coalesce\",[\"get\",\"sc\"],1]]" } + "]"
     /** Map icons by kind: camera, roadworks, closure, police, accident, hazard, breakdown, mobile camera. */
     private val hazardNames = arrayOf("dl-hz-cam", "dl-hz-work", "dl-hz-closed", "dl-hz-police", "dl-hz-accident", "dl-hz-hazard", "dl-hz-breakdown", "dl-hz-mobilecam")
 
     /** Icons for speed cameras (0), roadworks (1) and closures (2) along the route. */
     fun setHazards(list: List<Pair<LL, Int>>) { hazards = list; pushHazards() }
 
+    // ---- the speed camera badge's size (Settings > Map look > On your route > Speed camera size): 50% to 350% ----
+    private var camScale = 1.0
+    fun setCameraSize(pct: Int) {
+        val v = pct.coerceIn(50, 350) / 100.0
+        if (v == camScale) return
+        val before = camDetail()
+        camScale = v
+        val st = style ?: return
+        if (camDetail() != before) addImg(st, "dl-hz-cam", cameraBitmap())
+        try { if (st.styleLayerExists("dl-cams")) Value.fromJson(camsSize()).value?.let { st.setStyleLayerProperty("dl-cams", "icon-size", it) } } catch (e: Throwable) { }
+        pushHazards()
+    }
+    /** How many times over the camera badge is drawn: twice over (for sharpness) once it's set above 150%. */
+    private fun camDetail() = if (camScale > 1.5) 2 else 1
+    /** Every camera around you: the badge's size by zoom, times the setting. */
+    private fun camsSize(): String {
+        fun f(x: Double) = String.format(java.util.Locale.US, "%.3f", x * camScale)
+        return "[\"interpolate\",[\"linear\"],[\"zoom\"],8,${f(0.36)},12,${f(0.44)},15,${f(0.68)},18,${f(0.9)}]"
+    }
+
     private fun pushHazards() {
         val s = src("dl-hazards") ?: return
         val fs = hazards.map { (p, k) ->
-            Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)).also { it.addStringProperty("img", hazardNames[k.coerceIn(0, hazardNames.size - 1)]) }
+            Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)).also {
+                it.addStringProperty("img", hazardNames[k.coerceIn(0, hazardNames.size - 1)])
+                // the speed camera badge follows the size setting; roadworks, closures and reports stay as they are
+                it.addNumberProperty("sc", if (k == 0) camScale else 1.0)
+            }
         }
         s.featureCollection(FeatureCollection.fromFeatures(fs))
     }
@@ -2403,8 +2441,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
      */
     private fun cameraBitmap(): Bitmap {
         val n = 136
-        val bmp = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        // drawn with extra pixels when the size setting makes it big (the same size on the map, but sharp rather than blurry)
+        val k = camDetail()
+        val bmp = Bitmap.createBitmap(n * k, n * k, Bitmap.Config.ARGB_8888)
+        if (k > 1) bmp.density = bmp.density * k
         val c = Canvas(bmp)
+        c.scale(k.toFloat(), k.toFloat())
         val cx = n / 2f
         fun p(col: Int, st: Paint.Style = Paint.Style.FILL, w: Float = 0f) = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = col; style = st; strokeWidth = w }
         // a soft shadow under it

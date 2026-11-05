@@ -5,6 +5,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Taille des radars : un curseur dans Réglages › Sur la carte › Sur votre itinéraire, de 50 % à 350 %, pour agrandir ou réduire le badge rouge des radars sur la carte (téléphone, autoradio et Android Auto).
+- Couleurs « Crépuscule » : un nouveau choix dans Réglages › Aspect de la carte › Couleurs, les couleurs Horizon d'avant avec une nuit plus violette.
 - Retour à la voiture à pied : « À pied » sur la carte « Votre voiture » calcule maintenant un itinéraire piéton dans Horizon Nav (Mapbox) au lieu d'ouvrir une autre appli.
 - Limitations comme MG4Dash : les limitations de vitesse viennent maintenant d'OpenStreetMap seul, avec les paquets France de MG4Dash gardés sur le téléphone, la route la plus proche orientée dans votre sens et les règles françaises (50 en ville, 80 ailleurs, 110 sur voie rapide, 130 sur autoroute). L'ancien fonctionnement reste dans Réglages › Alertes › Vitesse › Source des limitations.
 - Bison Futé : au choix de l'itinéraire, une ligne prévient quand le jour du départ est orange, rouge ou noir sur les départements traversés, dans le sens des départs et dans celui des retours.
@@ -34,6 +36,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Plantage avec l'écran conducteur : sur les voitures qui affichent la carte derrière le volant (vu sur une Jaguar), l'appli pouvait planter dès le démarrage d'Android Auto. C'est réglé.
 - Démo avec un départ choisi : lancer le guidage avec « Démarrer » lance aussi la démo (la flèche restait au départ). Le bouton « Lancer la démo » est maintenant en tête de la ligne, toujours visible.
 - Incidents en anglais (« Heavy rain ») : les plus courants s'affichent et s'annoncent en français.
 - Démo : une erreur sur une position ne la bloque plus, et le rapport indique où elle en est.
