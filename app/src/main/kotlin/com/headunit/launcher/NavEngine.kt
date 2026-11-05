@@ -1393,6 +1393,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Guards the check before its coroutine is launched, preventing overlapping lifecycle/network callbacks. */
     @Volatile private var updateCheckInFlight = false
+    @Volatile private var updateCheckSince = 0L
+    @Volatile private var updateWantManual = false
 
     /** When the last automatic app / map-data checks ran (opening the app, or the connection coming back). */
     private var lastAutoUpdateCheck = 0L
@@ -1409,9 +1411,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     @Synchronized
-    fun checkForUpdate(manual: Boolean = false) {
-        if (!Updater.enabled || updateBusy || updateCheckInFlight) return
+    fun checkForUpdate(manual0: Boolean = false) {
+        if (!Updater.enabled || updateBusy) return
         val now = System.currentTimeMillis()
+        // fork FR : un appui sur « Vérifier maintenant » pendant la vérification automatique (au lancement) ne faisait rien :
+        // il la rejoint et en affiche le résultat ; une vérification bloquée depuis plus de 45 s est relancée
+        if (updateCheckInFlight) {
+            if (!manual0) return
+            updateWantManual = true; updateStatus = "Vérification…"
+            if (now - updateCheckSince < 45_000L) return
+        }
+        updateCheckSince = now
+        val manual = manual0 || updateWantManual
         if (!manual) {
             // "Chercher les mises à jour automatiquement" switched off in Settings: only the Check button looks
             if (!prefs.b(PreferenceKeys.UPDCHECK, true)) return
@@ -1421,7 +1432,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         updateCheckInFlight = true
         if (manual) updateStatus = "Vérification…"
         scope.launch {
-            val u = try { withContext(Dispatchers.IO) { Updater.check() } } catch (e: Exception) { if (manual) updateStatus = "Vérification impossible : pas de connexion"; return@launch } finally { updateCheckInFlight = false }
+            val u = try { withContext(Dispatchers.IO) { Updater.check() } } catch (e: Exception) { if (manual || updateWantManual) updateStatus = "Vérification impossible : pas de connexion"; updateWantManual = false; return@launch } finally { updateCheckInFlight = false }
+            val manual = manual || updateWantManual
+            updateWantManual = false
             prefs.put(PreferenceKeys.UPDATE_LAST_CHECK, now.toString())
             if (u == null) { if (manual) updateStatus = "Vous avez la dernière version"; return@launch }
             if (manual) updateStatus = "La version ${u.version} est disponible"

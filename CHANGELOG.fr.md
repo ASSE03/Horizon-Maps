@@ -34,6 +34,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- « Vérifier maintenant » ne faisait rien quand la vérification automatique du lancement était en cours : le bouton affiche maintenant « Vérification… » puis le résultat.
 - Toilettes introuvables quand les serveurs Overpass sont saturés : la recherche passe d'abord par Nominatim (la recherche d'OpenStreetMap), plus rapide et disponible.
 - Recherches OpenStreetMap (toilettes, radars…) : les quatre serveurs sont essayés au lieu de deux, et un serveur en panne est mis de côté 5 minutes. Message clair quand aucun ne répond.
 - Boussole : le trait rouge tourne avec la carte et montre toujours le nord.
