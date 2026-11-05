@@ -1411,36 +1411,36 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     @Synchronized
-    fun checkForUpdate(manual0: Boolean = false) {
+    fun checkForUpdate(manual: Boolean = false) {
         if (!Updater.enabled || updateBusy) return
         val now = System.currentTimeMillis()
         // fork FR : un appui sur « Vérifier maintenant » pendant la vérification automatique (au lancement) ne faisait rien :
         // il la rejoint et en affiche le résultat ; une vérification bloquée depuis plus de 45 s est relancée
         if (updateCheckInFlight) {
-            if (!manual0) return
+            if (!manual) return
             updateWantManual = true; updateStatus = "Vérification…"
             if (now - updateCheckSince < 45_000L) return
         }
         updateCheckSince = now
-        val manual = manual0 || updateWantManual
-        if (!manual) {
+        val byHand = manual || updateWantManual
+        if (!byHand) {
             // "Chercher les mises à jour automatiquement" switched off in Settings: only the Check button looks
             if (!prefs.b(PreferenceKeys.UPDCHECK, true)) return
             if (now - lastAutoUpdateCheck < autoCheckGapMs) return
             lastAutoUpdateCheck = now
         }
         updateCheckInFlight = true
-        if (manual) updateStatus = "Vérification…"
+        if (byHand) updateStatus = "Vérification…"
         scope.launch {
-            val u = try { withContext(Dispatchers.IO) { Updater.check() } } catch (e: Exception) { if (manual || updateWantManual) updateStatus = "Vérification impossible : pas de connexion"; updateWantManual = false; return@launch } finally { updateCheckInFlight = false }
-            val manual = manual || updateWantManual
+            val u = try { withContext(Dispatchers.IO) { Updater.check() } } catch (e: Exception) { if (byHand || updateWantManual) updateStatus = "Vérification impossible : pas de connexion"; updateWantManual = false; return@launch } finally { updateCheckInFlight = false }
+            val shown = byHand || updateWantManual
             updateWantManual = false
             prefs.put(PreferenceKeys.UPDATE_LAST_CHECK, now.toString())
-            if (u == null) { if (manual) updateStatus = "Vous avez la dernière version"; return@launch }
-            if (manual) updateStatus = "La version ${u.version} est disponible"
+            if (u == null) { if (shown) updateStatus = "Vous avez la dernière version"; return@launch }
+            if (shown) updateStatus = "La version ${u.version} est disponible"
             // "later" keeps the card away for a few days, unless you check by hand
             val snoozed = (prefs.s(PreferenceKeys.UPDSNOOZE, "0").toLongOrNull() ?: 0L) > now
-            if (manual || !snoozed) appUpdate = u
+            if (shown || !snoozed) appUpdate = u
         }
     }
 
