@@ -31,6 +31,9 @@ object Overpass {
         "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
     )
 
+    /** Fork FR : jusqu'à quand chaque serveur est mis de côté après un échec. */
+    private val downUntil = LongArray(endpoints.size)
+
     /** The server that answered last time is tried first. */
     @Volatile private var preferred = 0
 
@@ -42,8 +45,12 @@ object Overpass {
 
     private fun run(query: String, connectMs: Int = 8000, readMs: Int = 18000, tries: Int = endpoints.size): JSONArray {
         val errors = ArrayList<String>()
+        // fork FR : les serveurs qui viennent d'échouer (502, délai dépassé) passent en dernier pendant 5 minutes,
+        // pour que les essais aillent d'abord aux serveurs qui répondent
+        val now = System.currentTimeMillis()
+        val order = (0 until endpoints.size).map { (preferred + it) % endpoints.size }.sortedBy { if (downUntil[it] > now) 1 else 0 }
         for (n in 0 until minOf(tries, endpoints.size)) {
-            val idx = (preferred + n) % endpoints.size
+            val idx = order[n]
             val ep = endpoints[idx]
             val host = ep.removePrefix("https://").substringBefore('/')
             try {
@@ -64,10 +71,10 @@ object Overpass {
                 if (remark.contains("error", true) || remark.contains("timed out", true) || remark.contains("out of memory", true) || remark.contains("timeout", true))
                     throw IOException("busy (" + remark.take(50) + ")")
                 val els = j.optJSONArray("elements") ?: JSONArray()
-                preferred = idx
+                preferred = idx; downUntil[idx] = 0L
                 lastNote = host.removePrefix("www.").substringBefore('.') + " ok"
                 return els
-            } catch (e: Exception) { errors += host.removePrefix("www.").substringBefore('.') + ": " + (e.message ?: e.javaClass.simpleName) }
+            } catch (e: Exception) { downUntil[idx] = System.currentTimeMillis() + 5 * 60_000L; errors += host.removePrefix("www.").substringBefore('.') + ": " + (e.message ?: e.javaClass.simpleName) }
         }
         lastNote = errors.joinToString("; ")
         throw IOException(errors.joinToString("; "))
@@ -489,7 +496,7 @@ object Overpass {
     fun nearby(kind: String, c: LL, radius: Int): List<Nearby> {
         val parts = filtersOf(kind).joinToString("") { f -> "node(around:$radius,${c.lat},${c.lon})$f;way(around:$radius,${c.lat},${c.lon})$f;" }
         val q = "[out:json][timeout:20];($parts);out center tags 80;"
-        return parseNearby(run(q, 6000, 12000, 2), kind, c).sortedBy { it.dist }.take(40)
+        return parseNearby(run(q, 5000, 9000), kind, c).sortedBy { it.dist }.take(40)
     }
 
     /** Places within [radius] metres of a line (the route ahead), in no particular order. */
@@ -498,7 +505,7 @@ object Overpass {
         val poly = line.joinToString(",") { String.format(java.util.Locale.US, "%.5f,%.5f", it.lat, it.lon) }
         val parts = filtersOf(kind).joinToString("") { f -> "node(around:$radius,$poly)$f;way(around:$radius,$poly)$f;" }
         val q = "[out:json][timeout:25];($parts);out center tags 150;"
-        return parseNearby(run(q, 6000, 15000, 2), kind, line.first())
+        return parseNearby(run(q, 5000, 10000), kind, line.first())
     }
 
     /** A car park's price from OpenStreetMap's charge tag ("1.80 GBP/hour", "£1.80/hour"...) as "£1.80/hr"; null when it can't be read. */

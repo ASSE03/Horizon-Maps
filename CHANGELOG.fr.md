@@ -34,6 +34,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Recherches OpenStreetMap (toilettes, radars…) : les quatre serveurs sont essayés au lieu de deux, et un serveur en panne est mis de côté 5 minutes. Message clair quand aucun ne répond.
 - Boussole : le trait rouge tourne avec la carte et montre toujours le nord.
 - Carte « Votre voiture » : le titre et « Garée il y a… » ne sont plus coupés, le bouton « À pied » passe en dessous.
 - Carte « Votre voiture » écrasée : le bouton s'appelle maintenant « À pied », et « Votre voiture » ne s'écrit plus lettre par lettre à la verticale.

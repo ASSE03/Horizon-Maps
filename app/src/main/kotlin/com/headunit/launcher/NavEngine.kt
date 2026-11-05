@@ -2476,6 +2476,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     }
                     // fork FR : toilettes : OpenStreetMap d'abord (la base la plus complète en France, les recherches Mapbox/TomTom
                     // en connaissent très peu) ; autour de vous, le rayon s'élargit à 10 km si rien n'est trouvé à 3 km
+                    var osmFailed = false
                     if (kind == "toilets" && online()) {
                         val osm = try {
                             if (alongRoute && rt != null) Overpass.nearbyAlong(kind, RouteExtras.line(rt, progress, progress + 60_000.0, 1500.0, 45), 900).mapNotNull { n ->
@@ -2483,7 +2484,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                                 if (pr.first < progress - 100) null else n.copy(dist = pr.first - progress, detourMin = detour(pr.second), ahead = true)
                             } else Overpass.nearby(kind, centre, radius).ifEmpty { if (nearDest) emptyList() else Overpass.nearby(kind, centre, 10_000) }
                                 .map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
-                        } catch (e: Exception) { null }
+                        } catch (e: Exception) { osmFailed = true; null }
                         if (!osm.isNullOrEmpty()) return@async osm
                     }
                     // TomTom's place search first (quick, and it knows the detour time along a route); OpenStreetMap if that fails
@@ -2506,12 +2507,16 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         // Mapbox first (a few points along the next 40 km, asked all at once: a second or two); the free OpenStreetMap
                         // servers only when it finds nothing or there's no Mapbox key (they're often busy and can take a long time)
                         val fromMapbox = if (mbToken.isNotBlank() && online()) (try { mapboxAlong(kind, line) } catch (e: Exception) { emptyList() }) else emptyList()
-                        val raw = fromMapbox.ifEmpty { Overpass.nearbyAlong(kind, line, if (kind == "services") 400 else 900) }
+                        val raw = fromMapbox.ifEmpty { if (osmFailed) throw java.io.IOException("serveurs OpenStreetMap indisponibles") else Overpass.nearbyAlong(kind, line, if (kind == "services") 400 else 900) }
                         raw.mapNotNull { n ->
                             val pr = RouteExtras.project(rt, n.place.pos, 1200.0, progress) ?: return@mapNotNull null
                             if (pr.first < progress - 100) null else n.copy(dist = pr.first - progress, detourMin = detour(pr.second), ahead = true)
                         }
-                    } else Overpass.nearby(kind, centre, radius).map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
+                    } else {
+                        // (fork FR : déjà essayé pour les toilettes : inutile de refaire attendre)
+                        if (osmFailed) throw java.io.IOException("serveurs OpenStreetMap indisponibles")
+                        Overpass.nearby(kind, centre, radius).map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
+                    }
                 }
                 val list = kotlinx.coroutines.withTimeoutOrNull(30_000L) { work.await() }
                 if (list == null) { work.cancel(); toast("La recherche a pris trop de temps. Vérifiez le réseau et réessayez.", 4000); clearNearby(); return@launch }
@@ -2579,6 +2584,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         NetHealth.note(e)
         val m = (e.message ?: "").lowercase()
         return when {
+            m.contains("openstreetmap indisponibles") -> "Les serveurs OpenStreetMap (toilettes) ne répondent pas pour l'instant. Réessayez dans quelques minutes."
             m.contains("no signal") || m.contains("unable to resolve") || m.contains("failed to connect") -> "Pas de réseau, la recherche n'a pas pu se faire. Réessayez dans un instant." + NetHealth.clockHint()
             m.contains("certificate") || m.contains("ssl") || m.contains("handshake") || m.contains("chain validation") ->
                 "Connexion sécurisée impossible. Vérifiez la date et l'heure de l'autoradio, puis réessayez."
