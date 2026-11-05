@@ -34,6 +34,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Incidents en anglais (« Heavy rain ») : les plus courants s'affichent et s'annoncent en français.
+- Démo : une erreur sur une position ne la bloque plus, et le rapport indique où elle en est.
 - Mise à jour en deux fois : l'installation passe directement par l'installateur d'Android au lieu d'AAEnabler, qui se fermait sans installer.
 - Démo avec Android Auto : l'écran de la voiture part du départ de démo choisi sur le téléphone, et non plus de votre position.
 - Démo lancée sur le téléphone : l'écran Android Auto suit maintenant le trajet simulé au lieu de rester au départ.

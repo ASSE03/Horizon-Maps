@@ -1225,6 +1225,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val shape = when { t.isBlank() -> "none"; !MapboxRest.looksValid(t) -> "not a token"; !MapboxRest.looksWhole(t) -> "looks incomplete"; else -> "looks whole" }
                 appendLine("Mapbox token: ${t.take(3)}… $shape" + (if (mbCheckNote.isNotBlank()) " · $mbCheckNote" else "") + (if (mbKeyRefused) " · refused" else ""))
             }
+            appendLine("Démo : ×$simMode · ${Math.round(simDist)} m sur ${route?.len?.let { Math.round(it) } ?: 0} · départ choisi : ${demoFrom?.name ?: "non"} · aperçu : $previewing · ${simNote.ifBlank { "-" }}")
             appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · dernière recherche : ${Overpass.camNote.ifBlank { "aucune" }.take(160)} · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)}" + " · Nominatim : ${NominatimPoi.lastNote.ifBlank { "-" }} · zones : ${Zones.status.take(120)}")
             appendLine("Carte : ${try { map.styleNote } catch (e: Exception) { "?" }} · satellite : ${if (map.isSatellite) "oui" else "non"}")
             if (BisonFute.status.isNotBlank()) appendLine(BisonFute.status)
@@ -3331,7 +3332,23 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun incidentLabel(i: Incident): String = when (i.cat) {
         "roadWorks" -> "Travaux"; "roadClosed" -> "Route fermée"; "accident" -> "Accident"
         "jam" -> "Bouchon"; "laneClosed" -> "Voie fermée"; "danger" -> "Danger"
-        else -> i.text.ifBlank { "Incident" }
+        else -> frIncident(i.text).ifBlank { "Incident" }
+    }
+
+    /** Fork FR : les descriptions d'incidents arrivent parfois en anglais (« Heavy rain ») : les plus courantes en français. */
+    private fun frIncident(t: String): String {
+        val l = t.lowercase().trim()
+        val map = listOf(
+            "heavy rain" to "Fortes pluies", "torrential rain" to "Pluies torrentielles", "rain" to "Pluie", "flood" to "Inondation",
+            "fog" to "Brouillard", "snow" to "Neige", "black ice" to "Verglas", "ice" to "Verglas", "icy" to "Verglas", "hail" to "Grêle",
+            "strong wind" to "Vent fort", "high wind" to "Vent fort", "wind" to "Vent fort", "slippery" to "Chaussée glissante",
+            "broken down" to "Véhicule en panne", "breakdown" to "Véhicule en panne", "object on" to "Objet sur la chaussée",
+            "debris" to "Débris sur la chaussée", "animal" to "Animaux sur la chaussée", "stationary traffic" to "Circulation à l'arrêt",
+            "queuing traffic" to "File d'attente", "slow traffic" to "Circulation ralentie", "heavy traffic" to "Circulation dense",
+            "road closed" to "Route fermée", "closed" to "Fermeture", "lane closed" to "Voie fermée", "roadworks" to "Travaux",
+            "road works" to "Travaux", "construction" to "Travaux", "accident" to "Accident", "crash" to "Accident",
+            "vehicle on fire" to "Véhicule en feu", "fire" to "Incendie", "event" to "Événement", "danger" to "Danger")
+        return map.firstOrNull { l.contains(it.first) }?.second ?: t
     }
 
     /** Speed cameras within [radius] m from a downloaded area that covers [p] (null when none does, so they're looked up online). */
@@ -5084,7 +5101,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun cycleSim() {
         val r = route
-        if (r == null) { toast("Choisissez d'abord une destination, puis lancez la démo"); return }
+        if (r == null) { simNote = "pas de trajet au lancement"; toast("Choisissez d'abord une destination, puis lancez la démo"); return }
         // à l'arrêt : démarre à la vitesse choisie ; en route : ×1 → ×2 → ×4 → ×8, puis fin
         if (simMode == 0) { simMode = demoSpeed; startSim(r); return }
         when (simMode) {
@@ -5106,15 +5123,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         simDist = if (demoFrom != null && prefs.b(PreferenceKeys.DEMO, false)) 0.0 else fix?.let { snap(r, it.pos).progress } ?: 0.0
         following = true
         simJob = scope.launch {
+            simNote = "lancée ×$simMode à ${Math.round(simDist)} m"
             while (true) {
-                val cur = route ?: break
+                val cur = route ?: run { simNote = "arrêtée : trajet perdu à ${Math.round(simDist)} m"; null } ?: break
                 // the position moves by exactly the speed it reports, so the arrow glide never sees a gap it has to jump to close
                 // (the old demo moved 16 m a second while claiming 7 m/s near a turn, which the glide "corrected" with a jump halfway round the roundabout)
                 val td = turn?.dist ?: 1000.0
                 val demoSpeed = (if (td < 150) 7.0 else if (td < 400) 13.0 else if (td < 1200) 20.0 else 27.0) * simMode
                 simDist = min(cur.len, simDist + demoSpeed)
                 val (pt, hd) = pointAt(cur, simDist)
-                onPosition(Fix(pt, hd, demoSpeed, 0.0), false)
+                // fork FR : une erreur sur une position ne bloque plus la démo (elle est notée dans le rapport)
+                try { onPosition(Fix(pt, hd, demoSpeed, 0.0), false) } catch (e: Exception) { simNote = "erreur à ${Math.round(simDist)} m : ${e.javaClass.simpleName} ${e.message?.take(80)}" }
                 if (simDist >= cur.len) break
                 delay(1000)
             }
@@ -5122,6 +5141,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (!isCar) DemoLink.phone = 0
         }
     }
+
+    /** Fork FR : dernier souci de la démo, pour le rapport. */
+    @Volatile var simNote = ""
 
     fun stopSim() { simJob?.cancel(); simJob = null; simMode = 0; if (!isCar) DemoLink.phone = 0; carEngine()?.let { if (it.simMode != 0) it.stopSim() } }
 
