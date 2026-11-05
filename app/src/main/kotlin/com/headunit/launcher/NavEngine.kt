@@ -3029,7 +3029,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 glideRoute = null; glideOnRoute = false
                 // standing still: the arrow (and the map round it) stays where you stopped, facing the same way
                 val held = if (isStill) mPos else null
-                mPos = held ?: if (p.speed > 2.0 && prefs.b(PreferenceKeys.SNAPROAD, true)) (Overpass.snapToRoad(p.pos, p.heading) ?: map.snapToRoad(p.pos, p.heading) ?: p.pos) else p.pos
+                // fork FR : à l'arrêt ou au pas aussi (sinon la flèche d'une voiture garée reste à côté de la rue), mais seulement
+                // à 12 m au plus de la route et dans le dernier sens de marche, pour ne pas sortir une voiture d'un parking
+                mPos = held ?: if (prefs.b(PreferenceKeys.SNAPROAD, true)) {
+                    val moving = p.speed > 2.0
+                    val h = if (moving) p.heading else mHead
+                    val sn = Overpass.snapToRoad(p.pos, h) ?: map.snapToRoad(p.pos, h)
+                    if (sn != null && (moving || Geo.dist(sn, p.pos) <= 12.0)) sn else p.pos
+                } else p.pos
                 if (!isStill) mHead = p.heading
                 val gp = gPos
                 if (gp == null || Geo.dist(gp, p.pos) > 150.0) { gPos = p.pos; gHead = p.heading }
