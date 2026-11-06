@@ -2974,7 +2974,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             gPos = LL(nLat, nLon)
             // fork FR : la position affichée est elle-même recalée sur la route, image par image : prolongée en ligne droite, elle
             // sortait de la chaussée dans les ronds-points et les virages serrés (Waze et Google Maps la gardent sur la route)
-            if (mSpeed > 1.0 && prefs.b(PreferenceKeys.SNAPROAD, true)) try {
+            // (10 fois par seconde au plus : chaque recalage parcourt les routes affichées, c'est du calcul pour un autoradio lent)
+            if (mSpeed > 1.0 && now - gSnapAt >= 100L && snapRoadOn) try {
+                gSnapAt = now
                 map.snapToRoad(LL(nLat, nLon), gHead, if (turning) 70.0 else 40.0, 15.0)?.let { gPos = it }
             } catch (e: Exception) { }
             if (mSpeed > 1.5) gHead = easeAngle(gHead, mHead, dt, if (turning) 0.2 else 0.35)
@@ -3129,6 +3131,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val held = if (isStill) mPos?.takeIf { !accOk || Geo.dist(it, p.pos) <= maxOf(15.0, p.acc * 2.0) } ?: (if (accOk) p.pos else mPos) else null
                 // kept on the road down to a crawl too, matched along the last good direction (Horizon Maps) ; fork FR : à l'arrêt
                 // aussi, mais seulement à 12 m au plus de la route, pour ne pas sortir une voiture d'un parking
+                snapRoadOn = prefs.b(PreferenceKeys.SNAPROAD, true)
                 mPos = held ?: if (prefs.b(PreferenceKeys.SNAPROAD, true)) {
                     val moving = p.speed > 0.5
                     val sn = Overpass.snapToRoad(p.pos, headNow) ?: map.snapToRoad(p.pos, headNow)
@@ -5412,6 +5415,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Fork FR : le contexte de l'appli (notifications). */
     val appCtx: Context get() = ctx
+
+    /** Fork FR : dernier recalage sur la route de la position affichée, et le réglage lu une fois par position. */
+    private var gSnapAt = 0L
+    @Volatile private var snapRoadOn = true
 
     /** Fork FR : depuis quand la démo ne tourne plus alors qu'un départ de démo bloque la vraie position. */
     private var demoIdleSince = 0L
