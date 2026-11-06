@@ -48,6 +48,8 @@ object MapErrors {
         lines += SimpleDateFormat("HH:mm:ss", Locale.FRANCE).format(Date()) + " " + line
         while (lines.size > 25) lines.removeAt(0)
     }
+    /** Fork FR : nombre d'erreurs de carte depuis l'ouverture. */
+    @Synchronized fun total(): Int = counts.values.sum()
     @Synchronized fun read(): String = lines.joinToString("\n") +
         (if (counts.isEmpty()) "" else "\nTotal par erreur depuis l'ouverture :\n" + counts.entries.joinToString("\n") { "${it.value} × ${it.key}" })
 

@@ -5,6 +5,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Radars de France hors ligne : un fichier de tous les radars fixes (OpenStreetMap + liste officielle du ministère de l'Intérieur, environ 4 600 radars), mis à jour chaque semaine sur GitHub et gardé sur le téléphone. Les radars ne dépendent plus des serveurs Overpass, souvent saturés.
+- Notification « Voiture garée » : quand Android Auto se déconnecte à l'arrêt, une notification avec l'heure et un bouton « À pied » qui lance l'itinéraire piéton vers la voiture (désactivable dans Réglages › Arrivée).
+- Démo depuis l'écran de la voiture : dans les réglages Android Auto, la vitesse de la démo, le départ (votre position ou celui choisi sur le téléphone) et « Lancer la démo ».
+- Rapport : une ligne « État » en tête indique d'un coup d'œil ce qui marche ou non (carte, satellite, radars, limitation, Nominatim, Overpass, GPS).
 - Couleurs personnalisées : une vignette « Personnalisé » dans Réglages › Aspect de la carte › Couleurs, avec un éditeur par-dessus la carte en direct. Le jour et la nuit ont chacun leurs couleurs pour le sol, l'eau, les parcs, les routes, les grands axes, les bâtiments, les zones colorées et les textes, plus la luminosité de nuit, une teinte générale, des bâtiments lumineux et un halo au sol. On part du thème qu'on avait, donc rien ne change tant qu'on ne modifie rien. (Remplace les couleurs « Clair de lune », retirées par Horizon Maps.)
 - Taille des radars : un curseur dans Réglages › Sur la carte › Sur votre itinéraire, de 50 % à 350 %, pour agrandir ou réduire le badge rouge des radars sur la carte (téléphone, autoradio et Android Auto).
 - Couleurs « Crépuscule » : un nouveau choix dans Réglages › Aspect de la carte › Couleurs, les couleurs Horizon d'avant avec une nuit plus violette.
@@ -25,6 +29,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- À pied : ni panneau de limitation, ni alerte de vitesse, ni radars pendant un itinéraire piéton.
+- Démo arrêtée avec un départ choisi : au bout de 45 secondes, la flèche revient d'elle-même sur votre vraie position au lieu de rester figée.
 - Démo accélérée : le compteur et l'alerte de dépassement utilisent la vitesse « normale », sans le ×2 à ×8.
 - Toilettes : recherche d'abord dans OpenStreetMap (la base la plus complète en France), avec aussi les toilettes des stations-service et des aires, et un rayon élargi à 10 km si rien n'est trouvé tout près.
 - Téléchargements rangés : une fois la mise à jour installée, sa copie dans Téléchargements est supprimée au démarrage suivant.

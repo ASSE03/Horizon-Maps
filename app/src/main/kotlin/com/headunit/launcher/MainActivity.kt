@@ -204,6 +204,20 @@ class MainActivity : ComponentActivity() {
 
     /** A destination shared from another app (a Google Maps link, a geo: link or an address). */
     private fun handleShared(i: android.content.Intent?) {
+        // fork FR : « À pied » de la notification « Voiture garée »
+        if (i?.getBooleanExtra(ParkedNotice.EXTRA_WALK, false) == true) {
+            i.removeExtra(ParkedNotice.EXTRA_WALK)
+            ParkedNotice.cancel(this)
+            val parts = engine.prefs.s(PreferenceKeys.PARKED_SPOT, "").split(',')
+            val la = parts.getOrNull(0)?.toDoubleOrNull(); val lo = parts.getOrNull(1)?.toDoubleOrNull()
+            if (la != null && lo != null) lifecycleScope.launch {
+                var n = 0
+                while (engine.fix == null && n < 20) { kotlinx.coroutines.delay(500); n++ }
+                if (!engine.walkTo(Place("Votre voiture", "", LL(la, lo))))
+                    engine.toast("Itinéraire à pied indisponible sans jeton Mapbox", 3500)
+            }
+            return
+        }
         val text = ExternalLinks.textOf(i) ?: return
         lifecycleScope.launch {
             val t = try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ExternalLinks.parse(text) } } catch (e: Exception) { null }

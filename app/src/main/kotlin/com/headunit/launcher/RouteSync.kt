@@ -38,6 +38,8 @@ object RouteSync {
         // (only when the car is stopped: switching to another app on the car screen mid-drive also closes it)
         if (e.isCar) e.fix?.takeIf { it.speed < 2.5 }?.pos?.let { p ->
             try { e.prefs.put(PreferenceKeys.PARKED_SPOT, String.format(java.util.Locale.US, "%.6f,%.6f,%d", p.lat, p.lon, System.currentTimeMillis())) } catch (x: Exception) { }
+            // fork FR : une notification « Voiture garée » avec le bouton « À pied »
+            try { if (e.prefs.b("parkednotice", true)) ParkedNotice.show(e.appCtx) } catch (x: Exception) { }
         }
         synchronized(engines) { engines.remove(e) }; noteCar()
     }

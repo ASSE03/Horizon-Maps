@@ -1052,7 +1052,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         if (simMode != 0) return
         // fork FR : guidage lancé depuis un départ de démo : la vraie position ne le recalcule pas depuis chez vous en attendant la démo
-        if (demoFrom != null && route != null && !previewing && prefs.b(PreferenceKeys.DEMO, false)) return
+        if (demoFrom != null && route != null && !previewing && prefs.b(PreferenceKeys.DEMO, false)) {
+            // fork FR : démo arrêtée (ou jamais lancée) depuis 45 s : la flèche ne reste plus figée, elle revient sur votre vraie position
+            val t = System.currentTimeMillis()
+            if (demoIdleSince == 0L) demoIdleSince = t
+            if (t - demoIdleSince < 45_000L) return
+            demoFrom = null; demoIdleSince = 0L
+            toast("Démo arrêtée : retour à votre position", 3500)
+        } else demoIdleSince = 0L
         detectCountry(l.latitude, l.longitude)
         val now = System.currentTimeMillis()
         val slow = !l.hasSpeed() || l.speed < 1.0f
@@ -1211,6 +1218,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (note.isNotBlank()) { appendLine(note.trim()); appendLine() }
             appendLine("---")
             appendLine("Horizon Nav ${BuildConfig.VERSION_NAME} (${BuildConfig.FLAVOR})")
+            // fork FR : en un coup d'œil, ce qui marche (✓) ou pas (✗) ; le détail suit plus bas
+            try {
+                fun ok(b: Boolean?) = when (b) { true -> "✓"; false -> "✗"; null -> "–" }
+                val mapErr = MapErrors.total()
+                val sat = prefs.b(PreferenceKeys.SATELLITE, false)
+                val radars = RadarsFr.status.contains("radars (") || Overpass.camNote.contains(": ") && !Overpass.camNote.endsWith(": 0")
+                val lim = if (mgLimits()) MgSpeedLimit.limit.value != null else speedLimit != null
+                val nomi = NominatimPoi.lastNote.takeIf { it.isNotBlank() }?.contains("ok")
+                val ovp = Overpass.lastNote.takeIf { it.isNotBlank() }?.endsWith(" ok")
+                appendLine("État : carte ${ok(mapErr == 0)}${if (mapErr > 0) " ($mapErr erreurs)" else ""}" +
+                    (if (sat) " · satellite ${ok(mapErr == 0)}" else "") +
+                    " · radars ${ok(radars)} · limitation ${ok(lim)} · Nominatim ${ok(nomi)} · Overpass ${ok(ovp)} · GPS ${ok(fix != null)}")
+            } catch (e: Exception) { }
             appendLine("Unit: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), screen ${dm.widthPixels}x${dm.heightPixels}")
             appendLine("Country: ${detectedCountry.ifBlank { "unknown" }} · map: ${prefs.mapSource()} · TomTom key: ${if (hasKey) "yes" else "no"} · Mapbox token: ${if (hasMapbox) "yes" else "no"} · routes from: ${provider.ifBlank { "offline" }} · online: ${if (online()) "yes" else "no"}")
             appendLine("Offline area: ${installedPackId() ?: "none"}")
@@ -1229,6 +1249,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 appendLine("Mapbox token: ${t.take(3)}… $shape" + (if (mbCheckNote.isNotBlank()) " · $mbCheckNote" else "") + (if (mbKeyRefused) " · refused" else ""))
             }
             appendLine("Démo : ×$simMode · ${Math.round(simDist)} m sur ${route?.len?.let { Math.round(it) } ?: 0} · départ choisi : ${demoFrom?.name ?: "non"} · aperçu : $previewing · ${simNote.ifBlank { "-" }}")
+            appendLine("Fichier des radars de France : ${RadarsFr.status}")
             appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · dernière recherche : ${Overpass.camNote.ifBlank { "aucune" }.take(160)} · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)}" + " · Nominatim : ${NominatimPoi.lastNote.ifBlank { "-" }} · zones : ${Zones.status.take(120)}")
             appendLine("Carte : ${try { map.styleNote } catch (e: Exception) { "?" }} · satellite : ${if (map.isSatellite) "oui" else "non"}")
             if (BisonFute.status.isNotBlank()) appendLine(BisonFute.status)
@@ -1730,7 +1751,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (pickDemoStart) {
             pickDemoStart = false
             val d = dest
-            if (d != null) { demoFrom = to0; toast("Départ de la démo : ${to0.name}", 2500); to = d }
+            if (d != null) { demoFrom = to0; if (!isCar) DemoLink.from = to0; toast("Départ de la démo : ${to0.name}", 2500); to = d }
         }
         val demoStart = demoFrom?.takeIf { prefs.b(PreferenceKeys.DEMO, false) && simMode == 0 }
         syncRoutePrefs(demoStart?.pos ?: fix?.pos ?: map.center(), to.pos)
@@ -2124,6 +2145,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      * seen twice, so passing a side road at a junction doesn't flash its limit.
      */
     private fun showLimit(r: Overpass.Limit, at: LL) {
+        if (walking) return
         val showEst = prefs.b(PreferenceKeys.LIMITEST, false)
         val v = if (r.ms <= 0.0 || (r.estimated && !showEst)) -1.0 else r.ms
         val cur = speedLimit ?: -1.0
@@ -2203,8 +2225,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             lastSpd = p.speed; lastSpdAt = now
         }
-        if (mgLimits()) try { applyMgLimit(p) } catch (e: Exception) { }
-        run {
+        // fork FR : à pied, ni limitation ni alerte de vitesse
+        if (walking) { if (speedLimit != null) speedLimit = null; overLimit = false }
+        else if (mgLimits()) try { applyMgLimit(p) } catch (e: Exception) { }
+        if (!walking) run {
             val lim = speedLimit
             val tolUnits = prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5").toIntOrNull() ?: 5
             val tol = tolUnits * (if (imperial) 0.44704 else 0.27778)
@@ -2273,7 +2297,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             camAt = now; camPos = p.pos
             // the cameras within 6 km: warned about as you approach, and drawn on the map (route or not)
             scope.launch {
-                val found = withContext(Dispatchers.IO) { localCameras(p.pos, 6000.0) ?: Overpass.cameras(p.pos, 6000) }
+                val found = withContext(Dispatchers.IO) { localCameras(p.pos, 6000.0)
+                    // fork FR : le fichier des radars de France (GitHub, hors ligne) avant Overpass, souvent saturé
+                    ?: (if (detectedCountry.isBlank() || detectedCountry == "FR") try { RadarsFr.cameras(ctx, p.pos, 6000.0)?.also { Overpass.camNote = "fichier France : ${it.size}" } } catch (e: Exception) { null } else null)
+                    ?: Overpass.cameras(p.pos, 6000) }
                 // a failed lookup (weak signal, busy server) keeps the ones already shown and tries again in about half a minute
                 if (found == null) { camAt = System.currentTimeMillis() - 90_000L; camPos = null }
                 else if (found.isEmpty() && aroundCams.isNotEmpty()) { camAt = System.currentTimeMillis() - 60_000L; camPos = null }
@@ -3379,7 +3406,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     /** Camera alerts are on: switched on in Settings, and not in a country that bans them (unless you've chosen to keep them there). */
-    fun camerasOn(): Boolean = prefs.b(PreferenceKeys.CAMERA_WARNINGS, true) && !(detectedCountry in CAMERA_BANNED && prefs.b(PreferenceKeys.CAMBANOBEY, true))
+    fun camerasOn(): Boolean = !walking && prefs.b(PreferenceKeys.CAMERA_WARNINGS, true) && !(detectedCountry in CAMERA_BANNED && prefs.b(PreferenceKeys.CAMBANOBEY, true))
 
     private var banNoted = ""
     /** Says once, on arriving in a country that bans camera warnings, that they've been switched off. */
@@ -5135,6 +5162,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun carEngine(): NavEngine? = if (isCar) null else try { com.headunit.launcher.car.ClusterLink.engine?.takeIf { it !== this } } catch (e: Exception) { null }
 
     private fun startSim(r: Route) {
+        demoIdleSince = 0L
         if (!isCar) DemoLink.phone = simMode
         carEngine()?.let { c -> val cr = c.route; if (cr != null && c.simMode == 0) { c.simMode = simMode; c.startSim(cr) } }
         simJob?.cancel()
@@ -5171,6 +5199,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Fork FR : la vitesse affichée au compteur : en démo accélérée, la vitesse « normale », sans le ×2 à ×8. */
     val shownSpeed: Double get() = (fix?.speed ?: 0.0) / maxOf(1, simMode)
+
+    /** Fork FR : le contexte de l'appli (notifications). */
+    val appCtx: Context get() = ctx
+
+    /** Fork FR : depuis quand la démo ne tourne plus alors qu'un départ de démo bloque la vraie position. */
+    private var demoIdleSince = 0L
 
     /** Fork FR : dernier souci de la démo, pour le rapport. */
     @Volatile var simNote = ""
@@ -5584,4 +5618,8 @@ object CarDiag {
 
 
 /** Fork FR : vitesse de la démo lancée sur le téléphone (0 : aucune), pour que l'écran Android Auto la suive dès que son trajet est prêt. */
-object DemoLink { @Volatile var phone = 0 }
+object DemoLink {
+    @Volatile var phone = 0
+    /** Le dernier départ de démo choisi sur le téléphone, proposé sur l'écran de la voiture. */
+    @Volatile var from: Place? = null
+}

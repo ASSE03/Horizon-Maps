@@ -554,6 +554,7 @@ private fun GuidanceSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Moment d'arrivée", "arrivalfx", true, "La caméra plonge vers votre destination et montre le parking le plus proche")
         SToggle(prefs, "Parking près de la destination", "parkprompt", true, (if (mi) "Environ un mile" else "Environ 1,5 km") + " avant l'arrivée, les parkings proches avec le temps de marche depuis chacun")
         SToggle(prefs, "Itinéraire retour", "routeback", true, "Sur la carte d'arrivée : un seul appui pour revenir à votre point de départ")
+        SToggle(prefs, "Notification « Voiture garée »", "parkednotice", true, "Quand Android Auto se déconnecte à l'arrêt : une notification avec l'heure et un bouton « À pied » pour revenir à la voiture")
     }
     SGroup("Autres écrans") {
         SToggle(prefs, "Direction suivante dans la notification", PreferenceKeys.TURN_NOTIF, true, "La flèche, la distance et la route dans la notification d'Horizon Nav pendant le guidage, pour les lanceurs de voiture, les montres et les écrans qui affichent les notifications de navigation")

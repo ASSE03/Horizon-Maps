@@ -247,6 +247,7 @@ class CarNavSession : Session() {
         map.onAlprTap = { who -> try { androidx.car.app.CarToast.makeText(carContext, "Caméra de lecture de plaques" + (if (who.isNotBlank()) " · $who" else ""), androidx.car.app.CarToast.LENGTH_SHORT).show() } catch (e: Exception) { } }
         // back in the car: the "Votre voiture" spot on the phone isn't needed any more
         try { prefs.put(PreferenceKeys.PARKED_SPOT, "") } catch (e: Exception) { }
+        com.headunit.launcher.ParkedNotice.cancel(carContext)
         holder.map = map; holder.engine = engine
         surface.engine = engine
         CarTicks.tick = { surface.tick() }
@@ -1112,6 +1113,29 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
         rows += Row.Builder().setTitle("Carte sur l'écran du conducteur")
             .addText(if (cluster) "Activée (sur les voitures compatibles) · touchez pour désactiver" else "Désactivée · touchez pour activer")
             .setOnClickListener { prefs.put(PreferenceKeys.CLUSTER_MAP, !cluster); invalidate() }.build()
+        // fork FR : la démo depuis l'écran de la voiture (Réglages du téléphone › bouton de trajet de démo)
+        if (prefs.b(PreferenceKeys.DEMO, false) && e != null) {
+            val sp = e.demoSpeed
+            rows += Row.Builder().setTitle("Vitesse de la démo")
+                .addText("×$sp · touchez pour changer (×1, ×2, ×4, ×8)")
+                .setOnClickListener { e.chooseDemoSpeed(when (sp) { 1 -> 2; 2 -> 4; 4 -> 8; else -> 1 }); invalidate() }.build()
+            val phoneFrom = com.headunit.launcher.DemoLink.from
+            val cur = e.demoFrom
+            rows += Row.Builder().setTitle("Départ de la démo")
+                .addText((cur?.name ?: "Ma position") + if (phoneFrom != null) " · touchez pour " + (if (cur == null) "partir de « ${phoneFrom.name.take(30)} » (choisi sur le téléphone)" else "partir de votre position") else " · choisissez un départ sur le téléphone")
+                .setOnClickListener {
+                    if (cur == null && phoneFrom != null) e.demoFrom = phoneFrom else e.demoFrom = null
+                    // l'itinéraire en aperçu est recalculé depuis le nouveau départ
+                    e.dest?.let { d -> if (e.previewing) e.startRoute(d) }
+                    invalidate()
+                }.build()
+            rows += Row.Builder().setTitle("Lancer la démo")
+                .addText(if (e.route != null) "Sur l'itinéraire choisi, à ×$sp" else "Choisissez d'abord une destination")
+                .setOnClickListener {
+                    if (e.route != null) { if (e.previewing) e.beginNavigation(); if (e.simMode == 0) e.cycleSim(); screenManager.pop() }
+                    else try { androidx.car.app.CarToast.makeText(carContext, "Choisissez d'abord une destination", androidx.car.app.CarToast.LENGTH_SHORT).show() } catch (x: Exception) { }
+                }.build()
+        }
         val max = limit.coerceIn(2, 12)
         val list = ItemList.Builder()
         val start = page * (max - 1)

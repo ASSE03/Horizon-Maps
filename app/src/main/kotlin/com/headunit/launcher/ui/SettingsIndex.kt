@@ -33,6 +33,7 @@ internal val settingsIndex = listOf(
     SettingRef("Feux tricolores", "", "Sur votre itinéraire", 1),
     SettingRef("Caméras de lecture de plaques", "Caméras Flock / LAPI sur la carte", "Sur votre itinéraire", 1),
     SettingRef("Icônes des radars et travaux", "Leurs icônes sur la carte", "Sur votre itinéraire", 1),
+    SettingRef("Notification « Voiture garée »", "Avec un bouton À pied, quand Android Auto se déconnecte", "Arrivée", 4),
     SettingRef("Taille des radars", "Badge rouge des radars sur la carte, plus grand ou plus petit", "Sur votre itinéraire", 1),
     SettingRef("Passages piétons", "Peints sur la route avec balises", "Sur votre itinéraire", 1),
     SettingRef("Panneaux stop", "Stops sur votre itinéraire, avec un signal sonore", "Sur votre itinéraire", 1),
