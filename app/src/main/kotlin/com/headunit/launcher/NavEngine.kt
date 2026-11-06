@@ -2207,7 +2207,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val lim = speedLimit
             val tolUnits = prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5").toIntOrNull() ?: 5
             val tol = tolUnits * (if (imperial) 0.44704 else 0.27778)
-            val over = prefs.b(PreferenceKeys.SPEEDWARN, true) && lim != null && !limitEstimated && p.speed > lim + tol && p.speed > 4.0
+            // (fork FR : en démo accélérée, la vitesse « normale », sans le ×2 à ×8)
+            val ps = p.speed / maxOf(1, simMode)
+            val over = prefs.b(PreferenceKeys.SPEEDWARN, true) && lim != null && !limitEstimated && ps > lim + tol && ps > 4.0
             overLimit = over
             if (over && soundMode != 2 && now - lastBeep > 9000) {
                 lastBeep = now
@@ -5157,6 +5159,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (!isCar) DemoLink.phone = 0
         }
     }
+
+    /** Fork FR : la vitesse affichée au compteur : en démo accélérée, la vitesse « normale », sans le ×2 à ×8. */
+    val shownSpeed: Double get() = (fix?.speed ?: 0.0) / maxOf(1, simMode)
 
     /** Fork FR : dernier souci de la démo, pour le rapport. */
     @Volatile var simNote = ""

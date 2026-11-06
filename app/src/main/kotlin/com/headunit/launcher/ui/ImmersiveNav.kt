@@ -805,7 +805,7 @@ private fun SpeedBlock(engine: NavEngine) {
             Modifier.width(78.dp).panel(8.dp, RoundedCornerShape(24.dp), c.surface).padding(vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("${Math.round((engine.fix?.speed ?: 0.0) * k)}", color = speedTint(engine) ?: c.text, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text("${Math.round(engine.shownSpeed * k)}", color = speedTint(engine) ?: c.text, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 1)
             Text(if (engine.imperial) "mph" else "km/h", color = c.sub, fontSize = 12.sp)
         }
         if (lim != null && !(show && engine.mirrored && !engine.isCar)) SpeedLimitSign(engine, 70.dp)
@@ -820,7 +820,7 @@ private fun SpeedBlock(engine: NavEngine) {
 private fun SpeedRing(engine: NavEngine, show: Boolean, k: Double) {
     val c = LocalVw.current
     val lim = engine.speedLimit
-    val sp = engine.fix?.speed ?: 0.0
+    val sp = engine.shownSpeed
     val full = if (lim != null && lim > 0) lim * 1.2 else 31.3          // the ring is full at 20% over the limit (or 70 mph with no limit)
     val target = (sp / full).toFloat().coerceIn(0f, 1f)
     val frac by androidx.compose.animation.core.animateFloatAsState(target, androidx.compose.animation.core.tween(350), label = "ring")
