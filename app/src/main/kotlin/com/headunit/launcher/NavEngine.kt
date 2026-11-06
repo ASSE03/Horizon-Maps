@@ -1035,7 +1035,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     private fun handleLocationInner(l: Location, first: Boolean) {
         // fork FR : limitations comme MG4Dash (OpenStreetMap seul, paquets France)
-        if (mgLimits()) try { MgSpeedLimit.init(ctx); MgSpeedLimit.onLocation(Location(l)) } catch (e: Exception) { }
+        // (pas pendant la démo : c'est la position simulée qui donne la limitation, sinon le panneau restait celui de chez vous)
+        if (mgLimits() && simMode == 0) try { MgSpeedLimit.init(ctx); MgSpeedLimit.onLocation(Location(l)) } catch (e: Exception) { }
         run {
             val t = System.currentTimeMillis()
             // where you are exactly (and which way you're facing), for the map to open right there next time
@@ -5150,6 +5151,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val demoSpeed = (if (td < 150) 7.0 else if (td < 400) 13.0 else if (td < 1200) 20.0 else 27.0) * simMode
                 simDist = min(cur.len, simDist + demoSpeed)
                 val (pt, hd) = pointAt(cur, simDist)
+                // fork FR : la démo donne aussi sa position aux limitations MG4Dash (le panneau restait celui du départ)
+                if (mgLimits()) try {
+                    MgSpeedLimit.init(ctx)
+                    MgSpeedLimit.onLocation(Location("demo").apply {
+                        latitude = pt.lat; longitude = pt.lon; bearing = hd.toFloat(); speed = (demoSpeed / maxOf(1, simMode)).toFloat()
+                        accuracy = 3f; time = System.currentTimeMillis()
+                    })
+                } catch (e: Exception) { }
                 // fork FR : une erreur sur une position ne bloque plus la démo (elle est notée dans le rapport)
                 try { onPosition(Fix(pt, hd, demoSpeed, 0.0), false) } catch (e: Exception) { simNote = "erreur à ${Math.round(simDist)} m : ${e.javaClass.simpleName} ${e.message?.take(80)}" }
                 if (simDist >= cur.len) break
