@@ -7,6 +7,7 @@ internal val settingsIndex = listOf(
     SettingRef("Jour et nuit", "", "Jour et nuit", 0),
     SettingRef("La nuit commence à", "", "Jour et nuit", 0),
     SettingRef("Le jour commence à", "", "Jour et nuit", 0),
+    SettingRef("Clair de lune la nuit", "Une lumière de lune bleue et rasante avec de longues ombres, la nuit", "Jour et nuit", 0),
     SettingRef("Source de la carte", "", "La carte", 0),
     SettingRef("Niveau de détail", "3D complète, Allégée ou Minimale", "La carte", 0),
     SettingRef("Zoom par défaut", "Votre zoom habituel hors itinéraire, et réinitialisation", "La carte", 0),
@@ -207,7 +208,7 @@ internal val settingsIndex = listOf(
     SettingRef("Work", "Définir ou effacer votre lieu de travail", "Lieux enregistrés", 7),
     SettingRef("Journal des trajets", "Chaque trajet, enregistré quand vous vous garez", "Journal des trajets", 7),
     SettingRef("Compteur et panneau de limitation", "Taille de la limitation et du compteur", "En conduite", 10),
-    SettingRef("Couleurs", "Mapbox, Horizon, crépuscule, pastel, gris ou les vôtres (personnalisé)", "La carte", 0),
+    SettingRef("Couleurs", "Mapbox, Horizon, crépuscule, pastel ou gris", "La carte", 0),
     SettingRef("Taille du texte et des boutons", "La taille de tout ce qui est à l'écran", "Tailles", 10),
     SettingRef("Vos lieux", "Vos lieux nommés : renommer, réordonner ou retirer", "Vos lieux", 7),
 )

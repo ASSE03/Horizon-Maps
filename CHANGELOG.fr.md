@@ -5,11 +5,13 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Clair de lune la nuit : un interrupteur dans Réglages › Aspect de la carte › Jour et nuit. Comme au crépuscule, mais sous la lune : la nuit, une lumière bleue pâle et rasante éclaire la carte d'un côté avec de longues ombres douces, à la place de l'éclairage de nuit uniforme de Mapbox. Désactivé au départ. (Remplace les couleurs personnalisées, retirées par Horizon Maps.)
+- Android Auto avec molette ou boutons : un bouton Lieux sur toutes les voitures, avec Rechercher en premier, puis les raccourcis carburant, restaurants, parkings et les lieux enregistrés, atteignables à la molette.
+- Réglages Android Auto pendant le guidage : le bouton Réglages reste affiché (Arrêter, Son, Signaler, Réglages) ; 2D / 3D passe en première ligne des réglages de la voiture.
 - Radars de France hors ligne : un fichier de tous les radars fixes (OpenStreetMap + liste officielle du ministère de l'Intérieur, environ 4 600 radars), mis à jour chaque semaine sur GitHub et gardé sur le téléphone. Les radars ne dépendent plus des serveurs Overpass, souvent saturés.
 - Notification « Voiture garée » : quand Android Auto se déconnecte à l'arrêt, une notification avec l'heure et un bouton « À pied » qui lance l'itinéraire piéton vers la voiture (désactivable dans Réglages › Arrivée).
 - Démo depuis l'écran de la voiture : dans les réglages Android Auto, la vitesse de la démo, le départ (votre position ou celui choisi sur le téléphone) et « Lancer la démo ».
 - Rapport : une ligne « État » en tête indique d'un coup d'œil ce qui marche ou non (carte, satellite, radars, limitation, Nominatim, Overpass, GPS).
-- Couleurs personnalisées : une vignette « Personnalisé » dans Réglages › Aspect de la carte › Couleurs, avec un éditeur par-dessus la carte en direct. Le jour et la nuit ont chacun leurs couleurs pour le sol, l'eau, les parcs, les routes, les grands axes, les bâtiments, les zones colorées et les textes, plus la luminosité de nuit, une teinte générale, des bâtiments lumineux et un halo au sol. On part du thème qu'on avait, donc rien ne change tant qu'on ne modifie rien. (Remplace les couleurs « Clair de lune », retirées par Horizon Maps.)
 - Taille des radars : un curseur dans Réglages › Sur la carte › Sur votre itinéraire, de 50 % à 350 %, pour agrandir ou réduire le badge rouge des radars sur la carte (téléphone, autoradio et Android Auto).
 - Couleurs « Crépuscule » : un nouveau choix dans Réglages › Aspect de la carte › Couleurs, les couleurs Horizon d'avant avec une nuit plus violette.
 - Retour à la voiture à pied : « À pied » sur la carte « Votre voiture » calcule maintenant un itinéraire piéton dans Horizon Nav (Mapbox) au lieu d'ouvrir une autre appli.

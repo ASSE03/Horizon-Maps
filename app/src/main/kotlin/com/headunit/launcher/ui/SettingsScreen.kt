@@ -68,7 +68,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.headunit.launcher.BuildConfig
-import com.headunit.launcher.CustomLook
 import com.headunit.launcher.FuelFinder
 import com.headunit.launcher.Geo
 import com.headunit.launcher.NavEngine
@@ -254,6 +253,8 @@ private fun MapLookSection(prefs: Prefs, engine: NavEngine) {
             SFieldItem("La nuit commence à", prefs.s(PreferenceKeys.NIGHT_FROM, "19:00"), "Format 24 h, par exemple 19:30", placeholder = "19:00") { prefs.put(PreferenceKeys.NIGHT_FROM, it.trim()) }
             SFieldItem("Le jour commence à", prefs.s(PreferenceKeys.DAY_FROM, "07:00"), "Format 24 h, par exemple 06:45", placeholder = "07:00") { prefs.put(PreferenceKeys.DAY_FROM, it.trim()) }
         }
+        if (prefs.mapSource() == "mapbox")
+            SToggle(prefs, "Clair de lune la nuit", PreferenceKeys.MOONLIT, false, "Comme au crépuscule, mais sous la lune : une lumière bleue rasante avec de longues ombres douces, à la place de l'éclairage de nuit uniforme de Mapbox. Le ciel de nuit et vos couleurs restent")
     }
     SGroup("La carte") {
         SChoice("Source de la carte", listOf("mapbox" to "Mapbox", "tomtom" to "TomTom", "osm" to "OpenStreetMap"), prefs.mapSource(),
@@ -261,18 +262,7 @@ private fun MapLookSection(prefs: Prefs, engine: NavEngine) {
         if (prefs.mapSource() == "mapbox") {
             SChoice("Niveau de détail", listOf("full" to "3D complète", "lite" to "Allégée", "lightest" to "Minimale"), prefs.mapDetail(),
                 "3D complète : bâtiments, monuments, arbres et ombres. Allégée : bâtiments plats, sans monuments ni ombres. Minimale : la carte 2D simplifiée de Mapbox, pour les autoradios lents") { prefs.put(PreferenceKeys.MAP_DETAIL, it) }
-            MapColoursPicker(prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")) { picked ->
-                val now = prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")
-                // Custom starts as the theme you had (nothing changes until you change something), unless you've made it your own before
-                if (picked == "custom" && now != "custom" &&
-                    CustomLook.parse(prefs.s(PreferenceKeys.CUSTOM_DAY, "")).isEmpty && CustomLook.parse(prefs.s(PreferenceKeys.CUSTOM_NIGHT, "")).isEmpty
-                ) prefs.put(PreferenceKeys.CUSTOM_BASE, now)
-                prefs.put(PreferenceKeys.MAP_COLOURS, picked)
-            }
-            if (prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox") == "custom")
-                SItem("Couleurs personnalisées", "Choisissez la couleur de chaque partie de la carte, de jour et de nuit, avec la carte affichée au fur et à mesure") {
-                    SButton("Modifier") { CustomEditState.open = true }
-                }
+            MapColoursPicker(prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")) { prefs.put(PreferenceKeys.MAP_COLOURS, it) }
         }
         DefaultZoomRow(prefs)
         SToggle(prefs, "Chemins et sentiers", "paths", true, "Désactivez pour une carte de conduite plus épurée")
@@ -1283,12 +1273,11 @@ private fun MapColoursPicker(value: String, onPick: (String) -> Unit) {
         Triple("mapbox", "Mapbox", listOf(0xFFEDEFE9, 0xFF9CCBF0, 0xFFC6E4B4, 0xFFFFFFFF, 0xFFDCDCE0)),
         Triple("horizon", "Horizon", listOf(0xFFF4F2EE, 0xFFAADAF5, 0xFFCDEBC4, 0xFFFFFFFF, 0xFFE7E5E1)),
         Triple("twilight", "Crépuscule", listOf(0xFFF1F0F5, 0xFFAAD4F5, 0xFFCDEBC4, 0xFFFFFFFF, 0xFFE5E3EA)),
-        Triple("custom", "Personnalisé", listOf(0xFF26304C, 0xFF2F6FB0, 0xFF3F7A5A, 0xFF8A93AE, 0xFFE0A84A)),
         Triple("faded", "Pastel", listOf(0xFFF1F1F1, 0xFFD9E2EA, 0xFFE2E8DE, 0xFFFFFFFF, 0xFFE6E6E6)),
         Triple("grey", "Gris", listOf(0xFFE8E8E8, 0xFFCFCFCF, 0xFFDADADA, 0xFFFFFFFF, 0xFFD4D4D4)),
     )
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        SItem("Couleurs", "Horizon : la carte Mapbox aux couleurs douces de l'appli, bleu ardoise la nuit. Crépuscule : la même avec une nuit plus violette. Personnalisé : vos propres couleurs. Couleurs de jour affichées ; chacune a une version de nuit")
+        SItem("Couleurs", "Horizon : la carte Mapbox aux couleurs douces de l'appli, bleu ardoise la nuit. Crépuscule : la même avec une nuit plus violette. Couleurs de jour affichées ; chacune a une version de nuit")
         Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             for ((id, name, cols) in sets) {
                 val sel = id == value

@@ -231,9 +231,9 @@ class CarNavSession : Session() {
         map.setCarModel(prefs.s(PreferenceKeys.CAR_MODEL, "saloon"))
         map.setRoadNameScale(prefs.i(PreferenceKeys.CAR_ROAD_NAME_SIZE, 100).coerceIn(70, 200) / 100f)
         val mapCols = prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")
-        map.setColours(if (mapCols == "custom") prefs.s(PreferenceKeys.CUSTOM_BASE, "mapbox") else mapCols)
-        map.setCustom(mapCols == "custom", prefs.s(PreferenceKeys.CUSTOM_DAY, ""), prefs.s(PreferenceKeys.CUSTOM_NIGHT, ""))
+        map.setColours(if (mapCols == "custom") prefs.s("custombase", "mapbox") else mapCols)
         map.setCameraSize(prefs.i(PreferenceKeys.CAM_SIZE, 100))
+        map.setMoonlight(prefs.b(PreferenceKeys.MOONLIT, false))
         map.setLogoCorner(prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"))
         map.setExtras(prefs.b(PreferenceKeys.FACADES, true), prefs.b(PreferenceKeys.LANDMARKS3D, true), prefs.b(PreferenceKeys.PATHS, true), prefs.b(PreferenceKeys.TERRAIN, false),
             false, prefs.b(PreferenceKeys.FURNITURE3D, true), prefs.b(PreferenceKeys.CLEARVIEW, true))
@@ -567,7 +567,6 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             strip.addAction(Action.Builder().setTitle("Annuler").setOnClickListener { e?.endRoute(); invalidate() }.build())
             return NavigationTemplate.Builder().setActionStrip(strip.build()).build()
         }
-        val taps = carContext.carAppApiLevel >= 5
         // voice guidance: all / alerts only / off (the same as the app's sound button)
         val soundIcon = when (e?.soundMode ?: 0) { 0 -> R.drawable.ic_car_sound_on; 1 -> R.drawable.ic_car_sound_alerts; else -> R.drawable.ic_car_sound_off }
         val sound = Action.Builder().setIcon(icon(soundIcon)).setOnClickListener { e?.cycleSound(); invalidate() }.build()
@@ -581,21 +580,19 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             strip.addAction(Action.Builder().setTitle("Garder").setOnClickListener { e?.dismissFaster(); invalidate() }.build())
             strip.addAction(sound)
         } else if (guiding) {
+            // only four fit: Settings stays while navigating (2D / 3D is the first row in it)
             strip.addAction(Action.Builder().setTitle("Arrêter").setOnClickListener { e?.endRoute(); invalidate() }.build())
             // the demo drive (for trying it out parked; only with Demo switched on in Settings, as in the app): starts it, speeds it
-            // up, stops it. Otherwise that space is the 2D / 3D button
+            // up, stops it. It has Report's place while it's on
             if (demoOn) strip.addAction(Action.Builder().setTitle(when (e?.simMode ?: 0) { 0 -> "Démo"; 1 -> "×2"; 2 -> "×4"; 4 -> "×8"; else -> "Fin de la démo" })
                 .setOnClickListener { e?.cycleSim(); invalidate() }.build())
-            else strip.addAction(view)
             strip.addAction(sound)
-            strip.addAction(reportAction())
-        } else if (taps) {
-            // cars that pass taps on use the app's own search bar and chips on the map, so Report has the Search button's place
-            strip.addAction(reportAction())
-            strip.addAction(view)
+            if (!demoOn) strip.addAction(reportAction())
             strip.addAction(Action.Builder().setIcon(icon(R.drawable.ic_car_settings)).setOnClickListener { openSettings() }.build())
         } else {
-            // cars that don't pass taps on: Report has the Search button's place, and Search is the first row in Places
+            // Report has the Search button's place, and Search is the first row in Places. Every car gets Places: a rotary knob or
+            // the car's buttons can only reach Android Auto's own buttons, never the search bar and chips the app draws on the map
+            // (cars that pass taps on still have those too)
             strip.addAction(reportAction())
             strip.addAction(Action.Builder().setTitle("Lieux").setOnClickListener { screenManager.push(PlacesScreen(carContext, holder)) }.build())
             strip.addAction(view)
@@ -1045,6 +1042,10 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
         // most needed first: some cars only allow a few rows in a list, so what doesn't fit goes on a second page ("More settings")
         // rather than being left off (the last rows used to be cut off altogether on those cars)
         val rows = ArrayList<Row>()
+        // 2D / 3D (its button gives way to Settings while navigating)
+        if (e != null) rows += Row.Builder().setTitle(if (e.tilt3d) "Vue : 3D" else "Vue : 2D")
+            .addText(if (e.tilt3d) "Touchez pour passer en 2D" else "Touchez pour passer en 3D")
+            .setOnClickListener { e.toggleTilt(); invalidate() }.build()
         val sm = e?.soundMode ?: prefs.i(PreferenceKeys.SOUND_MODE, 0)
         rows += Row.Builder().setTitle("Guidage vocal")
             .addText(listOf("Toutes les instructions et alertes", "Alertes seules (radars, limitations, dangers)", "Désactivé")[sm.coerceIn(0, 2)])
