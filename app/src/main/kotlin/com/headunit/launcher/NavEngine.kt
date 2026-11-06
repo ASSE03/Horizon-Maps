@@ -3042,7 +3042,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             } else {
                 glideRoute = null; glideOnRoute = false
                 // standing still: the arrow (and the map round it) stays where you stopped, facing the same way
-                val held = if (isStill) mPos else null
+                // fork FR : sauf si une position précise est nettement ailleurs : la flèche restait sur la route d'accès, recalée en
+                // roulant, alors que la voiture était garée au milieu d'un grand parking ; elle passe alors à la vraie position
+                val accOk = p.acc in 0.1..15.0
+                val held = if (isStill) mPos?.takeIf { !accOk || Geo.dist(it, p.pos) <= maxOf(15.0, p.acc * 2.0) } ?: (if (accOk) p.pos else mPos) else null
                 // fork FR : à l'arrêt ou au pas aussi (sinon la flèche d'une voiture garée reste à côté de la rue), mais seulement
                 // à 12 m au plus de la route et dans le dernier sens de marche, pour ne pas sortir une voiture d'un parking
                 mPos = held ?: if (prefs.b(PreferenceKeys.SNAPROAD, true)) {
