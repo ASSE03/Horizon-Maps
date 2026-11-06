@@ -45,6 +45,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Park
+import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.DirectionsWalk
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.geometry.Offset
@@ -325,6 +326,8 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
             val railItems = ArrayList<@Composable () -> Unit>()
             railItems.add(@Composable { ImmCompass(engine) })
             railItems.add(@Composable { ImmIcon(Icons.Rounded.Layers, { sheet = !sheet }, active = sheet, desc = "Options de la carte") })
+            // navigating: other ways to go, any time (as in Google Maps): shown in grey on the map with how they compare, tap one to switch
+            if (routing) railItems.add(@Composable { ImmIcon(Icons.Rounded.AltRoute, { engine.findAlternatives() }, desc = "Autres itinéraires") })
             if (!simple && (engine.prefs.b(PreferenceKeys.DEMO, false) || engine.simMode != 0)) railItems.add(@Composable { ImmIcon(Icons.Rounded.PlayArrow, { engine.cycleSim() }, active = engine.simMode != 0, desc = "Trajet de démo") })
             // zoom: hidden while the map is following you on the move (it zooms itself); back as soon as you touch or zoom the map, or
             // whenever you're stopped. (A little hysteresis on the speed, so it doesn't flicker at walking pace.)
@@ -388,6 +391,14 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
                 }
             }
         } else androidx.compose.runtime.SideEffect { engine.setPanel(2, 0f, 0f, 0f, 0f); if (buttonsWPx != 0) buttonsWPx = 0 }
+
+        // ---- the routes box, folded out beside the buttons by Other routes (as in Google Maps): your route and the other ways, with
+        // the time, arrival, distance, the road each goes by and the traffic; tap one to switch
+        if (!previewing && engine.altListOpen && engine.route != null) {
+            val besideRail = with(dens) { buttonsWPx.toDp() } + 26.dp
+            // (on a narrow, portrait screen there's no room beside the buttons: it sits in the middle instead)
+            Box(if (narrow) Modifier.align(Alignment.Center) else Modifier.align(side(Alignment.TopEnd)).sides(end = besideRail, top = 16.dp)) { RoutesBox(engine) }
+        }
 
         // ---- speed limit and speedometer: bottom right, or bottom left when mirrored for left-hand drive (the cards are on the
         // right then; keeping the speed on the right too put it under the turn card on shorter screens)
@@ -1380,6 +1391,68 @@ private fun ItineraryCard(engine: NavEngine) {
                     }
                 }
             }
+        }
+    }
+}
+
+/** The routes box (Other routes): your route first, then each other way, with how it compares. */
+@Composable
+private fun RoutesBox(engine: NavEngine) {
+    val c = LocalVw.current
+    val eta = engine.eta
+    val alts = engine.liveAlts
+    Column(Modifier.width(340.dp).panel(10.dp, RoundedCornerShape(22.dp), c.surface).padding(vertical = 8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Itinéraires", color = c.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(22.dp)).pressClick { engine.closeAlternatives() }, contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Close, "Fermer", tint = c.sub, modifier = Modifier.size(22.dp))
+            }
+        }
+        // yours
+        if (eta != null) RouteRow(
+            title = Geo.fmtDur(eta.secs), titleCol = c.text,
+            line2 = "Arrivée ${eta.arrive} · ${Geo.fmtDist(eta.dist, engine.imperial)}",
+            line3 = "Votre itinéraire" + (if (eta.delayMin >= 2) " · ${eta.delayMin} min de trafic" else ""), selected = true,
+        ) { engine.closeAlternatives() }
+        for ((i, a) in alts.withIndex()) {
+            val secs = (eta?.secs ?: 0.0) + a.diffMin * 60.0
+            val arrive = com.headunit.launcher.Clock.hm(System.currentTimeMillis() + (secs * 1000).toLong())
+            // distance: what's left of yours up to where it turns off, then the rest of its own
+            val split = a.route.cum.getOrNull(a.divIdx) ?: 0.0
+            val toSplit = (eta?.dist ?: 0.0) - ((engine.route?.len ?: 0.0) - a.divergeOff)
+            val dist = (toSplit.coerceAtLeast(0.0) + (a.route.len - split)).coerceAtLeast(0.0)
+            val via = a.route.steps.firstOrNull { it.off > split && it.street.isNotBlank() }?.street
+            val diff = when { a.diffMin < 0 -> "${-a.diffMin} min de moins"; a.diffMin > 0 -> "${a.diffMin} min de plus"; else -> "Même temps" }
+            val traffic = when (a.traffic) { -1 -> "Moins de trafic"; 1 -> "Plus de trafic"; else -> "Trafic comparable" }
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(c.line))
+            RouteRow(
+                title = "${Geo.fmtDur(secs)}  ·  $diff",
+                titleCol = if (a.diffMin < 0) Good else if (a.diffMin > 0) Warn else c.text,
+                line2 = "Arrivée $arrive · ${Geo.fmtDist(dist, engine.imperial)}",
+                line3 = (if (via != null) "Par $via · " else "") + traffic, selected = false,
+            ) { engine.switchToAlt(i) }
+        }
+        if (alts.isEmpty()) Text(
+            if (engine.altSearching) "Recherche d'autres itinéraires…" else "Aucun autre itinéraire pour le moment",
+            color = c.sub, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+        )
+        else Text("Touchez un itinéraire pour le prendre, ici ou sur la carte", color = c.sub, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
+    }
+}
+
+@Composable
+private fun RouteRow(title: String, titleCol: Color, line2: String, line3: String, selected: Boolean, onClick: () -> Unit) {
+    val c = LocalVw.current
+    Row(
+        Modifier.fillMaxWidth().pressClick(onClick).padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(4.dp).height(46.dp).clip(RoundedCornerShape(2.dp)).background(if (selected) c.accent else c.line))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = titleCol, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(line2, color = c.text, fontSize = 13.sp, maxLines = 1)
+            Text(line3, color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
     }
 }

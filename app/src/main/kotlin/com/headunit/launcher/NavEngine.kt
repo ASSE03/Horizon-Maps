@@ -1712,6 +1712,22 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val rects = ArrayList<Pair<LL, LL>>(sessionAvoid)
         val rings = ArrayList<List<LL>>()
         for ((sw, ne) in sessionAvoid) rings += listOf(sw, LL(sw.lat, ne.lon), ne, LL(ne.lat, sw.lon), sw)
+        // closed roads: kept off by every route source (a closure at the start or the destination itself is left out, or there'd be
+        // no route at all). TomTom gets a small box round each, Mapbox points along it, the offline router the boxes
+        val closedPts = ArrayList<LL>()
+        for (pts in closedRoads()) {
+            if (pts.isEmpty()) continue
+            if ((from != null && pts.any { Geo.dist(it, from) < 150.0 }) || (to != null && pts.any { Geo.dist(it, to) < 150.0 })) continue
+            var minLat = 90.0; var maxLat = -90.0; var minLon = 180.0; var maxLon = -180.0
+            for (q in pts) { minLat = min(minLat, q.lat); maxLat = max(maxLat, q.lat); minLon = min(minLon, q.lon); maxLon = max(maxLon, q.lon) }
+            val pad = 0.0003
+            val sw = LL(minLat - pad, minLon - pad); val ne = LL(maxLat + pad, maxLon + pad)
+            rects += sw to ne
+            rings += listOf(sw, LL(sw.lat, ne.lon), ne, LL(ne.lat, sw.lon), sw)
+            // the middle of a short closure, or a few points along a long one
+            if (pts.size <= 2) closedPts += pts.last() else { closedPts += pts[pts.size / 2]; closedPts += pts.first(); closedPts += pts.last() }
+        }
+        MapboxRest.avoidPoints = closedPts.take(25)
         if (prefs.b(PreferenceKeys.AVOIDZONES, false)) {
             for (z in Zones.all(ctx)) {
                 if ((from != null && Zones.inside(z, from)) || (to != null && Zones.inside(z, to))) continue
@@ -1921,6 +1937,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         lastReroute = System.currentTimeMillis()
         rerouting = true
         syncRoutePrefs(fix?.pos, d.pos); faster = null
+        // the new route's alternatives are looked for half a minute after it's found, not the usual couple of minutes
+        lastFasterCheck = System.currentTimeMillis() - 90_000L
         toast("Recalcul…", 2500)
         scope.launch {
             var err: String? = null
@@ -1984,7 +2002,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         turnArrowKey = -1; map.setTurnArrow(emptyList())
         clearLiveAlts(); liveSaid.clear(); radar = emptyList(); radarSig = 0; bendsFor = null; bends = emptyList()
         flushRoads()
-        sessionAvoid.clear(); routeZones = emptyList(); avgInfo = null; avgIn = null; servicesAhead = emptyList(); barEvents = emptyList()
+        sessionAvoid.clear(); closuresAvoided.clear(); altListOpen = false; routeZones = emptyList(); avgInfo = null; avgIn = null; servicesAhead = emptyList(); barEvents = emptyList()
         rawServices = emptyList(); servicesFor = null; rawHz = emptyList(); rawAvg = emptyList(); hzWinRoute = null; hzWinEnd = -1.0
         placed = null; placedSig = 0; avgAlerted.clear(); hzAlerted.clear(); zoneAlerted.clear(); stopsEditor = false
         map.setVias(emptyList()); chargeVias = emptyList()
@@ -2618,7 +2636,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         zoomOffset = 0.0
         rememberFreeZoom()
         fix?.let { onPosition(it, true) }
-        toast("C'est maintenant votre zoom par défaut. Modifiez-le ou réinitialisez-le dans Réglages > Aspect de la carte", 4500)
+        toast("C'est maintenant votre zoom par défaut. Modifiez-le ou réinitialisez-le dans Réglages › Style de la carte", 4500)
     }
 
     /** Phone: sends [p] to the paired head unit, which offers to start it (next time it's on, within 12 hours). */
@@ -3015,11 +3033,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         return true
     }
     private var stillFast = 0
+    /** The last direction of travel the GPS gave while really moving. */
+    private var goodHead: Double? = null
 
     private fun onPosition(p: Fix, force: Boolean) {
         fix = p
         val newFix = p !== lastMeasured
         if (newFix) isStill = try { stillCheck(p) } catch (e: Exception) { false }
+        // the GPS's direction is only worth anything when moving: slowing for a red light it swings about, and the arrow turned
+        // into the car park or plaza beside the road. Below walking pace the last good direction is kept
+        if (newFix && p.speed > 2.5) goodHead = p.heading
+        val headNow = if (p.speed > 2.5) p.heading else goodHead ?: p.heading
         // the speed used for the camera and the arrow: none while standing still
         val sp = if (isStill) 0.0 else p.speed
         // start/stop moving with a little hysteresis (the full map rests its shop labels while you drive)
@@ -3032,6 +3056,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             lastPosAt = tNow
             try { updateRoadInfo(p); trackParking(p) } catch (e: Exception) { android.util.Log.w("NavEngine", "road info failed", e) }
             try { checkArea(p.pos) } catch (e: Exception) { }
+            try { areaIncidents(p.pos) } catch (e: Exception) { }
             if (shortRoute) try { completeShortRoute() } catch (e: Exception) { }
         }
         // the first position of this session: the zoom you left the map at last time comes back (not on a route)
@@ -3076,23 +3101,22 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 // roulant, alors que la voiture était garée au milieu d'un grand parking ; elle passe alors à la vraie position
                 val accOk = p.acc in 0.1..15.0
                 val held = if (isStill) mPos?.takeIf { !accOk || Geo.dist(it, p.pos) <= maxOf(15.0, p.acc * 2.0) } ?: (if (accOk) p.pos else mPos) else null
-                // fork FR : à l'arrêt ou au pas aussi (sinon la flèche d'une voiture garée reste à côté de la rue), mais seulement
-                // à 12 m au plus de la route et dans le dernier sens de marche, pour ne pas sortir une voiture d'un parking
+                // kept on the road down to a crawl too, matched along the last good direction (Horizon Maps) ; fork FR : à l'arrêt
+                // aussi, mais seulement à 12 m au plus de la route, pour ne pas sortir une voiture d'un parking
                 mPos = held ?: if (prefs.b(PreferenceKeys.SNAPROAD, true)) {
-                    val moving = p.speed > 2.0
-                    val h = if (moving) p.heading else mHead
-                    val sn = Overpass.snapToRoad(p.pos, h) ?: map.snapToRoad(p.pos, h)
+                    val moving = p.speed > 0.5
+                    val sn = Overpass.snapToRoad(p.pos, headNow) ?: map.snapToRoad(p.pos, headNow)
                     if (sn != null && (moving || Geo.dist(sn, p.pos) <= 12.0)) sn else p.pos
                 } else p.pos
-                if (!isStill) mHead = p.heading
+                if (!isStill) mHead = headNow
                 val gp = gPos
-                if (gp == null || Geo.dist(gp, p.pos) > 150.0) { gPos = p.pos; gHead = p.heading }
+                if (gp == null || Geo.dist(gp, p.pos) > 150.0) { gPos = p.pos; gHead = headNow }
             }
         }
         ensureGlide()
         // camera target for this fix; the glide loop eases the shown camera towards it every frame
         if (!previewing && following) {
-            val hdg = if (onR && r != null && s != null) gHead else p.heading
+            val hdg = if (onR && r != null && s != null) gHead else headNow
             followCamera(Fix(gPos ?: p.pos, hdg, sp, p.alt, p.acc), onR)
         }
         if (previewing) return
@@ -3797,14 +3821,97 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    /** Road closures the route is being kept off this trip (id to the closed road's points). */
+    private val closuresAvoided = LinkedHashMap<String, List<LL>>()
+
+    /** Every closed road known now: on the route (and already being avoided) and round about. */
+    private fun closedRoads(): List<List<LL>> {
+        val out = ArrayList<List<LL>>(closuresAvoided.values)
+        val seen = HashSet(closuresAvoided.keys)
+        for (inc in nearIncidents) if (inc.cat.equals("roadclosed", true) && seen.add(inc.id)) out += inc.pts
+        for ((inc, _, _) in incMatches) if (inc.cat.equals("roadclosed", true) && seen.add(inc.id)) out += inc.pts
+        return out.take(20)
+    }
+
+    /** How far [q] is from the route [r] near [atOff] metres along it (the nearest stretch within 600 m either side). */
+    private fun distToRoute(r: Route, q: LL, atOff: Double): Double {
+        var best = Double.MAX_VALUE
+        val k = 111_320.0 * kotlin.math.cos(Math.toRadians(q.lat))
+        for (i in 0 until r.pts.size - 1) {
+            if (r.cum[i + 1] < atOff - 600 || r.cum[i] > atOff + 600) continue
+            val ax = (r.pts[i].lon - q.lon) * k; val ay = (r.pts[i].lat - q.lat) * 110_540.0
+            val bx = (r.pts[i + 1].lon - q.lon) * k; val by = (r.pts[i + 1].lat - q.lat) * 110_540.0
+            val dx = bx - ax; val dy = by - ay
+            val l2 = dx * dx + dy * dy
+            val t = if (l2 > 0) (-(ax * dx + ay * dy) / l2).coerceIn(0.0, 1.0) else 0.0
+            val cx = ax + dx * t; val cy = ay + dy * t
+            best = min(best, kotlin.math.sqrt(cx * cx + cy * cy))
+        }
+        return best
+    }
+
+    /**
+     * A closed road on the route ahead: the route is worked out again, keeping off it. Only when the closure really runs along the
+     * route (not a closed side road that just meets it at a junction), and once per closure, so a closure with no way round (the
+     * only road to where you're going) doesn't keep rerouting.
+     */
+    private fun avoidClosuresAhead(r: Route, found: List<Triple<Incident, Double, String>>, progress: Double) {
+        var hit: Incident? = null
+        for ((inc, off, _) in found) {
+            if (!inc.cat.equals("roadclosed", true) || inc.id in closuresAvoided) continue
+            if (off < progress + 30 || off > progress + 30_000) continue
+            val near = inc.pts.count { distToRoute(r, it, off) < 25.0 }
+            if (near < min(2, inc.pts.size)) continue
+            closuresAvoided[inc.id] = inc.pts
+            if (hit == null) hit = inc
+        }
+        if (hit == null) return
+        raiseAlert("incident", "Route fermée devant. Recherche d'un détour", 6000)
+        speak("Route fermée devant. Recherche d'un détour.", true)
+        reroute()
+    }
+
+    /** Roadworks and closures round about (from TomTom, with a key), shown on the map whether or not they're on your route. */
+    @Volatile private var nearIncidents: List<Incident> = emptyList()
+    private var nearIncAt = 0L
+    private var nearIncPos: LL? = null
+
+    /** Looks them up for about 7 km round you, every 5 minutes, or sooner once you've gone 4 km. */
+    private fun areaIncidents(pos: LL) {
+        if (!hasKey || !prefs.b(PreferenceKeys.INCIDENTS, true) || !prefs.b(PreferenceKeys.HAZARD_ICONS, true) || simMode != 0) {
+            if (nearIncidents.isNotEmpty()) { nearIncidents = emptyList(); pushHazards(hzProgress) }
+            return
+        }
+        val now = System.currentTimeMillis()
+        val moved = nearIncPos?.let { Geo.dist(it, pos) } ?: Double.MAX_VALUE
+        if (now - nearIncAt < 5 * 60_000L && moved < 4000.0) return
+        if (now - nearIncAt < 60_000L) return
+        nearIncAt = now; nearIncPos = pos
+        val dLat = 0.065; val dLon = 0.065 / kotlin.math.cos(Math.toRadians(pos.lat)).coerceAtLeast(0.2)
+        scope.launch {
+            val got = withContext(Dispatchers.IO) {
+                try { TomTomRest.incidents(apiKey, pos.lon - dLon, pos.lat - dLat, pos.lon + dLon, pos.lat + dLat) } catch (e: Exception) { null }
+            } ?: return@launch
+            nearIncidents = got.filter { it.cat.lowercase() in setOf("roadclosed", "roadworks", "laneclosed") }.take(80)
+            pushHazards(hzProgress)
+        }
+    }
+
     /** Pushes the camera, roadworks and closure icons for what is still ahead on the route (only when something changed). */
     private fun pushHazards(progress: Double) {
         hzProgress = progress
         val list = ArrayList<Pair<LL, Int>>()
         if (prefs.b(PreferenceKeys.HAZARD_ICONS, true)) {
             for (r in reportsActive()) list += r.pos to reportIcon(r.kind)
+            val shown = HashSet<String>()
             for ((inc, off, _) in incMatches) {
                 if (off <= progress - 20) continue
+                val k = when (inc.cat.lowercase()) { "roadclosed" -> 2; "roadworks", "laneclosed" -> 1; else -> -1 }
+                if (k >= 0) { list += inc.pts.first() to k; shown += inc.id }
+            }
+            // roadworks and closures round about, on the route or not (as Google Maps and Waze show them)
+            for (inc in nearIncidents) {
+                if (inc.id in shown || inc.pts.isEmpty()) continue
                 val k = when (inc.cat.lowercase()) { "roadclosed" -> 2; "roadworks", "laneclosed" -> 1; else -> -1 }
                 if (k >= 0) list += inc.pts.first() to k
             }
@@ -3851,7 +3958,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         }
                     } catch (e: Exception) { null }
                 }
-                if (found != null) { incMatches = found; try { applyIncidentSev(r, found) } catch (e: Exception) { } }
+                if (found != null) {
+                    incMatches = found
+                    try { applyIncidentSev(r, found) } catch (e: Exception) { }
+                    if (route === r && !previewing && simMode == 0) try { avoidClosuresAhead(r, found, curProgress) } catch (e: Exception) { }
+                }
             }
         }
         val next = incMatches.filter { it.second > progress - 30 }.minByOrNull { it.second }
@@ -3900,22 +4011,56 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     private fun p0Speed(): Double = fix?.speed ?: 0.0
 
-    /** Every few minutes while driving, asks for fresh routes and offers a different one if it saves a few minutes. */
-    private fun checkFaster(cur: Route, remainingSecs: Double) {
+    /**
+     * The "Autres itinéraires" button: asks for other ways to go now, shows them on the map in grey with how they compare (tap one to
+     * switch), and zooms out to show them. Says so when there aren't any.
+     */
+    fun findAlternatives() {
+        val r = route ?: return
+        if (previewing) return
+        // the routes box opens at once (with "Recherche d'autres itinéraires" until they come)
+        altListOpen = true
+        altSearching = true
+        // (already looking, every couple of minutes: that answer fills the box)
+        if (altBusy) return
+        checkFaster(r, Double.MAX_VALUE, force = true)
+    }
+    @Volatile private var altBusy = false
+    /** Closes the routes box, keeping your route, and goes back to following you. */
+    fun closeAlternatives() {
+        altListOpen = false
+        recenter(byUser = true)
+    }
+
+    /** The routes box beside the Other routes button: open, and still looking. */
+    var altListOpen by mutableStateOf(false)
+    var altSearching by mutableStateOf(false)
+
+    /**
+     * Every couple of minutes while driving, asks for fresh routes: the other ways stay on the map in grey with how they compare
+     * (Live alternatives), or a much faster one is offered. It used to skip the last 10 minutes of a trip, any time you were in slow
+     * traffic (under about 7 mph, when other routes matter most) and the first 3 minutes after a reroute, so they often didn't show.
+     */
+    private fun checkFaster(cur: Route, remainingSecs: Double, force: Boolean = false) {
         val now = System.currentTimeMillis()
         val f = fix ?: return
         val d = dest ?: return
-        val live = prefs.b(PreferenceKeys.LIVE_ALTERNATIVES, true)
-        if (previewing || simMode != 0 || faster != null || !prefs.b(PreferenceKeys.FASTER_ROUTE, true) || shadow()) return
-        if (remainingSecs < (if (live) 600 else 900) || now - lastFasterCheck < (if (live) 180_000L else 240_000L) || f.speed < 3.0) return
+        val live = force || prefs.b(PreferenceKeys.LIVE_ALTERNATIVES, true)
+        if (!force) {
+            if (previewing || simMode != 0 || faster != null || !prefs.b(PreferenceKeys.FASTER_ROUTE, true) || shadow() || altBusy) return
+            if (remainingSecs < (if (live) 300 else 900) || now - lastFasterCheck < (if (live) 120_000L else 240_000L)) return
+        }
         lastFasterCheck = now
+        altBusy = true
         val ahead = cur.pts.drop(lastIdx.coerceIn(0, max(0, cur.pts.size - 2))).filterIndexed { i, _ -> i % 3 == 0 }
         val viaPts = via.map { it.pos }
         scope.launch {
             try {
                 syncRoutePrefs(f.pos, d.pos)
-                val rs = withContext(Dispatchers.IO) { netRoutes(f.pos, d.pos, true, 0L, viaPts) }
-                if (rs.size < 2 || route !== cur) return@launch
+                // (both route services when there are keys for both, so there are more ways to choose from)
+                val rs = withContext(Dispatchers.IO) { netRoutes(f.pos, d.pos, true, 0L, viaPts, -1.0, false, askBoth = true) }
+                if (route !== cur) return@launch
+                if (rs.size < 2) return@launch
                 // how much of each candidate runs along the road we are already following
                 fun overlap(r: Route): Double {
                     val s = r.pts.filterIndexed { i, _ -> i % 10 == 0 }
@@ -3931,6 +4076,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     if (route !== cur) return@launch
                     liveAlts = list
                     map.setLiveAlts(list.map { it.line() }, list.map { it.bubble }, list.map { it.diffMin }, list.map { it.traffic })
+                    if (force && list.isNotEmpty()) showAlternatives(list.map { it.line() })
                     val best = list.minByOrNull { it.diffMin }
                     if (best != null && best.diffMin <= -3 && liveSaid.add(best.diffMin / 2)) speak("Un itinéraire plus rapide est disponible, ${-best.diffMin} minutes de gagnées. Touchez-le sur la carte pour en changer.", true)
                     return@launch
@@ -3944,8 +4090,22 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     delay(25_000)
                     if (faster === shown) { faster = null; lastFasterCheck = System.currentTimeMillis() + 300_000L }
                 }
-            } catch (e: Exception) { }
+            } catch (e: Exception) { if (force) toast("Impossible de chercher d'autres itinéraires", 3000) }
+            finally { altBusy = false; altSearching = false }
         }
+    }
+
+    /** Zooms out to your route and the other ways, for the Other routes button (back to following you after a while). */
+    private fun showAlternatives(lines: List<List<LL>>) {
+        val r = route ?: return
+        val pts = ArrayList<LL>()
+        fix?.pos?.let { pts += it }
+        pts += r.pts.drop(lastIdx.coerceIn(0, max(0, r.pts.size - 2))).filterIndexed { n, _ -> n % 8 == 0 }
+        for (l in lines) pts += l.filterIndexed { n, _ -> n % 8 == 0 }
+        pts += r.pts.last()
+        following = false
+        map.fit(pts)
+        scheduleRecentre(15_000)
     }
 
     private var curProgress = 0.0
@@ -4035,6 +4195,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Switches to one of the grey alternatives on the map. */
     fun switchToAlt(i: Int) {
         val a = liveAlts.getOrNull(i) ?: return
+        altListOpen = false
         val old = route; val oldProg = curProgress
         routes = listOf(a.route); active = 0
         said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0; liveSaid.clear()
@@ -4043,7 +4204,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         drawRoutes()
         updateRouteZones()
         toast(if (a.diffMin < 0) "Itinéraire changé : environ ${-a.diffMin} min de moins" else if (a.diffMin > 0) "Itinéraire changé : environ ${a.diffMin} min de plus" else "Itinéraire changé", 3000)
-        fix?.let { onPosition(it, true) }
+        // back to following you on the new route (the map had zoomed out to show the routes)
+        recenter(byUser = true)
         // the way you were going stays on the map as an alternative, with its card (the other way round: slower becomes faster)
         if (old != null && old !== a.route && prefs.b(PreferenceKeys.LIVE_ALTERNATIVES, true)) {
             val nr = a.route

@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
         SessionWatch.resumed(applicationContext)
         if (sessionStep > 0) window.decorView.postDelayed({ try { engine.toast(SessionWatch.message(sessionStep), 12_000) } catch (e: Throwable) { } }, 5000L)
         if (safeLevel > 0) window.decorView.postDelayed({
-            try { engine.toast(if (safeLevel >= 2) "Horizon Nav a eu du mal à démarrer, la carte est donc en mode Minimale. Modifiable dans Réglages > Aspect de la carte" else "Horizon Nav a eu du mal à démarrer, les fonctions 3D les plus lourdes sont donc désactivées. Réactivables dans Réglages > Aspect de la carte et Sur la carte", 10_000) } catch (e: Throwable) { }
+            try { engine.toast(if (safeLevel >= 2) "Horizon Nav a eu du mal à démarrer, la carte est donc en mode Minimale. Modifiable dans Réglages › Style de la carte" else "Horizon Nav a eu du mal à démarrer, les fonctions 3D les plus lourdes sont donc désactivées. Réactivables dans Réglages › Lumière et 3D et Sur la carte", 10_000) } catch (e: Throwable) { }
         }, 4000L)
 
         setContent { App(prefs, engine, map) }

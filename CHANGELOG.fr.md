@@ -5,7 +5,12 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
-- Clair de lune la nuit : un interrupteur dans Réglages › Aspect de la carte › Jour et nuit. Comme au crépuscule, mais sous la lune : la nuit, une lumière bleue pâle et rasante éclaire la carte d'un côté avec de longues ombres douces, à la place de l'éclairage de nuit uniforme de Mapbox. Désactivé au départ. (Remplace les couleurs personnalisées, retirées par Horizon Maps.)
+- Bouton Autres itinéraires : pendant le guidage, un bouton sur la carte (sous les options de la carte) ouvre une liste d'itinéraires, comme dans Google Maps : le vôtre et chaque autre trajet avec son temps, la comparaison, l'heure d'arrivée, la distance, la route empruntée et le trafic. Touchez-en un dans la liste ou sur la carte (en gris) pour le prendre. Sur Android Auto, c'est la première ligne des réglages, dans une liste qu'on choisit au toucher ou à la molette.
+- Travaux et routes fermées autour de vous : avec une clé TomTom, les travaux et fermetures dans un rayon d'environ 7 km s'affichent sur la carte, avec ou sans itinéraire, comme dans Google Maps et Waze.
+- Plus de couleurs de carte : Braise (chaude et sombre), Nuit monochrome (des gris, seuls l'itinéraire et les alertes en couleur), Forêt, Arctique, Contraste élevé, Sépia, Néon, Pastel doux, et Assorties à ma voiture (une touche de la couleur de l'éclairage intérieur, avec son intensité). Dans Réglages › Style de la carte › Couleurs.
+- Lumière et météo : un nouveau groupe dans Réglages › Lumière et 3D, avec la luminosité de nuit, le clair de lune (déplacé ici) et son intensité, les ombres, le soleil à sa vraie place (le jour, la lumière et les ombres viennent de la vraie position du soleil), la lumière voilée (douce, sans ombres dures) et la lumière selon la météo (plus grise quand il pleut). Tout reste comme avant au départ.
+- Aperçu en direct dans les réglages : les pages de style, de lumière, de ce qui est sur la carte et de la flèche montrent la vraie carte en haut, avec des boutons Jour / Nuit pour voir le rendu de nuit en plein jour.
+- Images dans les réglages : les styles de voies, la position de la vitesse et les repères de position se choisissent sur de petites images.
 - Android Auto avec molette ou boutons : un bouton Lieux sur toutes les voitures, avec Rechercher en premier, puis les raccourcis carburant, restaurants, parkings et les lieux enregistrés, atteignables à la molette.
 - Réglages Android Auto pendant le guidage : le bouton Réglages reste affiché (Arrêter, Son, Signaler, Réglages) ; 2D / 3D passe en première ligne des réglages de la voiture.
 - Radars de France hors ligne : un fichier de tous les radars fixes (OpenStreetMap + liste officielle du ministère de l'Intérieur, environ 4 600 radars), mis à jour chaque semaine sur GitHub et gardé sur le téléphone. Les radars ne dépendent plus des serveurs Overpass, souvent saturés.
@@ -31,6 +36,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Réglages réorganisés : Aspect de la carte est séparé en Style de la carte (couleurs, jour et nuit, détail) et Lumière et 3D (lumière et météo, 3D, inclinaison, ciel). Les panneaux en verre et la position du logo Mapbox passent dans Écran et tailles. La recherche des réglages trouve tout à sa nouvelle place, et les réglages se rouvrent là où vous les aviez laissés.
+- Autres itinéraires en direct : cherchés toutes les 2 minutes (au lieu de 3), aussi dans les bouchons, jusqu'aux 5 dernières minutes du trajet, 30 secondes après un recalcul, et auprès des deux services quand vous avez les deux clés.
 - Arrêt recharge sur le trajet : la carte de trajet indique aussi la batterie estimée en arrivant à la borne (« à la borne »).
 - Voiture électrique : la carte de trajet affiche la batterie estimée maintenant à côté de celle à l'arrivée (relue dans Home Assistant si configuré, sinon calculée depuis la charge de départ), comme ABRP. Aussi sur l'écran Android Auto.
 - À pied : ni panneau de limitation, ni alerte de vitesse, ni radars pendant un itinéraire piéton.
@@ -48,6 +55,9 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Itinéraires par des routes fermées : une fermeture sur votre itinéraire devant fait chercher un détour, et les fermetures connues aux alentours sont écartées des nouveaux itinéraires (TomTom, Mapbox et hors ligne). Une fermeture sans détour possible (seule route vers la destination) reste utilisée.
+- Android Auto en écran partagé : avec Horizon Nav dans la petite partie de l'écran, la carte n'était pas centrée et l'itinéraire et les cartes sortaient de l'écran. La carte s'adapte maintenant à la place donnée par Android Auto.
+- Flèche qui quittait la route aux feux : en ralentissant, la direction du GPS varie et la flèche partait dans un parking ou une place à côté. Elle garde maintenant votre dernière vraie direction et reste sur la route jusqu'au pas.
 - Cartes hors ligne : le bouton « Enregistrer » d'« Autour du domicile » n'est plus coupé (il passe sous le choix de distance).
 - Démo : le panneau de limitation suit le trajet simulé (limitations MG4Dash) au lieu de rester sur celle du départ.
 - Carte de direction : la ligne « Puis tournez … sur … » passe sur deux lignes au lieu d'être coupée.
