@@ -925,8 +925,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val pos = fix?.pos ?: prefs.s(PreferenceKeys.LASTLAT, "").toDoubleOrNull()?.let { la -> prefs.s(PreferenceKeys.LASTLON, "").toDoubleOrNull()?.let { lo -> LL(la, lo) } }
         val ph = pos?.let { Sun.phase(it.lat, it.lon, System.currentTimeMillis()) } ?: ""
         return when {
-            ph == "dawn" || ph == "dusk" -> ph
+            // fork FR : l'aube et le crépuscule seulement quand l'écran est en mode jour : l'aube (carte claire et rosée) commençait
+            // 40 minutes avant le lever du soleil, en pleine nuit noire, alors que le reste de l'écran était encore en sombre
             dark -> "night"
+            ph == "dawn" || ph == "dusk" -> ph
             else -> "day"
         }
     }
