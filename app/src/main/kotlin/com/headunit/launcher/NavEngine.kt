@@ -4619,6 +4619,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         return Math.round(start - driven / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(0, 100)
     }
 
+    /** Fork FR : la batterie estimée en arrivant au prochain arrêt recharge du trajet (null s'il n'y en a pas devant). */
+    fun evChargerPct(): Int? {
+        val now = evNowPct() ?: return null
+        val r = route ?: return null
+        val off = chargeVias.mapNotNull { RouteExtras.project(r, it, 300.0)?.first }.filter { it > curProg + 100.0 }.minOrNull() ?: return null
+        return Math.round(now - (off - curProg) / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(-50, 100)
+    }
+
     /** Roughly how much battery (%) you'll arrive with: the charge you set before the trip, less what's been driven and what's left. */
     fun evArrivalPct(): Int? {
         if (!isEv) return null
