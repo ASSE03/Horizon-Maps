@@ -44,6 +44,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Cartes hors ligne : le bouton « Enregistrer » d'« Autour du domicile » n'est plus coupé (il passe sous le choix de distance).
 - Démo : le panneau de limitation suit le trajet simulé (limitations MG4Dash) au lieu de rester sur celle du départ.
 - Carte de direction : la ligne « Puis tournez … sur … » passe sur deux lignes au lieu d'être coupée.
 - Voiture garée dans un grand parking : la flèche ne reste plus sur la route d'accès ; à l'arrêt, elle rejoint la vraie position dès qu'une position GPS précise est nettement ailleurs.

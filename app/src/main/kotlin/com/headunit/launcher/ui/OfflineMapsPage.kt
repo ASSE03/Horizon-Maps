@@ -40,8 +40,10 @@ private fun MapboxOfflineGroup(prefs: Prefs, engine: NavEngine) {
         androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Segmented(listOf("15" to "15 km", "30" to "30 km", "50" to "50 km"), km.toString()) { prefs.put(PreferenceKeys.MBHOMEKM, it) }
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-            if (home != null && engine.hasMapbox) SButton(if (off.busy?.startsWith("Autour du domicile") == true) "Enregistrement…" else "Enregistrer", primary = true) { off.saveHome(ctx, home.pos, km) }
+        }
+        // fork FR : « Enregistrer » sur sa propre ligne (à côté du choix de distance, il était coupé : « Enregi »)
+        if (home != null && engine.hasMapbox) androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+            SButton(if (off.busy?.startsWith("Autour du domicile") == true) "Enregistrement…" else "Enregistrer", primary = true) { off.saveHome(ctx, home.pos, km) }
         }
         val r = engine.route
         SItem("Enregistrer la carte de cet itinéraire", if (r == null) "Calculez d'abord un itinéraire" else engine.offlineRouteName() + " · une bande le long de l'itinéraire · environ ${off.routeMb(r.len)} Mo") {
