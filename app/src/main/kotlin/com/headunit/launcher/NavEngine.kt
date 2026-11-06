@@ -1249,6 +1249,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 appendLine("Mapbox token: ${t.take(3)}… $shape" + (if (mbCheckNote.isNotBlank()) " · $mbCheckNote" else "") + (if (mbKeyRefused) " · refused" else ""))
             }
             appendLine("Démo : ×$simMode · ${Math.round(simDist)} m sur ${route?.len?.let { Math.round(it) } ?: 0} · départ choisi : ${demoFrom?.name ?: "non"} · aperçu : $previewing · ${simNote.ifBlank { "-" }}")
+            appendLine("Adresses (BAN) : ${BanAddr.lastNote.ifBlank { "-" }}")
             appendLine("Fichier des radars de France : ${RadarsFr.status}")
             appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · dernière recherche : ${Overpass.camNote.ifBlank { "aucune" }.take(160)} · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)}" + " · Nominatim : ${NominatimPoi.lastNote.ifBlank { "-" }} · zones : ${Zones.status.take(120)}")
             appendLine("Carte : ${try { map.styleNote } catch (e: Exception) { "?" }} · satellite : ${if (map.isSatellite) "oui" else "non"}")
@@ -1644,7 +1645,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             // the online search and the saved / downloaded places run at the same time, and their results are merged
             val localJob = async { offlineMatches(q, near) }
-            val net = try { withContext(Dispatchers.IO) { netGeocode(countryCode(), q, near) } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+            val banJob = async(Dispatchers.IO) { banSearch(q, near) }
+            val net0 = try { withContext(Dispatchers.IO) { netGeocode(countryCode(), q, near) } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+            val net = withBan(q, net0, kotlinx.coroutines.withTimeoutOrNull(4000L) { banJob.await() } ?: emptyList())
             // the online results are shown straight away if the downloaded lists are still being searched; those are merged in after
             var local = kotlinx.coroutines.withTimeoutOrNull(500L) { localJob.await() }
             if (local == null) {
@@ -1659,6 +1662,22 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    /** Fork FR : la Base Adresse Nationale, en France seulement. */
+    private fun banSearch(q: String, near: LL?): List<Place> {
+        val cc = countryCode()
+        if (cc.isNotBlank() && cc != "FR") return emptyList()
+        if (!q.any { it.isLetter() }) return emptyList()
+        return try { BanAddr.search(q, near) } catch (e: Exception) { emptyList() }
+    }
+
+    /** Fork FR : les adresses de la BAN ajoutées aux résultats en ligne (en tête pour une adresse avec un numéro), sans doublon. */
+    private fun withBan(q: String, net: List<Place>?, ban: List<Place>): List<Place>? {
+        if (ban.isEmpty()) return net
+        val base = net ?: emptyList()
+        val extra = ban.filter { b -> base.none { Geo.dist(it.pos, b.pos) < 40.0 } }
+        return if (q.trim().firstOrNull()?.isDigit() == true) extra + base else base + extra
+    }
+
     /** Search used by the stops editor: the same sources as the search box, returned instead of shown. */
     suspend fun findPlaces(q: String): List<Place> {
         val near = fix?.pos ?: map.center()
@@ -1666,7 +1685,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // both at once, as in the main search
         return kotlinx.coroutines.coroutineScope {
             val localJob = async { offlineMatches(q, near) }
-            val net = try { withContext(Dispatchers.IO) { netGeocode(countryCode(), q, near) } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+            val banJob = async(Dispatchers.IO) { banSearch(q, near) }
+            val net0 = try { withContext(Dispatchers.IO) { netGeocode(countryCode(), q, near) } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+            val net = withBan(q, net0, kotlinx.coroutines.withTimeoutOrNull(4000L) { banJob.await() } ?: emptyList())
             rankResults(q, near, net ?: emptyList(), localJob.await())
         }
     }
