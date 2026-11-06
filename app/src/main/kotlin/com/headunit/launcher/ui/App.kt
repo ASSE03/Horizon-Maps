@@ -319,7 +319,8 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) {
                     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         val narrow = maxWidth < 720.dp
                         Box(
-                            if (narrow) Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 250.dp)
+                            // (fork FR : en guidage, au-dessus du compteur, qu'elle recouvrait avec la carte de trajet plus haute)
+                            if (narrow) Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = if (engine.route != null && !engine.previewing) 340.dp else 250.dp)
                             else Modifier.align(Alignment.TopStart).fillMaxWidth().padding(start = if (engine.mirrored) 290.dp else 412.dp, end = if (engine.mirrored) 412.dp else 290.dp, top = 16.dp),
                             contentAlignment = if (narrow) Alignment.BottomCenter else Alignment.TopCenter,
                         ) {

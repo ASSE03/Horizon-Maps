@@ -56,6 +56,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Téléphone en portrait : pendant le guidage, l'alerte (radar, danger…) s'affiche au-dessus du compteur au lieu de le recouvrir.
 - Bouchons non pris en compte dans le trajet : un bouchon pouvait être annoncé sans que le temps restant augmente ni que le tracé passe en orange ou en rouge. Les détails des incidents TomTom étaient mal lus, et un bouchon sans retard indiqué était ignoré. Maintenant, chaque bouchon devant colore le tracé (orange, rouge s'il est important), et son retard est ajouté au temps restant quand le trafic de l'itinéraire ne le compte pas déjà.
 - Travaux et fermetures TomTom non reconnus : à cause de la même erreur de lecture, ils n'étaient ni évités ni affichés aux alentours. Corrigé avec le point précédent.
 - Écran figé non pris en compte : quand la carte bloquait l'écran et qu'Android fermait l'appli, ce n'était pas compté, donc le dessin de la carte n'était jamais allégé pour cet appareil. Un blocage compte maintenant, et allège le dessin d'un cran dès le démarrage suivant, avec un message.
