@@ -2963,7 +2963,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val kLon = 111320.0 * cos(Geo.rad(gp.lat))
             // fork FR : en plein virage, l'avance en ligne droite envoyait la flèche tout droit au-delà du carrefour : elle est réduite
             val turning = abs(angDiff(mHead, gHead)) > 20.0
-            val ahead = age + if (turning) lead * 0.3 else lead
+            val ahead = age + if (turning) 0.0 else lead
             val predLat = (mp.lat) + cos(rad) * gSpeed * ahead / 110574.0
             val predLon = (mp.lon) + Math.sin(rad) * gSpeed * ahead / kLon
             var nLat = gp.lat + cos(rad) * gSpeed * dt / 110574.0
@@ -2972,6 +2972,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (hypot(eN, eE) > 80.0) { nLat = predLat; nLon = predLon }
             else { val k = 1.0 - Math.exp(-dt / 0.9); nLat += (predLat - nLat) * k; nLon += (predLon - nLon) * k }
             gPos = LL(nLat, nLon)
+            // fork FR : la position affichée est elle-même recalée sur la route, image par image : prolongée en ligne droite, elle
+            // sortait de la chaussée dans les ronds-points et les virages serrés (Waze et Google Maps la gardent sur la route)
+            if (mSpeed > 1.0 && prefs.b(PreferenceKeys.SNAPROAD, true)) try {
+                map.snapToRoad(LL(nLat, nLon), gHead, if (turning) 70.0 else 40.0, 15.0)?.let { gPos = it }
+            } catch (e: Exception) { }
             if (mSpeed > 1.5) gHead = easeAngle(gHead, mHead, dt, if (turning) 0.2 else 0.35)
             lookB = gHead
         }

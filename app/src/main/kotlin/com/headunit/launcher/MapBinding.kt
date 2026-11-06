@@ -4044,14 +4044,14 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
      * Moves a GPS position onto the nearest drawn road that runs the way you are heading, or returns null when none is close enough.
      * It never waits on the map: it uses the roads the map last reported (the engine tries the speed-limit roads first anyway).
      */
-    fun snapToRoad(p: LL, heading: Double): LL? {
+    fun snapToRoad(p: LL, heading: Double, maxAngle: Double = 35.0, maxDist: Double = 24.0): LL? {
         val segs = roadSegs
         if (segs.isEmpty() || android.os.SystemClock.uptimeMillis() - roadSegsAt > 20_000L) return null
         return try {
             val k = Math.cos(Math.toRadians(p.lat)) * 111320.0
             val k2 = 110574.0
             var best: LL? = null
-            var bd = 24.0
+            var bd = maxDist
             for (pts in segs) {
                 for (i in 0 until pts.size - 1) {
                     val ax = (pts[i].longitude() - p.lon) * k; val ay = (pts[i].latitude() - p.lat) * k2
@@ -4067,7 +4067,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                     val segB = (Math.toDegrees(Math.atan2(dx, dy)) + 360.0) % 360.0
                     var diff = Math.abs(segB - heading) % 360.0
                     if (diff > 180.0) diff = 360.0 - diff
-                    if (diff > 35.0 && diff < 145.0) continue
+                    if (diff > maxAngle && diff < 180.0 - maxAngle) continue
                     bd = d
                     best = LL(p.lat + (ay + dy * t) / k2, p.lon + (ax + dx * t) / k)
                 }

@@ -56,6 +56,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Flèche qui sortait de la route dans les ronds-points et les virages serrés (sans itinéraire) : la position affichée est recalée sur la route à chaque image, et n'est plus prolongée en ligne droite pendant un virage.
 - Itinéraires par des routes fermées : une fermeture sur votre itinéraire devant fait chercher un détour, et les fermetures connues aux alentours sont écartées des nouveaux itinéraires (TomTom, Mapbox et hors ligne). Une fermeture sans détour possible (seule route vers la destination) reste utilisée.
 - Android Auto en écran partagé : avec Horizon Nav dans la petite partie de l'écran, la carte n'était pas centrée et l'itinéraire et les cartes sortaient de l'écran. La carte s'adapte maintenant à la place donnée par Android Auto.
 - Flèche qui quittait la route aux feux : en ralentissant, la direction du GPS varie et la flèche partait dans un parking ou une place à côté. Elle garde maintenant votre dernière vraie direction et reste sur la route jusqu'au pas.
