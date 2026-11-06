@@ -1,0 +1,99 @@
+---
+Horizon Nav 1.0.82 (public)
+Unit: samsung SM-S921B, Android 17 (API 37), screen 1080x2093
+Country: FR · map: mapbox · TomTom key: yes · Mapbox token: yes · routes from: mapbox · online: yes
+Offline area: none
+Frame rate: auto · map detail: full · driving side: left-hand
+Night signals: system setting auto · screen night since 06:52:31 · config night since 06:52:31 · setting day since 06:52:31 · theme sun
+Heat: moderate
+Chip: s5e9945 / s5e9945 / s5e9945 · safer drawing step 0 · fast map drawing: on
+Last session didn't close normally: open 0 min 30 s, the app was closed by Android (the unit kept running). Speed then: 0 mph. Last note (Fri Nov 06 06:33:44 GMT+01:00 2026): app memory 37 MB + native 91 MB; unit free 2053 of 7223 MB; 
+Android Auto screen: 1802x596, visible 23,100,1684,582 · 
+Mapbox token: pk.… looks whole
+Démo : ×0 · 0 m sur 0 · départ choisi : non · aperçu : false · -
+Radars : activés · 1 autour · 1 affichés · dernière recherche : maps ok : 1 · OpenStreetMap : maps ok · Nominatim : - · zones : 
+Carte : mapbox://styles/mapbox/standard · satellite : non
+Mises à jour :
+05/11 19:01:58 installation lancée vers com.google.android.packageinstaller (content://downloads/all_downloads/2150)
+05/11 19:02:31 installé : 1.0.78
+05/11 19:02:32 supprimé de Téléchargements : HorizonNav-1.0.78.apk
+05/11 20:44:52 téléchargé et vérifié 1.0.80 (79225771 octets)
+05/11 20:44:52 installation lancée vers com.google.android.packageinstaller (content://downloads/all_downloads/2152)
+05/11 20:45:21 installé : 1.0.80
+05/11 20:45:22 supprimé de Téléchargements : HorizonNav-1.0.80.apk
+05/11 22:11:12 téléchargé et vérifié 1.0.81 (79225607 octets)
+05/11 22:11:12 installation lancée vers com.google.android.packageinstaller (content://downloads/all_downloads/2153)
+05/11 22:11:40 installé : 1.0.81
+05/11 22:11:41 supprimé de Téléchargements : HorizonNav-1.0.81.apk
+06/11 06:33:22 téléchargé et vérifié 1.0.82 (79258499 octets)
+06/11 06:33:22 installation lancée vers com.google.android.packageinstaller (content://downloads/all_downloads/2154)
+06/11 06:33:53 installé : 1.0.82
+06/11 06:33:53 supprimé de Téléchargements : HorizonNav-1.0.82.apk
+Test direct Mapbox : 06:43:59 satellite : HTTP 429 {"message":"Too Many Requests"} x-rate-limit-limit=-1 · carte : HTTP 429 {"message":"Too Many Requests"} x-rate-limit-limit=600 · style satellite : HTTP 200
+
+Erreurs de chargement de la carte :
+06:43:59 Tile · mapbox-hd-roadsbasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-hd · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · mapbox-hd-roadsbasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-hd · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-hd · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · mapbox-hd-roadsbasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-hd · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · mapbox-hd-roadsbasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-hd · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · mapbox-hd-roadsbasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-hd · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · mapbox-hd-roadsbasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · dl-hd · Failed to load tile: HTTP status code 429. Too Many Requests
+06:43:59 Tile · mapbox-hd-roadsbasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+Total par erreur depuis l'ouverture :
+36 × Tile · mapbox-hd-roadsbasemap · Failed to load tile: HTTP status code 429. Too Many Requests
+15 × Tile · dl-hd · Failed to load tile: HTTP status code 429. Too Many Requests
+9 × Tile · dl-traffic-src · Failed to load tile: HTTP status code 429. Too Many Requests
+Limitations (MG4Dash) : 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · unclassified (paquet OSM) · position fused ±3 m à 06:52:55 · tuiles 2/2 (stockage 0, réseau 0) · aucune tuile chargée
+
+Limitations (dernières) :
+05/11 19:02:35 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 277 ms) · 96 en ligne · residential (paquet OSM) · position gps ±24 m à 19:02:35 · tuiles 4/4 ( @ 45.28772,4.62694
+05/11 20:43:23 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28778,4.62708
+05/11 20:43:31 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 228 ms) · 96 en ligne · residential (paquet OSM) · position gps ±22 m à 20:43:31 · tuiles 4/4 ( @ 45.28776,4.62710
+05/11 20:44:46 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28774,4.62708
+05/11 20:44:52 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 206 ms) · 96 en ligne · residential (paquet OSM) · position gps ±12 m à 20:44:52 · tuiles 4/4 ( @ 45.28775,4.62699
+05/11 20:45:22 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28774,4.62708
+05/11 20:45:25 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 244 ms) · 96 en ligne · residential (paquet OSM) · position gps ±26 m à 20:45:25 · tuiles 4/4 ( @ 45.28775,4.62712
+05/11 22:10:16 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28774,4.62712
+05/11 22:10:20 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 224 ms) · 96 en ligne · residential (paquet OSM) · position gps ±55 m à 22:10:20 · tuiles 4/4 ( @ 45.28779,4.62731
+05/11 22:11:41 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28773,4.62710
+05/11 22:11:44 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 378 ms) · 96 en ligne · residential (paquet OSM) · position gps ±14 m à 22:11:44 · tuiles 4/4 ( @ 45.28772,4.62717
+06/11 06:33:15 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28773,4.62711
+06/11 06:33:23 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 184 ms) · 96 en ligne · residential (paquet OSM) · position gps ±18 m à 06:33:23 · tuiles 4/4 ( @ 45.28771,4.62716
+06/11 06:33:53 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28771,4.62716
+06/11 06:34:01 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 300 ms) · 96 en ligne · residential (paquet OSM) · position gps ±22 m à 06:34:01 · tuiles 4/4 ( @ 45.28773,4.62709
+06/11 06:39:57 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28773,4.62710
+06/11 06:40:04 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 246 ms) · 96 en ligne · residential (paquet OSM) · position gps ±51 m à 06:40:04 · tuiles 4/4 ( @ 45.28798,4.62699
+06/11 06:40:44 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28773,4.62710
+06/11 06:40:51 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 186 ms) · 96 en ligne · residential (paquet OSM) · position gps ±22 m à 06:40:51 · tuiles 4/4 ( @ 45.28777,4.62715
+06/11 06:43:55 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28772,4.62710
+06/11 06:44:00 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · residential (paquet OSM) · position gps ±15 m à 06:44:00 · tuiles 4/4 ( @ 45.28739,4.62712
+06/11 06:45:47 MG4Dash : 70 · 70 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · primary (paquet OSM) · position gps ±3 m à 06:45:47 · tuiles 3/3 (stock @ 45.28351,4.63295
+06/11 06:45:48 annonce : limitation 70 @ 45.28343,4.63314
+06/11 06:46:55 MG4Dash : 90 · 90 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · primary (paquet OSM) · position gps ±1 m à 06:46:55 · tuiles 4/4 (stock @ 45.28057,4.63887
+06/11 06:46:56 annonce : limitation 90 @ 45.28047,4.63911
+06/11 06:47:37 MG4Dash : 80 · 80 (estimée) · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · primary (paquet OSM) · position gps ±1 m à 06:47:37 · tuiles  @ 45.27648,4.64825
+06/11 06:47:38 MG4Dash : 90 · 90 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · primary (paquet OSM) · position gps ±2 m à 06:47:38 · tuiles 2/2 (stock @ 45.27640,4.64828
+06/11 06:50:13 MG4Dash : 80 · 80 (estimée) · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · primary (paquet OSM) · position gps ±4 m à 06:50:13 · tuiles  @ 45.26108,4.66768
+06/11 06:50:14 annonce : limitation 80 @ 45.26100,4.66766
+06/11 06:50:15 MG4Dash : 90 · 90 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · primary (paquet OSM) · position gps ±3 m à 06:50:15 · tuiles 4/4 (stock @ 45.26092,4.66768
+06/11 06:50:16 annonce : limitation 90 @ 45.26087,4.66774
+06/11 06:50:25 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · primary (paquet OSM) · position gps ±4 m à 06:50:25 · tuiles 4/4 (stock @ 45.26019,4.66873
+06/11 06:50:26 annonce : limitation 50 @ 45.26008,4.66881
+06/11 06:51:39 MG4Dash : inconnue · inconnue · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · aucune route à 30 m · position gps ±3 m à 06:51:39 · tuiles 3/3 ( @ 45.25513,4.66721
+06/11 06:51:40 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · aucune route à 30 m · position gps ±3 m à 06:51:40 · tuiles 3/3 (stocka @ 45.25517,4.66717
+06/11 06:51:45 MG4Dash : 80 · 80 (estimée) · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±3 m à 06:51:45 · tu @ 45.25552,4.66689
+06/11 06:51:46 annonce : limitation 80 @ 45.25558,4.66683
+06/11 06:51:59 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · aucune route à 30 m · position gps ±3 m à 06:51:59 · tuiles 2/2 (stocka @ 45.25556,4.66689
+06/11 06:52:00 annonce : limitation 50 @ 45.25553,4.66694
+06/11 06:52:32 MG4Dash : 50 · 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±4 m à 06:52:32 · tu @ 45.25530,4.66712
