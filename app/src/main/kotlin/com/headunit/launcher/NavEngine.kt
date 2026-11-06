@@ -2241,10 +2241,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         if (!routeLimitLive() && !mgLimits() && (System.currentTimeMillis() - limitOkAt > 600_000 || (okPos != null && Geo.dist(okPos, p.pos) > 3000))) { speedLimit = null; limitEstimated = false }
                         // the lookup itself failed: try again soon instead of waiting until the car has moved (and let an old road name
                         // drop once it's out of date)
-                        refreshRoad()
+                        // fork FR : le nom de la rue par Nominatim, puisque la recherche OpenStreetMap habituelle a échoué
+                        val nr = try { withContext(Dispatchers.IO) { NominatimPoi.road(look) } } catch (e: Exception) { null }
+                        if (nr != null) noteRoad(nr, hd) else refreshRoad()
                         limitFails++
                         limitPos = null
-                        limitAt = System.currentTimeMillis() + minOf(limitFails * 8000L, 60_000L)
+                        limitAt = System.currentTimeMillis() + if (nr != null) 5000L else minOf(limitFails * 8000L, 60_000L)
                     }
                 } finally { limitBusy = false }
             }
@@ -5158,6 +5160,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var limitRoadAt = 0L
     private var limitRoadHead = -1.0
     private var roadCandidate = ""
+    /** Fork FR : où le nom de rue des données a été confirmé pour la dernière fois. */
+    private var limitRoadPos: LL? = null
 
     /**
      * A road name from the lookup round you. A different name only shows once a second lookup agrees, or straight away if you've
@@ -5170,6 +5174,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (name == limitRoad || name.isBlank() || limitRoad.isBlank() || turned || name == roadCandidate) {
             limitRoad = name; roadCandidate = ""
             limitRoadAt = now; if (heading >= 0) limitRoadHead = heading
+            limitRoadPos = fix?.pos
         } else roadCandidate = name
         refreshRoad()
     }
@@ -5195,7 +5200,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      */
     private fun refreshRoad() {
         // the map-data name is dropped once it's 45 seconds old (lookups that kept failing used to leave the last road up)
-        val mapRoad = if (System.currentTimeMillis() - limitRoadAt < 45_000L) limitRoad else ""
+        // fork FR : et dès qu'on s'en est éloigné de 150 m sans nouvelle confirmation (recherches OpenStreetMap en échec : le nom
+        // de la rue d'avant restait affiché pendant qu'on roulait sur la suivante)
+        val rp = limitRoadPos; val fp = fix?.pos
+        val mapRoad = if (System.currentTimeMillis() - limitRoadAt < 45_000L && (rp == null || fp == null || Geo.dist(rp, fp) < 150.0)) limitRoad else ""
         val drawn = if (fix != null && (fix?.speed ?: 0.0) > 1.0) drawnRoadNow() else drawnRoad
         val n = Geo.shortRoad(drawn.ifBlank { if (route != null && !previewing && onRoad.isNotBlank()) onRoad else mapRoad })
         if (n != roadShown) { roadShown = n; map.setRoadName(n) }

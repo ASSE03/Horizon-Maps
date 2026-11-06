@@ -61,4 +61,22 @@ object NominatimPoi {
         }
         return out
     }
+
+    @Volatile private var roadAt = 0L
+
+    /** Le nom de la rue en [p] (Nominatim, au plus une fois toutes les 8 s), quand les recherches Overpass échouent. */
+    fun road(p: LL): String? {
+        val now = System.currentTimeMillis()
+        if (now - roadAt < 8000L) return null
+        roadAt = now
+        val url = String.format(java.util.Locale.US,
+            "https://nominatim.openstreetmap.org/reverse?lat=%.6f&lon=%.6f&format=jsonv2&zoom=17&layer=address&accept-language=fr", p.lat, p.lon)
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 5000; conn.readTimeout = 6000
+        conn.setRequestProperty("User-Agent", "HorizonNav/1.0 (Android navigation app)")
+        if (conn.responseCode !in 200..299) return null
+        val o = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        val a = o.optJSONObject("address") ?: return null
+        return a.optString("road").ifBlank { null }
+    }
 }
