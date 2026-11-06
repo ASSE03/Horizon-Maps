@@ -5,7 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
-- Couleurs « Clair de lune » : un nouveau choix dans Réglages › Aspect de la carte › Couleurs. La nuit, la carte est d'un bleu plus clair, comme Google Maps de nuit, avec des bâtiments d'un bleu plus vif doucement éclairés de l'intérieur. Le jour, identique à Horizon.
+- Couleurs personnalisées : une vignette « Personnalisé » dans Réglages › Aspect de la carte › Couleurs, avec un éditeur par-dessus la carte en direct. Le jour et la nuit ont chacun leurs couleurs pour le sol, l'eau, les parcs, les routes, les grands axes, les bâtiments, les zones colorées et les textes, plus la luminosité de nuit, une teinte générale, des bâtiments lumineux et un halo au sol. On part du thème qu'on avait, donc rien ne change tant qu'on ne modifie rien. (Remplace les couleurs « Clair de lune », retirées par Horizon Maps.)
 - Taille des radars : un curseur dans Réglages › Sur la carte › Sur votre itinéraire, de 50 % à 350 %, pour agrandir ou réduire le badge rouge des radars sur la carte (téléphone, autoradio et Android Auto).
 - Couleurs « Crépuscule » : un nouveau choix dans Réglages › Aspect de la carte › Couleurs, les couleurs Horizon d'avant avec une nuit plus violette.
 - Retour à la voiture à pied : « À pied » sur la carte « Votre voiture » calcule maintenant un itinéraire piéton dans Horizon Nav (Mapbox) au lieu d'ouvrir une autre appli.
