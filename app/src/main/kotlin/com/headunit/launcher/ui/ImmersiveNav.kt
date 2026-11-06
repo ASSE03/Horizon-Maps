@@ -700,11 +700,15 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                 // electric: roughly how much battery you'll arrive with (amber under 20%, red under 10%)
                 val evPct = engine.evArrivalPct()
                 val evCol = if (evPct == null) c.text else if (evPct < 10) Bad else if (evPct < 20) Warn else Good
+                // fork FR : la batterie maintenant, à côté de celle à l'arrivée (comme ABRP)
+                val evNow = if (evPct != null) engine.evNowPct() else null
+                val nowCol = if (evNow == null) c.text else if (evNow < 10) Bad else if (evNow < 20) Warn else c.text
                 val stats: @Composable () -> Unit = {
                     ImmStat(Geo.fmtDur(e.secs), if (e.delayMin >= 1) "+${e.delayMin} min de trafic" else "restant", dc)
                     ImmStat(e.arrive, "arrivée", c.text)
                     ImmStat(Geo.fmtDist(e.dist, engine.imperial), "restants", c.text)
-                    if (evPct != null) ImmStat("$evPct%", "batterie à l'arrivée", evCol)
+                    if (evNow != null) ImmStat("$evNow%", "batterie", nowCol)
+                    if (evPct != null) ImmStat("$evPct%", "à l'arrivée", evCol)
                 }
                 val buttons: @Composable () -> Unit = {
                     // electric: chargers along the route from here
@@ -726,7 +730,7 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                     // portrait: one compact line (figures, then the buttons), so the card stays low and clear of your arrow. When it can't
                     // all fit (an electric car adds a fourth figure and a fifth button), the buttons go on a line under the figures:
                     // squeezed onto one line the figures ran into each other ("21 min14:1216 km75")
-                    val nStats = if (evPct != null) 4 else 3
+                    val nStats = if (evPct != null) 5 else 3
                     val nButtons = if (evPct != null) 5 else 4
                     val oneLine = maxWidth >= (nStats * 74 + nButtons * 42 + 30).dp
                     val figures: @Composable (Modifier) -> Unit = { m ->
@@ -734,7 +738,8 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                             ImmStat(Geo.fmtDur(e.secs), if (e.delayMin >= 1) "+${e.delayMin} min" else "restant", dc, compact = true)
                             ImmStat(e.arrive, "arrivée", c.text, compact = true)
                             ImmStat(Geo.fmtDist(e.dist, engine.imperial), "restants", c.text, compact = true)
-                            if (evPct != null) ImmStat("$evPct%", "batterie", evCol, compact = true)
+                            if (evNow != null) ImmStat("$evNow%", "batterie", nowCol, compact = true)
+                            if (evPct != null) ImmStat("$evPct%", "à l'arrivée", evCol, compact = true)
                         }
                     }
                     val smallButtons: @Composable (Modifier) -> Unit = { m ->

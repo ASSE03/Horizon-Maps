@@ -4605,6 +4605,20 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    /** Fork FR : la batterie estimée maintenant (%) : la valeur relue dans Home Assistant moins ce qui a été roulé depuis, sinon la
+     *  charge réglée au départ moins ce qui a été roulé depuis le début du trajet. */
+    fun evNowPct(): Int? {
+        if (!isEv || route == null) return null
+        refreshHaBattery()
+        if (haLivePct >= 0 && System.currentTimeMillis() - haLiveAt < 20 * 60_000L) {
+            val since = max(0.0, tripDist - haLiveDist)
+            return Math.round(haLivePct - since / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(0, 100)
+        }
+        val start = prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80).coerceIn(1, 100)
+        val driven = if (navStartMs > 0) max(0.0, tripDist - navStartDist) else 0.0
+        return Math.round(start - driven / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(0, 100)
+    }
+
     /** Roughly how much battery (%) you'll arrive with: the charge you set before the trip, less what's been driven and what's left. */
     fun evArrivalPct(): Int? {
         if (!isEv) return null

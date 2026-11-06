@@ -440,7 +440,9 @@ private fun TripCard(engine: NavEngine, fill: Boolean) {
             CarStat(Geo.fmtDur(e.secs), if (e.delayMin >= 1) "+${e.delayMin} min" else "restant", dc)
             CarStat(e.arrive, "arrivée", c.text)
             CarStat(Geo.fmtDist(e.dist, engine.imperial), "restants", c.text)
-            engine.evArrivalPct()?.let { p -> CarStat("$p%", "batterie", if (p < 10) Bad else if (p < 20) Warn else Good) }
+            // fork FR : la batterie maintenant et à l'arrivée
+            engine.evNowPct()?.let { p -> CarStat("$p%", "batterie", if (p < 10) Bad else if (p < 20) Warn else c.text) }
+            engine.evArrivalPct()?.let { p -> CarStat("$p%", "à l'arrivée", if (p < 10) Bad else if (p < 20) Warn else Good) }
         }
         if (fill) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 10.dp, top = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { stats() }

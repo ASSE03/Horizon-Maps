@@ -31,6 +31,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Voiture électrique : la carte de trajet affiche la batterie estimée maintenant à côté de celle à l'arrivée (relue dans Home Assistant si configuré, sinon calculée depuis la charge de départ), comme ABRP. Aussi sur l'écran Android Auto.
 - À pied : ni panneau de limitation, ni alerte de vitesse, ni radars pendant un itinéraire piéton.
 - Démo arrêtée avec un départ choisi : au bout de 45 secondes, la flèche revient d'elle-même sur votre vraie position au lieu de rester figée.
 - Démo accélérée : le compteur et l'alerte de dépassement utilisent la vitesse « normale », sans le ×2 à ×8.
