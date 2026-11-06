@@ -5,8 +5,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          UA="HorizonNav/1.0 (Android navigation app)"
-          echo "== nominatim"; curl -s -m 20 -A "$UA" "https://nominatim.openstreetmap.org/search?amenity=toilets&viewbox=4.62,45.28,4.71,45.22&bounded=1&format=jsonv2&limit=40&extratags=1" | head -c 2500; echo
-          echo "== photon"; curl -s -m 20 -A "$UA" "https://photon.komoot.io/reverse?lat=45.25302&lon=4.66528&radius=5&osm_tag=amenity:toilets&limit=20" | head -c 2500; echo
-          echo "== photon q"; curl -s -m 20 -A "$UA" "https://photon.komoot.io/api/?q=toilettes&lat=45.25302&lon=4.66528&osm_tag=amenity:toilets&limit=20&location_bias_scale=0.1" | head -c 2500; echo
-          echo "== overpass status"; curl -s -m 15 https://overpass-api.de/api/status | head -20
+          echo "== geopf"; curl -s -m 20 "https://data.geopf.fr/geocodage/search?q=4%20place%20de%20la%20bascule&limit=3&lat=45.25&lon=4.66" | head -c 1500; echo
