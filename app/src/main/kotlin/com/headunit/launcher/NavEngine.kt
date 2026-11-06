@@ -2890,15 +2890,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val mp = mPos ?: f.pos
             val rad = Math.toRadians(mHead)
             val kLon = 111320.0 * cos(Geo.rad(gp.lat))
-            val predLat = (mp.lat) + cos(rad) * gSpeed * (age + lead) / 110574.0
-            val predLon = (mp.lon) + Math.sin(rad) * gSpeed * (age + lead) / kLon
+            // fork FR : en plein virage, l'avance en ligne droite envoyait la flèche tout droit au-delà du carrefour : elle est réduite
+            val turning = abs(angDiff(mHead, gHead)) > 20.0
+            val ahead = age + if (turning) lead * 0.3 else lead
+            val predLat = (mp.lat) + cos(rad) * gSpeed * ahead / 110574.0
+            val predLon = (mp.lon) + Math.sin(rad) * gSpeed * ahead / kLon
             var nLat = gp.lat + cos(rad) * gSpeed * dt / 110574.0
             var nLon = gp.lon + Math.sin(rad) * gSpeed * dt / kLon
             val eN = (predLat - nLat) * 110574.0; val eE = (predLon - nLon) * kLon
             if (hypot(eN, eE) > 80.0) { nLat = predLat; nLon = predLon }
             else { val k = 1.0 - Math.exp(-dt / 0.9); nLat += (predLat - nLat) * k; nLon += (predLon - nLon) * k }
             gPos = LL(nLat, nLon)
-            if (mSpeed > 1.5) gHead = easeAngle(gHead, mHead, dt, 0.35)
+            if (mSpeed > 1.5) gHead = easeAngle(gHead, mHead, dt, if (turning) 0.2 else 0.35)
             lookB = gHead
         }
         val gp = gPos ?: return
@@ -2937,8 +2940,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // a soft dead-band (instead of a hard 5 degree one that held, then suddenly caught up): tiny wobbles are ignored, and the turn
         // fades in smoothly as the difference grows
         if (tBMode == 1) { val f = (abs(d) / 9.0).coerceIn(0.0, 1.0); d *= f * f * (3 - 2 * f) }
-        val step = d * (1.0 - Math.exp(-dt / 1.05))
-        val maxStep = (if (camCatchUp) 140.0 else 32.0) * dt
+        // fork FR : sans itinéraire, la carte tourne plus vite dans les virages francs : elle restait de travers 2 à 3 secondes
+        // après un virage à angle droit, la flèche pointant sur le côté
+        val sharp = !glideOnRoute && abs(d) > 35.0
+        val step = d * (1.0 - Math.exp(-dt / (if (sharp) 0.55 else 1.05)))
+        val maxStep = (if (camCatchUp) 140.0 else if (sharp) 75.0 else 32.0) * dt
         camB = ((camB + step.coerceIn(-maxStep, maxStep)) % 360.0 + 360.0) % 360.0
         // nothing has moved (parked, or waiting at lights): don't ask the map to draw the same picture again,
         // which lets it sit idle instead of redrawing every frame (a big saving in heat and battery)

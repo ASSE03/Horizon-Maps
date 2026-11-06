@@ -37,6 +37,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Virages sans itinéraire : la flèche ne file plus tout droit au-delà du carrefour, et la carte tourne plus vite dans les virages francs au lieu de rester de travers 2 à 3 secondes.
 - Nom de rue figé : quand les serveurs OpenStreetMap ne répondent pas, le nom vient de Nominatim, et l'ancien nom disparaît dès qu'on s'en est éloigné de 150 m au lieu de rester affiché sur les rues suivantes.
 - Plantage avec l'écran conducteur : sur les voitures qui affichent la carte derrière le volant (vu sur une Jaguar), l'appli pouvait planter dès le démarrage d'Android Auto. C'est réglé.
 - Démo avec un départ choisi : lancer le guidage avec « Démarrer » lance aussi la démo (la flèche restait au départ). Le bouton « Lancer la démo » est maintenant en tête de la ligne, toujours visible.
