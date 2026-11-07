@@ -59,6 +59,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Radars retirés encore annoncés (La Versanne) : le fichier des radars de France ne reprend plus que la liste officielle du ministère de l'Intérieur (environ 3 200 radars fixes), OpenStreetMap ne sert plus qu'à indiquer leur direction. Le fichier est relu chaque jour au lieu de chaque semaine.
 - Flèche qui sortait encore de la route dans les virages : elle avance maintenant dans la direction de la route (relevée au recalage) plutôt que dans celle du GPS, qui a du retard dans les courbes.
 - Android Auto : les bannières (radar, danger…) s'affichent à droite de la barre de recherche au lieu de la chevaucher.
 - Logo Mapbox : en bas à droite, au plus près du coin.

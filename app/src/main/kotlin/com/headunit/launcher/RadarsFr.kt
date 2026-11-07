@@ -11,7 +11,8 @@ import java.net.URL
  */
 object RadarsFr {
     private const val URL_FILE = "https://github.com/ASSE03/Horizon-Maps/releases/download/radars/radars_fr.json"
-    private const val WEEK = 7L * 86_400_000L
+    // (relu chaque jour : un radar retiré disparaît vite)
+    private const val WEEK = 86_400_000L
 
     @Volatile private var pts: FloatArray? = null       // lat, lon, direction (-1 : inconnue) à la suite
     @Volatile var status = "pas encore chargé"
