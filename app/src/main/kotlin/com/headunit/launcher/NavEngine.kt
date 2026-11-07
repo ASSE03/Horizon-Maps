@@ -2946,6 +2946,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var glideFps = 30
     /** Fork FR : avance de la flèche sur le GPS, en secondes (Réglages › Écran et tailles › En conduite). */
     private var arrowLead = 1.0
+    /** Fork FR : vitesse de rotation de la voiture, en degrés par seconde (positif vers la droite). */
+    private var yawRate = 0.0
+    private var yawAt = 0L
 
     private fun glideTick(frameNs: Long) {
         // never do more work than the map can actually draw: on a slow head unit this frees the CPU for rendering
@@ -3010,20 +3013,32 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // fork FR : dans un virage, la direction de la route (au dernier recalage) plutôt que celle du GPS, qui a du retard et
             // envoyait la flèche vers l'extérieur de la courbe
             val roadB = if (now - gRoadAt < 400L && gRoadB >= 0.0 && abs(angDiff(gRoadB, mHead)) < 60.0) gRoadB else -1.0
-            val rad = Math.toRadians(if (roadB >= 0.0) roadB else mHead)
             val kLon = 111320.0 * cos(Geo.rad(gp.lat))
-            // fork FR : en plein virage, l'avance en ligne droite envoyait la flèche tout droit au-delà du carrefour : elle est réduite
-            val turning = abs(angDiff(mHead, gHead)) > 20.0
-            val ahead = age + if (turning) 0.0 else lead
-            var predLat = (mp.lat) + cos(rad) * gSpeed * ahead / 110574.0
-            var predLon = (mp.lon) + Math.sin(rad) * gSpeed * ahead / kLon
+            // fork FR : la position visée suit un arc de cercle, au rythme où la voiture tourne (d'après les derniers points GPS),
+            // au lieu d'une ligne droite : la flèche partait tout droit puis rattrapait le virage avec un petit retard
+            val yaw = if (gSpeed > 3.0 && abs(yawRate) > 2.0) yawRate else 0.0
+            val turning = abs(yaw) > 6.0 || abs(angDiff(mHead, gHead)) > 20.0
+            val ahead = (age + lead).coerceAtMost(3.5)
+            var predLat = mp.lat; var predLon = mp.lon
+            run {
+                val n = 6; val st = ahead / n
+                var h = mHead
+                for (i in 0 until n) {
+                    val hm = Math.toRadians(h + yaw * st / 2.0)
+                    predLat += cos(hm) * gSpeed * st / 110574.0; predLon += Math.sin(hm) * gSpeed * st / kLon
+                    h += yaw * st
+                }
+            }
+            // le cap de la flèche maintenant : celui du GPS tourné de ce que la voiture a tourné depuis, ou celui de la route recalée
+            val headNowEst = ((mHead + yaw * age.coerceAtMost(2.0)) % 360.0 + 360.0) % 360.0
+            val rad = Math.toRadians(if (roadB >= 0.0 && yaw == 0.0) roadB else headNowEst)
             // fork FR : c'est le point visé qui est recalé sur la route (10 fois par seconde, l'écart gardé entre deux), et la flèche
             // glisse vers lui en douceur. Recaler la flèche elle-même à chaque image la faisait trembler et la bloquait (la
             // projection sur une rue de biais annulait son avance)
             if (mSpeed > 1.0 && snapRoadOn) {
                 if (now - gSnapAt >= 100L) {
                     gSnapAt = now
-                    val sn = try { map.snapToRoad(LL(predLat, predLon), mHead, if (turning) 55.0 else 30.0, 15.0) } catch (e: Exception) { null }
+                    val sn = try { map.snapToRoad(LL(predLat, predLon), ((mHead + yaw * ahead) % 360.0 + 360.0) % 360.0, if (turning) 55.0 else 30.0, 15.0) } catch (e: Exception) { null }
                     gSnapDLat = if (sn != null) sn.lat - predLat else 0.0; gSnapDLon = if (sn != null) sn.lon - predLon else 0.0
                     if (sn != null) { gRoadB = map.lastSnapBearing; gRoadAt = now }
                 }
@@ -3033,9 +3048,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             var nLon = gp.lon + Math.sin(rad) * gSpeed * dt / kLon
             val eN = (predLat - nLat) * 110574.0; val eE = (predLon - nLon) * kLon
             if (hypot(eN, eE) > 80.0) { nLat = predLat; nLon = predLon }
-            else { val k = 1.0 - Math.exp(-dt / 0.9); nLat += (predLat - nLat) * k; nLon += (predLon - nLon) * k }
+            else { val k = 1.0 - Math.exp(-dt / (if (turning) 0.5 else 0.9)); nLat += (predLat - nLat) * k; nLon += (predLon - nLon) * k }
             gPos = LL(nLat, nLon)
-            if (mSpeed > 1.5) gHead = easeAngle(gHead, if (roadB >= 0.0) roadB else mHead, dt, if (turning) 0.2 else 0.35)
+            if (mSpeed > 1.5) gHead = easeAngle(gHead, if (roadB >= 0.0 && yaw == 0.0) roadB else headNowEst, dt, if (turning) 0.12 else 0.35)
             lookB = gHead
         }
         val gp = gPos ?: return
@@ -3193,7 +3208,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     val sn = Overpass.snapToRoad(p.pos, headNow) ?: map.snapToRoad(p.pos, headNow)
                     if (sn != null && (moving || Geo.dist(sn, p.pos) <= 12.0)) sn else p.pos
                 } else p.pos
-                if (!isStill) mHead = headNow
+                if (!isStill) {
+                    // fork FR : la vitesse de rotation (°/s) entre deux points GPS, pour que la flèche prenne le virage en même
+                    // temps que la voiture au lieu de continuer tout droit le temps que le cap GPS rattrape
+                    val dtF = (tNow - yawAt) / 1000.0
+                    if (yawAt > 0L && dtF in 0.2..2.5 && sp > 3.0) {
+                        val y = (angDiff(headNow, mHead) / dtF).coerceIn(-45.0, 45.0)
+                        yawRate += (y - yawRate) * 0.6
+                    } else yawRate = 0.0
+                    yawAt = tNow
+                    mHead = headNow
+                } else yawRate = 0.0
                 val gp = gPos
                 if (gp == null || Geo.dist(gp, p.pos) > 150.0) { gPos = p.pos; gHead = headNow }
             }

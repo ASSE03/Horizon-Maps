@@ -47,6 +47,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Flèche dans les virages : elle suit maintenant la courbe au rythme où la voiture tourne, au lieu de continuer un instant tout droit avant de rattraper le virage.
 - Radars : annonce à 300 m puis rappel à 150 m (au lieu de 500 m puis toutes les centaines de mètres) ; tourelles et radars double sens comptés pour les deux sens.
 - Android Auto en écran partagé : dans la partie étroite de l'écran, les cartes et boutons de l'appli rétrécissent encore d'eux-mêmes pour tenir à côté de la carte. La taille générale (Réglages › Android Auto, ou les réglages de la voiture) les règle toujours de 40 % à 300 %.
 - Taille de la flèche sur Android Auto : jusqu'à 30 % (au lieu de 60 %), pour les petits écrans.
