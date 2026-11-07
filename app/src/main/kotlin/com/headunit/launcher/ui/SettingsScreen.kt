@@ -322,6 +322,7 @@ private fun LightSection(prefs: Prefs) {
         STilt("Inclinaison sur Android Auto", "L'écran de la voiture", prefs, PreferenceKeys.TILT_CAR)
     }
     SGroup("3D") {
+        SToggle(prefs, "Ombrage du relief", PreferenceKeys.HILLSHADE, false, "Un ombrage doux sur les pentes, pour voir vallées et crêtes même sur une carte à plat. Plus léger que le relief 3D")
         SToggle(prefs, "Bâtiments 3D", "buildings3d", true)
         SToggle(prefs, "Façades détaillées", "facades", true, "Fenêtres, portes et vitrines sur les bâtiments, là où Mapbox les a (surtout en centre-ville)")
         SToggle(prefs, "Monuments 3D", "landmarks3d", true, "Modèles détaillés de bâtiments célèbres, ponts et stades")
@@ -341,6 +342,9 @@ private fun LightSection(prefs: Prefs) {
 
 @Composable
 private fun OnTheMapSection(prefs: Prefs, engine: NavEngine) {
+    SGroup("Appui long sur la carte") {
+        SToggle(prefs, "Qu'y a-t-il ici", PreferenceKeys.WHATS_HERE, true, "Un appui long sur la carte montre d'abord la route, sa limitation et le lieu, avec Y aller et Ajouter une étape. Désactivé : on y va directement, comme avant")
+    }
     SGroup("Trafic") {
         SToggle(prefs, "Trafic en direct", "traffic", true)
         SToggle(prefs, "Vue du trafic à l'arrêt", PreferenceKeys.STOPPED_OVERVIEW, true, "Après 30 secondes d'arrêt (feu, file), la carte recule pour montrer le trafic autour de vous vu de dessus, et revient quand vous repartez")
@@ -430,6 +434,7 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
         SSlider(if (shapeCar) "Taille de la voiture" else if (loc == "custom") "Taille de l'image" else "Taille de la flèche", prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toFloatOrNull() ?: 240f, 100f..500f, "%", reset = 240f) { prefs.put(PreferenceKeys.ARROW_PERCENT, it.toString()) }
     }
     SGroup("Tracé de l'itinéraire") {
+        SToggle(prefs, "Drapeaux 3D", PreferenceKeys.FLAGS_3D, true, "Un grand drapeau rouge à destination et des drapeaux orange plus petits aux étapes, au-dessus des bâtiments, visibles de loin")
         SToggle(prefs, "Flèche de direction sur le tracé", "turnarrows", true, "Une flèche blanche à travers le prochain carrefour ou rond-point")
         SToggle(prefs, "Chevrons le long du tracé", "routechevrons", true, "Petites flèches le long du tracé en vue rapprochée")
         SToggle(prefs, "Ruban d'itinéraire", "ribbon", true, "Une ombre douce sous le tracé, et l'itinéraire visible en transparence à travers les bâtiments 3D devant")
@@ -473,6 +478,7 @@ private fun RoutesSection(prefs: Prefs, engine: NavEngine) {
         if (prefs.b(PreferenceKeys.FASTER_ROUTE, true)) SToggle(prefs, "Garder les autres itinéraires sur la carte", "livealts", true, "Lignes grises avec +/− minutes, à toucher à tout moment. Désactivé : une carte « Itinéraire plus rapide trouvé » à la place")
         SToggle(prefs, "Deviner votre destination", "predict", true, "Avec le temps de trajet en direct, y compris domicile et travail à vos heures habituelles")
         SToggle(prefs, "Météo sur l'itinéraire", "routewx", true)
+        SToggle(prefs, "Arriver du bon côté de la route", PreferenceKeys.ARRIVE_SIDE, true, "L'itinéraire vous amène du côté de la chaussée où se trouve votre destination, pour ne pas avoir à traverser. Itinéraires Mapbox et hors ligne")
     }
     SGroup("Démarrer un itinéraire") {
         SToggle(prefs, "Démarrage auto après compte à rebours", PreferenceKeys.AUTO_START_ROUTE, true, "Lance le guidage automatiquement à la fin du compte à rebours")
@@ -569,6 +575,7 @@ private fun GuidanceSection(prefs: Prefs, engine: NavEngine) {
         if (prefs.s(PreferenceKeys.THEN_MODE, "close") != "off") SChoice("Affichée comme", listOf("row" to "Une ligne sous la carte", "icon" to "Une petite flèche"), prefs.s(PreferenceKeys.THEN_STYLE, "row")) { prefs.put(PreferenceKeys.THEN_STYLE, it) }
     }
     SGroup("Voies et carrefours") {
+        SToggle(prefs, "Images des échangeurs", PreferenceKeys.JUNCTION_PICS, false, "Les images Mapbox des échangeurs d'autoroute, avec les voies à prendre, dans le dernier kilomètre. Seulement là où Mapbox en a, et pour les comptes Mapbox auxquels il les propose")
         SToggle(prefs, "Voies sur la carte", "lanemap", true)
         if (prefs.b(PreferenceKeys.LANEMAP, true)) SPictureChoice(
             "Voies affichées en",
@@ -624,6 +631,7 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
         if (prefs.b(PreferenceKeys.SPEEDWARN, true)) SChoice("Avertir au-delà de", listOf("0", "5", "10").map { it to it + if (engine.imperial) " mph" else " km/h" }, prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5")) { prefs.put(PreferenceKeys.TRAFFIC_WARNING, it) }
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
         if (prefs.b("limitchange", true)) SToggle(prefs, "Afficher aussi le changement à l'écran", "limitbanner", false, "Désactivé : seulement l'annonce vocale (et le panneau qui clignote), sans la grande bannière")
+        SToggle(prefs, "Prochaine limitation", PreferenceKeys.NEXT_LIMIT, true, "Un petit panneau au-dessus de la limitation avec la suivante sur votre itinéraire et sa distance, à partir d'environ 800 m")
         SChoice("Source des limitations", listOf("mg4" to "Comme MG4Dash", "mix" to "MG4Dash + TomTom", "auto" to "TomTom et Mapbox"), prefs.s("limitsrc", "mg4"),
             when (prefs.s("limitsrc", "mg4")) {
                 "mg4" -> "OpenStreetMap seul, avec les paquets France de MG4Dash (jeton GitHub ayant accès à MG4Dash-SWI68), sinon par petites zones gardées 60 jours"
@@ -1075,7 +1083,7 @@ private fun AndroidAutoSection(prefs: Prefs) {
             SSlider("Taille des cartes", prefs.i(PreferenceKeys.CAR_CARD_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Cartes de direction, de trajet et d'itinéraire", steps = 16, reset = 100f) { prefs.put(PreferenceKeys.CAR_CARD_SIZE, it) }
             SSlider("Taille des boutons", prefs.i(PreferenceKeys.CAR_BUTTON_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Commandes rondes et boutons tactiles", steps = 16, reset = 100f) { prefs.put(PreferenceKeys.CAR_BUTTON_SIZE, it) }
             SSlider("Taille du texte", prefs.i(PreferenceKeys.CAR_TEXT_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Indépendant de la taille des cartes et des boutons", steps = 16, reset = 100f) { prefs.put(PreferenceKeys.CAR_TEXT_SIZE, it) }
-            SSlider("Taille de la flèche de navigation", prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).toFloat(), 60f..180f, "%", reset = 100f) { prefs.put(PreferenceKeys.CAR_ARROW_SIZE, it) }
+            SSlider("Taille de la flèche de navigation", prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).toFloat(), 30f..180f, "%", reset = 100f) { prefs.put(PreferenceKeys.CAR_ARROW_SIZE, it) }
             SSlider("Taille du nom de rue", prefs.i(PreferenceKeys.CAR_ROAD_NAME_SIZE, 100).toFloat(), 70f..200f, "%", sub = "Le nom de la route où vous êtes, sous votre flèche", steps = 12, reset = 100f) { prefs.put(PreferenceKeys.CAR_ROAD_NAME_SIZE, it) }
         }
     }

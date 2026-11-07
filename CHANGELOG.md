@@ -43,6 +43,8 @@ Add user-facing Horizon Nav changes under **Unreleased** before publishing each 
 - No TomTom key is built into the app any more (anyone could pull it out of a shared APK); paste your own in Settings if you use TomTom search.
 
 ### Fixed
+- Small Android Auto screens (GitHub, Pioneer SPH-DA160): on 7-inch 800 x 480 units the turn card left out the lanes, the junction close-up and the driving advice, as if the screen were too small. Lanes now always show on the car's turn card, and the close-up and advice show unless the screen is really short.
+- Services on the route bar with the services card off: switching off Next services card now takes them off the route bar too.
 - Traffic jams not added to the route: a jam could be announced ("Traffic jam ahead") without the time left going up or the route line turning amber or red. TomTom's incident details were read wrongly (the kind of incident as a word when it's a number, and the delay under the wrong name), and a jam with no delay given was skipped. Now every jam ahead colours the route (amber, red when it's major), and its hold-up is added to the time left when the route's own traffic doesn't already have it.
 - TomTom roadworks and closures not recognised: the same misreading meant TomTom's closures and roadworks weren't known as such, so they weren't avoided or shown round about. Fixed with the above.
 - Freezing head units not helped: when the map locked the screen up and Android closed the app (the unit itself kept running), it didn't count, so the map's drawing was never turned down for that unit. A lock-up now counts, and turns the drawing down a step straight away at the next start (Lite map at a lower sharpness, then Lightest), with a message saying so.
@@ -90,6 +92,12 @@ Add user-facing Horizon Nav changes under **Unreleased** before publishing each 
 - Where lanes are painted on the road, the route line runs through the lit-up lanes right up to the junction and carries smoothly into the turn arrow, then eases back onto the road over the next 25 m, with no gap or step where the lane guidance ends.
 
 ### New
+- 3D flags: a tall red flag at where you're going, and smaller amber ones at your stops, standing above the buildings so you can see them from a distance. On by default; Settings > Your arrow & route line > Route line.
+- Hill shading: soft shading on hillsides, so valleys and ridges show even on a flat map, with its own day and night shades. Off by default; Settings > Light & 3D > 3D.
+- Arrive on your side of the road: routes bring you to the kerb side of where you're going, so you don't have to cross the traffic (Mapbox and offline routes). On by default; Settings > Routes > Choosing a route.
+- Next speed limit ahead: a small sign above the limit shows the next limit on your route and how far it is, from about half a mile away. On by default; Settings > Alerts > Speed.
+- What's here: holding on the map now shows a card first: the road as its own sign (blue motorway, green A road, white B road), a mini speed limit sign, what the land is and the area with their own icons and colour, how far it is from you, and Go (or Add as a stop while driving) and a star to save it. On by default; switch it off in Settings > On the map > Holding on the map to go straight there as before.
+- Junction pictures: Mapbox's pictures of motorway junctions, with the lanes to use, in the last kilometre before one. Off by default (Settings > Turn card & lanes > Lanes and junctions); they only show where Mapbox has them and for accounts it offers them to.
 - Custom theme: a Custom tile in Settings > Map style > Colours. Pick the theme it starts from, then change the ground, water, parks, roads, main roads and buildings, and the route line's colour, separately for day and night, plus the route line's width and the night brightness. The live preview at the top shows the Day or Night colours you're editing. Save it under a name (Your themes) to pick again later, and reset a part, a day or night, or everything. It starts as exactly the theme you had, so nothing changes until you change something.
 - Other routes button: while navigating, a button on the map (under map options) folds out a Routes box, as in Google Maps: your route and each other way with its time, how it compares, arrival time, distance, the road it goes by and the traffic. Tap one in the box or on the map (where they're shown in grey) to switch. On Android Auto it's the first row in Settings, as a list you can pick from with a touch or the knob.
 - Roadworks and road closures round about (GitHub #45): with a TomTom key, roadworks and closures within about 7 km are shown on the map whether or not you're on a route, as Google Maps and Waze show them (before, only those on your route showed).
@@ -127,6 +135,9 @@ Add user-facing Horizon Nav changes under **Unreleased** before publishing each 
 - 2D / 3D on Android Auto: a 2D / 3D button in Android Auto's own buttons, as in the app (while navigating it takes the Demo button's place unless Demo is switched on in Settings).
 
 ### Improved
+- Android Auto split screen: in the narrow part of the screen the app's cards and buttons now shrink further by themselves, so they fit beside the map. The Overall size setting (Settings > Android Auto, or the car's own Settings) still sets them bigger or smaller, 40% to 300%.
+- Android Auto: Route overview and Other routes buttons on the trip card (beside sound and end), and Route overview in the car's Settings too.
+- Android Auto arrow size now goes down to 30% (was 60%), for small car screens where even 60% looked big.
 - Settings reorganised: Map look is split into Map style (colours, day and night, map detail) and Light & 3D (light and weather, 3D, tilt, sky), Glass panels and the Mapbox logo position move to Screen & sizes, and Feedback has its own group at the top of About & backup. Settings search finds everything in its new place, and settings open where you left them.
 - Live map preview in settings: the map style, light, on-the-map and arrow pages show the real map at the top, so changes show as you make them, with Day / Night buttons to check the night look in daylight.
 - Pictures in settings: the lane styles, where the speed display sits, and the arrow styles are shown as small pictures to pick from.

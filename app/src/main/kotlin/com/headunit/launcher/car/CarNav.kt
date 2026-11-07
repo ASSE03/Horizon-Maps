@@ -225,7 +225,7 @@ class CarNavSession : Session() {
         // Keep the locator proportionate to the more compact Android Auto overlay sizing.
         // Android Auto uses a smaller map surface than the main head-unit app. Keep the
         // user preference, but normalise it so the 240% main-app default doesn't create an enormous car-screen locator.
-        map.setArrowScale(((prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(1f, 5f) * 0.9f * (prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(60, 180) / 100f))
+        map.setArrowScale(((prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(1f, 5f) * 0.9f * (prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(30, 180) / 100f))
         map.setMapDetail(prefs.mapDetail())
         map.setTrafficGreen(prefs.b(PreferenceKeys.TRAFFIC_GREEN, false))
         map.setCarModel(prefs.s(PreferenceKeys.CAR_MODEL, "saloon"))
@@ -234,6 +234,8 @@ class CarNavSession : Session() {
         map.setColours(if (mapCols == "custom") prefs.s(PreferenceKeys.CUSTOM_BASE, "mapbox") else mapCols)
         map.setCustom(mapCols == "custom", prefs.s(PreferenceKeys.CUSTOM_DAY, ""), prefs.s(PreferenceKeys.CUSTOM_NIGHT, ""), prefs.i(PreferenceKeys.CUSTOM_ROUTE_W, 100))
         map.setCameraSize(prefs.i(PreferenceKeys.CAM_SIZE, 100))
+        map.setFlags(prefs.b(PreferenceKeys.FLAGS_3D, true))
+        map.setHillShading(prefs.b(PreferenceKeys.HILLSHADE, false))
         map.setCarTint(prefs.s(PreferenceKeys.CAR_TINT, "#8A5AD0"), prefs.i(PreferenceKeys.CAR_TINT_STR, 40))
         map.setLightOpts(com.headunit.launcher.lightOptsFrom(prefs))
         map.setLogoCorner(prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"))
@@ -311,7 +313,9 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
         val short = minOf(width, height).toFloat()
         // Keep Android Auto overlays close to standard navigation UI sizing; large screens should
         // not inflate buttons/cards. Only allow a small adjustment for unusually compact surfaces.
-        val perUnit = (short / 1050f).coerceIn(dens * 0.68f, dens * 0.98f)
+        // a narrow part of the screen (Android Auto's split screen) can go smaller still, so the cards fit beside the map
+        val narrow = width < 760 || width < height
+        val perUnit = (short / 1050f).coerceIn(dens * (if (narrow) 0.52f else 0.68f), dens * 0.98f)
         uiScale.value = perUnit / dens
     }
 
@@ -1093,6 +1097,10 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
         // most needed first: some cars only allow a few rows in a list, so what doesn't fit goes on a second page ("More settings")
         // rather than being left off (the last rows used to be cut off altogether on those cars)
         val rows = ArrayList<Row>()
+        // the whole route at a glance (back to following you after a while)
+        if (e != null && e.route != null && !e.previewing) rows += Row.Builder().setTitle("Vue d'ensemble")
+            .addText("Voir tout l'itinéraire")
+            .setOnClickListener { e.overview(); screenManager.pop() }.build()
         // other ways to go while navigating: shown on the map in grey with how they compare (tap one, or Switch on the card)
         if (e != null && e.route != null && !e.previewing) rows += Row.Builder().setTitle("Autres itinéraires")
             .addText("Afficher les autres trajets possibles sur la carte")
@@ -1144,11 +1152,11 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
                 invalidate()
             }.build()
         // the car screen's own arrow size (it used to change the phone's arrow size too)
-        val arrowSize = prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(60, 180)
+        val arrowSize = prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(30, 180)
         rows += Row.Builder().setTitle("Taille de la flèche")
-            .addText("${arrowSize} % · touchez pour changer (60 % à 180 %)")
+            .addText("${arrowSize} % · touchez pour changer (30 % à 180 %)")
             .setOnClickListener {
-                val levels = listOf(60, 80, 100, 120, 140, 160, 180)
+                val levels = listOf(30, 45, 60, 80, 100, 120, 140, 160, 180)
                 val next = levels[(levels.indexOf(arrowSize).takeIf { it >= 0 } ?: 2).let { (it + 1) % levels.size }]
                 prefs.put(PreferenceKeys.CAR_ARROW_SIZE, next)
                 try { holder.map?.setArrowScale(((prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(1f, 5f) * 0.9f * (next / 100f)) } catch (_: Exception) { }

@@ -392,6 +392,11 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
             }
         } else androidx.compose.runtime.SideEffect { engine.setPanel(2, 0f, 0f, 0f, 0f); if (buttonsWPx != 0) buttonsWPx = 0 }
 
+        // ---- What's here (holding on the map): the road, its limit and the area, with Go / Add as a stop
+        engine.here?.let { h ->
+            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp)) { HereCardView(engine, h) }
+        }
+
         // ---- the routes box, folded out beside the buttons by Other routes (as in Google Maps): your route and the other ways, with
         // the time, arrival, distance, the road each goes by and the traffic; tap one to switch
         if (!previewing && engine.altListOpen && engine.route != null) {
@@ -802,11 +807,32 @@ private fun ImmCompass(engine: NavEngine) {
 internal fun ImmSpeed(engine: NavEngine) {
     // the size from Settings (100% = the standard size): it's laid out at that size, so it keeps clear of the edges and other cards
     val pct = engine.prefs.i(PreferenceKeys.SPEED_SIZE, 100).coerceIn(50, 200)
-    if (pct == 100) { SpeedBlock(engine); return }
+    if (pct == 100) { SpeedWithNext(engine); return }
     val base = androidx.compose.ui.platform.LocalDensity.current
     androidx.compose.runtime.CompositionLocalProvider(
         androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density * pct / 100f, base.fontScale),
-    ) { SpeedBlock(engine) }
+    ) { SpeedWithNext(engine) }
+}
+
+/** The speed, with the next speed limit on the route (when it changes within about half a mile) small above it. */
+@Composable
+private fun SpeedWithNext(engine: NavEngine) {
+    val nx = engine.nextLimit
+    if (nx == null || !engine.prefs.b(PreferenceKeys.NEXT_LIMIT, true)) { SpeedBlock(engine); return }
+    val c = LocalVw.current
+    val k = if (engine.imperial) 2.23694 else 3.6
+    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.panel(6.dp, RoundedCornerShape(20.dp), c.surface).padding(start = 6.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(Modifier.size(34.dp).clip(CircleShape).background(Color.White).border(4.dp, Color(0xFFE0202A), CircleShape), contentAlignment = Alignment.Center) {
+                Text("${(Math.round(nx.first * k / 5.0) * 5)}", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+            }
+            Text("in " + Geo.fmtDist(nx.second, engine.imperial), color = c.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+        SpeedBlock(engine)
+    }
 }
 
 @Composable
@@ -1006,7 +1032,8 @@ internal fun ImmTurnCard(
             // fork FR : style des panneaux britanniques au Royaume-Uni et en Irlande, français partout ailleurs
             if (engine.detectedCountry.uppercase() in setOf("GB", "IE", "IM", "JE", "GG")) UkSign(t.sign, t.tag.removePrefix("Sortie ").takeIf { t.tag.startsWith("Sortie") }.orEmpty(), t.street, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp))
             else FrSign(t.sign, t.tag.removePrefix("Sortie ").takeIf { t.tag.startsWith("Sortie") }.orEmpty(), t.street, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp))
-        if (!compact && engine.prefs.b(PreferenceKeys.LANE_STRIP, true)) t.lanes?.let { ls ->
+        // (the lanes stay on a small car screen too: they were left off with everything else, so small screens had no lane guidance)
+        if ((!compact || car) && engine.prefs.b(PreferenceKeys.LANE_STRIP, true)) t.lanes?.let { ls ->
             // lane hero view: before a complex junction the lanes grow into a big picture with yours lit; simple ones keep the strip
             // (not in Android Auto: the big lane picture made the card grow to fill much of a car screen as soon as a junction came up)
             val hero = !car && engine.prefs.s(PreferenceKeys.LANE_STYLE, "hero") == "hero" && ls.lanes.size >= 2 && t.dist < 900.0
@@ -1456,3 +1483,4 @@ private fun RouteRow(title: String, titleCol: Color, line2: String, line3: Strin
         }
     }
 }
+

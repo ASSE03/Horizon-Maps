@@ -82,6 +82,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     var departMin by mutableIntStateOf(0)
     var departAtMs by mutableLongStateOf(0L)
     var speedLimit by mutableStateOf<Double?>(null)     // m/s
+    /** The next speed limit on the route ahead (m/s) and how far to it (m), when it changes within about half a mile. */
+    var nextLimit by mutableStateOf<Pair<Double, Double>?>(null)
     var limitEstimated by mutableStateOf(false)
     private var limitOkAt = 0L
     private var limitOkPos: LL? = null
@@ -621,7 +623,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val t = tappedPoi
             val place = if (t != null && Geo.dist(t.second, p) < 60.0 && android.os.SystemClock.uptimeMillis() - tappedAt < 120_000L) { tappedPoi = null; Place(t.first, "", t.second) }
                 else Place("Repère posé", "", p)
-            if (route != null && !previewing && dest != null) addStop(place) else startRoute(place)
+            // What's here: a card with the road, its limit and the area first, with Go / Add as a stop (Settings > On the map)
+            if (prefs.b(PreferenceKeys.WHATS_HERE, true)) showHere(place)
+            else if (route != null && !previewing && dest != null) addStop(place) else startRoute(place)
         }
         map.onAlprTap = { who -> toast("Caméra de lecture de plaques" + (if (who.isNotBlank()) " · $who" else ""), 3500) }
         map.onPoiTap = { name, p -> tappedPoi = name to p; tappedAt = android.os.SystemClock.uptimeMillis(); toast(if (route != null && !previewing) "$name : appui long pour l'ajouter comme étape" else "$name : appui long pour y aller", 3000) }
@@ -1750,6 +1754,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (pts.size <= 2) closedPts += pts.last() else { closedPts += pts[pts.size / 2]; closedPts += pts.first(); closedPts += pts.last() }
         }
         MapboxRest.avoidPoints = closedPts.take(25)
+        MapboxRest.curbSide = prefs.b(PreferenceKeys.ARRIVE_SIDE, true)
+        MapboxRest.junctionPics = prefs.b(PreferenceKeys.JUNCTION_PICS, false)
         if (prefs.b(PreferenceKeys.AVOIDZONES, false)) {
             for (z in Zones.all(ctx)) {
                 if ((from != null && Zones.inside(z, from)) || (to != null && Zones.inside(z, to))) continue
@@ -1916,6 +1922,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun drawRoutes() {
         val r = route ?: return
         map.setRoute(r.pts, routes.filterIndexed { i, _ -> i != active }.map { it.pts }, r.sev)
+        map.setStopFlags(via.map { it.pos })
         map.setTunnels(r.tunnels.map { (a, b) -> slice(r, a, b) })
     }
 
@@ -2024,7 +2031,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         turnArrowKey = -1; map.setTurnArrow(emptyList())
         clearLiveAlts(); liveSaid.clear(); radar = emptyList(); radarSig = 0; bendsFor = null; bends = emptyList()
         flushRoads()
-        sessionAvoid.clear(); closuresAvoided.clear(); altListOpen = false; routeZones = emptyList(); avgInfo = null; avgIn = null; servicesAhead = emptyList(); barEvents = emptyList()
+        sessionAvoid.clear(); closuresAvoided.clear(); altListOpen = false; nextLimit = null; routeZones = emptyList(); avgInfo = null; avgIn = null; servicesAhead = emptyList(); barEvents = emptyList()
         rawServices = emptyList(); servicesFor = null; rawHz = emptyList(); rawAvg = emptyList(); hzWinRoute = null; hzWinEnd = -1.0
         placed = null; placedSig = 0; avgAlerted.clear(); hzAlerted.clear(); zoneAlerted.clear(); stopsEditor = false
         map.setVias(emptyList()); chargeVias = emptyList()
@@ -2254,7 +2261,16 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val sc = secs[m]
             if (at < sc.off) hi = m - 1 else if (at >= sc.end) lo = m + 1 else { hit = sc; break }
         }
-        if (hit == null) return      // no posted limit known for this stretch: the map data takes over
+        if (hit == null) { nextLimit = null; return }      // no posted limit known for this stretch: the map data takes over
+        // the next change ahead, within about half a mile (shown small above the limit sign)
+        var nx: Pair<Double, Double>? = null
+        for (sc in secs) {
+            if (sc.off <= at || sc.off - at > 800.0) continue
+            if (kotlin.math.abs(sc.ms - hit.ms) > 0.5) { nx = sc.ms to (sc.off - at); break }
+        }
+        val shown = nextLimit
+        if (nx == null) { if (shown != null) nextLimit = null }
+        else if (shown == null || kotlin.math.abs(shown.first - nx.first) > 0.1 || kotlin.math.abs(shown.second - nx.second) > 15.0) nextLimit = nx
         routeLimitAt = System.currentTimeMillis()
         pendHits = 0; pendLimit = -2.0
         // fork FR : les limitations de l'itinéraire passent parfois à la valeur suivante trop tôt (sortie d'agglomération). Si la
@@ -3220,6 +3236,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         onRouteNow = onR
         if (onR) curProg = guideProg
         if (onR && newFix) try { applyRouteLimit(r, guideProg, p) } catch (e: Exception) { }
+        else if (!onR && nextLimit != null) nextLimit = null
         updateGuidance(guideProg, onR && android.os.SystemClock.elapsedRealtime() - gFullAt < 1500L)
         syncPulse()
     }
@@ -3890,6 +3907,48 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    /**
+     * The What's here card (holding on the map): the place, and what's known about it as it comes in: the road (name, kind, number
+     * and class for its badge), the speed limit, what the land is, the area, and how far it is from you.
+     */
+    class HereCard(
+        val place: Place, val loading: Boolean, val road: String = "", val roadKind: String = "", val roadClass: String = "", val ref: String = "",
+        val limitMs: Double = 0.0, val limitEstimated: Boolean = false, val land: String = "", val landClass: String = "", val area: String = "", val distM: Double = -1.0,
+    )
+    var here by mutableStateOf<HereCard?>(null)
+
+    private fun showHere(place: Place) {
+        val p = place.pos
+        val dist = fix?.pos?.let { Geo.dist(it, p) } ?: -1.0
+        here = HereCard(place, true, distM = dist)
+        scope.launch {
+            val token = mbToken
+            val info = withContext(Dispatchers.IO) { if (token.isNotBlank() && online()) MapboxRest.whatsHere(token, p) else null }
+            val lim = withContext(Dispatchers.IO) { try { Overpass.speedLimit(p) } catch (e: Exception) { null } }
+            if (here?.place !== place) return@launch
+            here = HereCard(
+                place, false,
+                road = info?.road?.ifBlank { null } ?: lim?.road.orEmpty(), roadKind = info?.roadKind.orEmpty(), roadClass = info?.roadClass.orEmpty(), ref = info?.ref.orEmpty(),
+                limitMs = lim?.ms ?: 0.0, limitEstimated = lim?.estimated ?: false,
+                land = info?.land.orEmpty(), landClass = info?.landClass.orEmpty(), area = info?.place.orEmpty(), distM = dist,
+            )
+        }
+    }
+
+    /** Saves the What's here place as a favourite (or takes it off again). */
+    fun hereSave(): Boolean {
+        val h = here ?: return false
+        val name = h.place.name.takeIf { it != "Repère posé" } ?: h.road.ifBlank { "Lieu enregistré" }
+        return places.toggleFavourite(Place(name, h.area, h.place.pos))
+    }
+
+    /** From the What's here card: go there, or add it as a stop when driving a route. */
+    fun hereGo(asStop: Boolean) {
+        val h = here ?: return
+        here = null
+        if (asStop && route != null && !previewing && dest != null) addStop(h.place) else startRoute(h.place)
+    }
+
     /** Road closures the route is being kept off this trip (id to the closed road's points). */
     private val closuresAvoided = LinkedHashMap<String, List<LL>>()
 
@@ -4352,6 +4411,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             liveAlts = list
             // the plain grey lines make way for the ones with cards
             map.setRoute(cur.pts, emptyList(), cur.sev)
+            map.setStopFlags(via.map { it.pos })
             map.setTunnels(cur.tunnels.map { (a, b) -> slice(r = cur, a = a, b = b) })
             map.setLiveAlts(list.map { it.line() }, list.map { it.bubble }, list.map { it.diffMin }, list.map { it.traffic })
         }
@@ -4451,6 +4511,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (thenOn && nxt != null) "Puis " + Geo.maneuverText(nxt.maneuver, nxt.roundExit) + (if (nxt.street.isNotBlank()) " sur ${nxt.street}" else "") else "",
                 laneSec, Geo.stepTag(cur), laneAdv, cur.roundExit, cur.sign,
                 exitNo = cur.exitNo, rbIn = cur.rbIn, rbOut = cur.rbOut, rbExits = cur.rbExits, thenGap = if (thenOn) gap else 0.0, thenExit = if (thenOn) (nxt?.roundExit ?: 0) else 0,
+                junctionPic = cur.junctionPic,
             )
             // only publish a new turn card when something a driver can see changed (about 3 m of distance), so the screen is not redrawn four times a second for nothing
             val ot = turn
@@ -5348,7 +5409,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val ev = ArrayList<BarEvent>()
             if (camerasOn()) for ((_, off) in routeCams) ev += BarEvent(off, "camera")
             for ((inc, off, _) in incMatches) ev += BarEvent(off, if (inc.cat.contains("work", true)) "works" else "incident")
-            for (s in pl.services) if (s.side < 400.0) ev += BarEvent(s.off, "services")
+            // (services only with the services card on: switching that off in Settings didn't take them off the bar)
+            if (prefs.b(PreferenceKeys.SERVICESCARD, true)) for (s in pl.services) if (s.side < 400.0) ev += BarEvent(s.off, "services")
             for (a in pl.avg) ev += BarEvent(a.start, "avg")
             // fork FR : un arrêt recharge a sa propre icône
             val chargeOffs = chargeVias.mapNotNull { RouteExtras.project(r, it, 300.0)?.first }

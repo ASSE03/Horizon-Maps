@@ -5,6 +5,13 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Drapeaux 3D : un grand drapeau rouge à destination et des drapeaux orange plus petits aux étapes, au-dessus des bâtiments, visibles de loin. Activé par défaut (Réglages › Votre flèche et tracé › Tracé de l'itinéraire).
+- Ombrage du relief : un ombrage doux sur les pentes, pour voir vallées et crêtes même sur une carte à plat. Désactivé par défaut (Réglages › Lumière et 3D › 3D).
+- Arriver du bon côté de la route : l'itinéraire vous amène du côté de la chaussée où se trouve la destination, pour ne pas traverser (itinéraires Mapbox et hors ligne). Activé par défaut (Réglages › Itinéraires › Choix de l'itinéraire).
+- Prochaine limitation : un petit panneau au-dessus de la limitation indique la suivante sur votre itinéraire et sa distance, à partir d'environ 800 m. Activé par défaut (Réglages › Alertes › Vitesse).
+- Qu'y a-t-il ici : un appui long sur la carte montre d'abord une carte avec la route (et son panneau), une mini-limitation, le type de lieu et le secteur, la distance, Y aller (ou Ajouter une étape en conduite) et une étoile pour l'enregistrer. Désactivable dans Réglages › Sur la carte › Appui long sur la carte pour y aller directement comme avant.
+- Images des échangeurs : les images Mapbox des échangeurs d'autoroute, avec les voies à prendre, dans le dernier kilomètre. Désactivé par défaut (Réglages › Carte de direction et voies › Voies et carrefours) ; seulement là où Mapbox en a, et pour les comptes auxquels il les propose.
+- Android Auto : boutons Vue d'ensemble et Autres itinéraires sur la carte de trajet (à côté du son et de l'arrêt), et Vue d'ensemble aussi dans les réglages de la voiture.
 - Thème personnalisé : une vignette « Personnalisé » dans Réglages › Style de la carte › Couleurs. Choisissez le thème de départ, puis changez le sol, l'eau, les parcs, les routes, les grands axes, les bâtiments et la couleur du tracé, séparément le jour et la nuit, ainsi que la largeur du tracé et la luminosité de nuit. L'aperçu en haut montre les couleurs de jour ou de nuit en cours de modification. Enregistrez-le sous un nom (Vos thèmes) pour le reprendre plus tard. Il part exactement du thème que vous aviez : rien ne change tant que vous ne modifiez rien.
 - Limitations « MG4Dash + TomTom » : un nouveau choix dans Réglages › Alertes › Vitesse › Source des limitations. Les paquets MG4Dash (OpenStreetMap) restent la base, et les relevés de TomTom, une autre base de données, passent devant quand TomTom a une limitation pour la route. Utile là où OpenStreetMap n'en a pas ou se trompe. Demande la clé TomTom (une lecture toutes les 6 s environ, dans le quota gratuit).
 - Changement de limitation sans bannière : dans Réglages › Alertes › Vitesse, « Afficher aussi le changement à l'écran » peut être désactivé pour garder seulement l'annonce vocale (le panneau clignote toujours).
@@ -39,6 +46,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Android Auto en écran partagé : dans la partie étroite de l'écran, les cartes et boutons de l'appli rétrécissent encore d'eux-mêmes pour tenir à côté de la carte. La taille générale (Réglages › Android Auto, ou les réglages de la voiture) les règle toujours de 40 % à 300 %.
+- Taille de la flèche sur Android Auto : jusqu'à 30 % (au lieu de 60 %), pour les petits écrans.
 - Couleurs Horizon : un bleu clair de lune frais la nuit (sol, bâtiments et teinte de la carte), bien distinct du violet de Crépuscule.
 - Radars : une première alerte dès 500 m, puis un rappel vocal à 400, 300, 200 et 100 m. Sans itinéraire, les radars sur une route sinueuse sont trouvés plus tôt (ils ne l'étaient parfois qu'à 150 m).
 - Recherche d'adresses en France : la Base Adresse Nationale (IGN, toutes les adresses avec leur numéro) s'ajoute à TomTom et Mapbox, qui ne connaissent pas toutes les adresses des petites communes.
@@ -61,6 +70,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Petits écrans Android Auto (7 pouces, 800 × 480) : la carte de direction n'affichait ni les voies, ni la vue de l'échangeur, ni les conseils. Les voies s'affichent maintenant toujours sur l'écran de la voiture, et le reste sauf sur un écran vraiment bas.
+- Aires de services sur la barre d'itinéraire avec la carte des aires désactivée : la désactiver les retire aussi de la barre.
 - Radars retirés encore annoncés (La Versanne) : le fichier des radars de France ne reprend plus que la liste officielle du ministère de l'Intérieur (environ 3 200 radars fixes), OpenStreetMap ne sert plus qu'à indiquer leur direction. Le fichier est relu chaque jour au lieu de chaque semaine.
 - Flèche qui sortait encore de la route dans les virages : elle avance maintenant dans la direction de la route (relevée au recalage) plutôt que dans celle du GPS, qui a du retard dans les courbes.
 - Android Auto : les bannières (radar, danger…) s'affichent à droite de la barre de recherche au lieu de la chevaucher.
