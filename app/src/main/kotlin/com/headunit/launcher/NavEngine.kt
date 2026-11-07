@@ -1167,7 +1167,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             announcedLimit = n; candidateHits = 0; limitCandidate = -1
             chime()
             LimitLog.add(ctx, "annonce : limitation $n @ ${LimitLog.pos(fix?.pos)}")
-            raiseAlert("limit", "Limitation $n")
+            // fork FR : la bannière peut être coupée, l'annonce vocale reste
+            if (prefs.b("limitbanner", true)) raiseAlert("limit", "Limitation $n")
             speak("Limitation à $n", true)
             limitPulse = true
             scope.launch { delay(3500); limitPulse = false }

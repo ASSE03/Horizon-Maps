@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Changement de limitation sans bannière : dans Réglages › Alertes › Vitesse, « Afficher aussi le changement à l'écran » peut être désactivé pour garder seulement l'annonce vocale (le panneau clignote toujours).
 - Bouton Autres itinéraires : pendant le guidage, un bouton sur la carte (sous les options de la carte) ouvre une liste d'itinéraires, comme dans Google Maps : le vôtre et chaque autre trajet avec son temps, la comparaison, l'heure d'arrivée, la distance, la route empruntée et le trafic. Touchez-en un dans la liste ou sur la carte (en gris) pour le prendre. Sur Android Auto, c'est la première ligne des réglages, dans une liste qu'on choisit au toucher ou à la molette.
 - Travaux et routes fermées autour de vous : avec une clé TomTom, les travaux et fermetures dans un rayon d'environ 7 km s'affichent sur la carte, avec ou sans itinéraire, comme dans Google Maps et Waze.
 - Plus de couleurs de carte : Braise (chaude et sombre), Nuit monochrome (des gris, seuls l'itinéraire et les alertes en couleur), Forêt, Arctique, Contraste élevé, Sépia, Néon, Pastel doux, et Assorties à ma voiture (une touche de la couleur de l'éclairage intérieur, avec son intensité). Dans Réglages › Style de la carte › Couleurs.

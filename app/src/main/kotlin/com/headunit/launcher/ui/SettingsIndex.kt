@@ -104,6 +104,7 @@ internal val settingsIndex = listOf(
     SettingRef("Avertir en cas d'excès de vitesse", "", "Vitesse", 6),
     SettingRef("Avertir au-delà de", "", "Vitesse", 6),
     SettingRef("Annoncer les changements de limitation", "", "Vitesse", 6),
+    SettingRef("Afficher aussi le changement à l'écran", "La bannière au changement de limitation, en plus de l'annonce", "Vitesse", 6),
     SettingRef("Afficher les limitations estimées", "Sans limitation connue, affiche la limitation habituelle pour ce type de route (grisée). Désactivé : aucun panneau plutôt qu'une estimation", "Vitesse", 6),
     SettingRef("Alertes radar", "Alertes vocales et à l'écran", "Radars", 6),
     SettingRef("Désactivés là où c'est interdit", "La France, l'Allemagne et la Suisse interdisent les alertes radar : elles s'y coupent d'elles-mêmes", "Radars", 6),
