@@ -5,24 +5,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          curl -sL "https://static.data.gouv.fr/resources/liste-des-radars-fixes-en-france/20251230-134204/jeu-de-donnees-liste-des-radars-fixes-en-france-12-2025.csv" -o r.csv
-          head -5 r.csv
-          python3 - <<'P'
-          import csv,collections
-          raw=open('r.csv',encoding='utf-8-sig').read(); sep=';' if raw.count(';')>raw.count(',') else ','
-          rows=list(csv.DictReader(raw.splitlines(),delimiter=sep))
-          print(rows[0].keys())
-          for k in rows[0].keys():
-              c=collections.Counter(r[k] for r in rows)
-              if len(c)<40: print(k, c.most_common(15))
-          P
-          echo "== OSM direction tags sample"
           Q='[out:json][timeout:120];area["ISO3166-1"="FR"][admin_level=2]->.fr;node(area.fr)["highway"="speed_camera"];out tags;'
-          curl -s -m 150 --data-urlencode "data=$Q" https://overpass-api.de/api/interpreter | python3 -c "
-          import json,sys,collections
-          d=json.load(sys.stdin)['elements']; c=collections.Counter()
+          curl -s -m 150 --data-urlencode "data=$Q" https://overpass-api.de/api/interpreter > o.json
+          python3 -c "
+          import json,collections
+          d=json.load(open('o.json'))['elements']; c=collections.Counter(); n=0
           for e in d:
-            t=e.get('tags',{})
-            for k in t:
-              if 'direction' in k or k in ('enforcement','camera:direction','direction'): c[(k, t[k] if not t[k][:1].isdigit() else 'num')]+=1
-          print(len(d)); print(c.most_common(30))"
+            t=e.get('tags',{}); v=t.get('direction')
+            if v is None: c['(aucune)']+=1
+            elif v.replace('.','').isdigit(): c['angle']+=1
+            elif ';' in v: c['deux angles']+=1
+            else: c[v]+=1
+          print(len(d)); print(c.most_common(20))"
