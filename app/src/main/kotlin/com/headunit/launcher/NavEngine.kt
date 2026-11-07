@@ -2217,8 +2217,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         if (kmh == null || kmh <= 0) { if (speedLimit != null) { speedLimit = null; limitEstimated = false }; return }
         val ms = kmh / 3.6
-        if (speedLimit == null || abs((speedLimit ?: 0.0) - ms) > 0.3 || limitEstimated) { speedLimit = ms; limitEstimated = false }
-        checkLimitChange(ms, false)
+        // fork FR : une limitation estimée (route sans limitation dans OpenStreetMap) est affichée, mais ni annoncée ni utilisée
+        // pour l'alerte de dépassement : c'est elle qui annonçait 80 en agglomération
+        val est = MgSpeedLimit.estimated
+        if (speedLimit == null || abs((speedLimit ?: 0.0) - ms) > 0.3 || limitEstimated != est) { speedLimit = ms; limitEstimated = est }
+        checkLimitChange(ms, est)
         limitOkAt = System.currentTimeMillis(); limitOkPos = p.pos
     }
 

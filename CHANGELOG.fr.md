@@ -58,6 +58,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Limitation à 80 annoncée en agglomération : quand une route n'a pas de limitation dans OpenStreetMap, la valeur estimée est maintenant affichée en pâle, sans annonce vocale ni alerte de dépassement. L'estimation reconnaît aussi mieux les villages (50 au lieu de 80 quand les rues voisines sont de petites routes sans classement).
 - Flèche qui tremblait ou restait bloquée à petite vitesse (sans itinéraire) : c'est maintenant le point visé qui est recalé sur la route, et la flèche glisse vers lui en douceur, au lieu d'être recalée elle-même à chaque image.
 - Téléphone en portrait : pendant le guidage, l'alerte (radar, danger…) s'affiche au-dessus du compteur au lieu de le recouvrir.
 - Bouchons non pris en compte dans le trajet : un bouchon pouvait être annoncé sans que le temps restant augmente ni que le tracé passe en orange ou en rouge. Les détails des incidents TomTom étaient mal lus, et un bouchon sans retard indiqué était ignoré. Maintenant, chaque bouchon devant colore le tracé (orange, rouge s'il est important), et son retard est ajouté au temps restant quand le trafic de l'itinéraire ne le compte pas déjà.

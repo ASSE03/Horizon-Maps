@@ -503,6 +503,7 @@ object MgSpeedLimit {
             else if (now - lastFoundAt < HOLD_MS) _limit.value   // route perdue un instant : on garde l'affichage
             else null
         if (_limit.value != v) _limit.value = v
+        estimated = est.isNotEmpty() || (found == null && estimated)
         val acc = if (fix.hasAccuracy()) "±${fix.accuracy.toInt()} m" else "précision ?"
         val ready = wanted.count { covered(it) }
         status = "${v ?: "inconnue"}$est · $packInfo · ${found?.label ?: if (still) "aucune route à 150 m (arrêt)" else "aucune route à 30 m"} · position ${fix.provider} $acc à ${hhmmss()} · " +
@@ -521,18 +522,24 @@ object MgSpeedLimit {
         if (road == "motorway") return 130
         if (road.endsWith("_link") && road != "primary_link" && road != "secondary_link" && road != "tertiary_link") return null
         if (road == "trunk" && w.dual) return 110
+        // fork FR : agglomération = des rues résidentielles proches (2 points chacune) ou des petites routes sans classement
+        // (1 point) : à 4 points, c'est 50. Avant, il fallait 3 rues résidentielles, et un village dont les rues sont
+        // « unclassified » donnait 80 en plein bourg (Saint-Cyr, le 06/11)
         var near = 0
         for (o in list) {
-            if (o.cls != 6 && o.cls != 7) continue   // residential, living_street
+            if (o.cls != 5 && o.cls != 6 && o.cls != 7) continue   // unclassified, residential, living_street
+            if (o === w) continue
             var close = false
             for (j in 0 until o.lat.size - 1) {
                 if (segment(loc, o.lat[j] / E5, o.lon[j] / E5, o.lat[j + 1] / E5, o.lon[j + 1] / E5).first <= 150.0) { close = true; break }
             }
-            if (close && ++near >= 3) return 50
+            if (close) { near += if (o.cls == 5) 1 else 2; if (near >= 4) return 50 }
         }
         return 80
     }
     @Volatile private var estimateOn = true
+    /** Fork FR : la limitation affichée est estimée (route sans limitation dans OpenStreetMap). */
+    @Volatile var estimated = false
 
     private fun limitOf(tags: JSONObject): Int? =
         // En France, beaucoup de rues n'ont pas « maxspeed » mais un type de zone (FR:urban = 50, FR:zone30…)
