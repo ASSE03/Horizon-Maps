@@ -614,9 +614,12 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
         if (prefs.b(PreferenceKeys.SPEEDWARN, true)) SChoice("Avertir au-delà de", listOf("0", "5", "10").map { it to it + if (engine.imperial) " mph" else " km/h" }, prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5")) { prefs.put(PreferenceKeys.TRAFFIC_WARNING, it) }
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
         if (prefs.b("limitchange", true)) SToggle(prefs, "Afficher aussi le changement à l'écran", "limitbanner", true, "Désactivé : seulement l'annonce vocale (et le panneau qui clignote), sans la grande bannière")
-        SChoice("Source des limitations", listOf("mg4" to "Comme MG4Dash", "auto" to "TomTom et Mapbox"), prefs.s("limitsrc", "mg4"),
-            if (prefs.s("limitsrc", "mg4") == "mg4") "OpenStreetMap seul, avec les paquets France de MG4Dash (jeton GitHub ayant accès à MG4Dash-SWI68), sinon par petites zones gardées 60 jours"
-            else "TomTom ou Mapbox d'abord, OpenStreetMap en secours (comme l'appli d'origine)") { prefs.put("limitsrc", it) }
+        SChoice("Source des limitations", listOf("mg4" to "Comme MG4Dash", "mix" to "MG4Dash + TomTom", "auto" to "TomTom et Mapbox"), prefs.s("limitsrc", "mg4"),
+            when (prefs.s("limitsrc", "mg4")) {
+                "mg4" -> "OpenStreetMap seul, avec les paquets France de MG4Dash (jeton GitHub ayant accès à MG4Dash-SWI68), sinon par petites zones gardées 60 jours"
+                "mix" -> "Les paquets MG4Dash (OpenStreetMap), corrigés par les relevés de TomTom quand il en a (clé TomTom nécessaire, une lecture toutes les 6 s environ). Utile là où OpenStreetMap n'a pas de limitation ou se trompe"
+                else -> "TomTom ou Mapbox d'abord, OpenStreetMap en secours (comme l'appli d'origine)"
+            }) { prefs.put("limitsrc", it) }
         SToggle(prefs, "Afficher les limitations estimées", "limitest", false, "Sans limitation connue, affiche la limitation habituelle pour ce type de route (grisée). Désactivé : aucun panneau plutôt qu'une estimation")
     }
     SGroup("Radars") {

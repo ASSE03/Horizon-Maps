@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Limitations « MG4Dash + TomTom » : un nouveau choix dans Réglages › Alertes › Vitesse › Source des limitations. Les paquets MG4Dash (OpenStreetMap) restent la base, et les relevés de TomTom, une autre base de données, passent devant quand TomTom a une limitation pour la route. Utile là où OpenStreetMap n'en a pas ou se trompe. Demande la clé TomTom (une lecture toutes les 6 s environ, dans le quota gratuit).
 - Changement de limitation sans bannière : dans Réglages › Alertes › Vitesse, « Afficher aussi le changement à l'écran » peut être désactivé pour garder seulement l'annonce vocale (le panneau clignote toujours).
 - Bouton Autres itinéraires : pendant le guidage, un bouton sur la carte (sous les options de la carte) ouvre une liste d'itinéraires, comme dans Google Maps : le vôtre et chaque autre trajet avec son temps, la comparaison, l'heure d'arrivée, la distance, la route empruntée et le trafic. Touchez-en un dans la liste ou sur la carte (en gris) pour le prendre. Sur Android Auto, c'est la première ligne des réglages, dans une liste qu'on choisit au toucher ou à la molette.
 - Travaux et routes fermées autour de vous : avec une clé TomTom, les travaux et fermetures dans un rayon d'environ 7 km s'affichent sur la carte, avec ou sans itinéraire, comme dans Google Maps et Waze.

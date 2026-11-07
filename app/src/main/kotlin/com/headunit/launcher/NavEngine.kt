@@ -2205,21 +2205,38 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** While navigating a TomTom route: the posted limit for exactly where you are on it, updated with every GPS fix. */
     /** Fork FR : limitations reprises de MG4Dash (réglage « Source des limitations », par défaut). */
-    fun mgLimits() = prefs.s("limitsrc", "mg4") == "mg4"
+    fun mgLimits() = prefs.s("limitsrc", "mg4").let { it == "mg4" || it == "mix" }
+    /** Fork FR : OpenStreetMap (paquets MG4Dash) + TomTom : la limitation de TomTom passe devant quand il en a une. */
+    private fun mixLimits() = prefs.s("limitsrc", "mg4") == "mix" && hasKey
+    @Volatile private var mixLim: Double? = null      // km/h
+    @Volatile private var mixAt = 0L
+    @Volatile private var mixPos: LL? = null
+    @Volatile private var mixBusy = false
     private var mgShown: Int? = -1
 
     /** Fork FR : affiche la limitation trouvée par le moteur de MG4Dash. */
     private fun applyMgLimit(p: Fix) {
-        val kmh = MgSpeedLimit.limit.value
+        // fork FR : avec TomTom en plus, une lecture TomTom toutes les 6 s au plus et après 120 m (de quoi rester dans le quota gratuit)
+        val now0 = System.currentTimeMillis()
+        if (mixLimits() && simMode == 0 && !mixBusy && now0 - mixAt > 6000L && (mixPos?.let { Geo.dist(it, p.pos) > 120.0 } ?: true) && online()) {
+            mixBusy = true; mixAt = now0
+            val at = p.pos; val hd = p.heading
+            scope.launch(Dispatchers.IO) {
+                val r = try { TomTomRest.speedLimit(apiKey, at, hd) } catch (e: Exception) { null }
+                mixLim = r?.let { Math.round(it.ms * 3.6).toDouble() }; mixPos = at; mixBusy = false
+            }
+        }
+        val mixFresh = mixLimits() && mixLim != null && now0 - mixAt < 20_000L && (mixPos?.let { Geo.dist(it, p.pos) < 250.0 } ?: false)
+        val kmh = if (mixFresh) mixLim!!.toInt() else MgSpeedLimit.limit.value
         if (kmh != mgShown) {
             mgShown = kmh
-            LimitLog.add(ctx, "MG4Dash : ${kmh ?: "inconnue"} · ${MgSpeedLimit.status.take(140)} @ ${LimitLog.pos(p.pos)}")
+            LimitLog.add(ctx, (if (mixFresh) "TomTom : $kmh (OSM : ${MgSpeedLimit.limit.value ?: "inconnue"}) · " else "MG4Dash : ${kmh ?: "inconnue"} · ") + "${MgSpeedLimit.status.take(140)} @ ${LimitLog.pos(p.pos)}")
         }
         if (kmh == null || kmh <= 0) { if (speedLimit != null) { speedLimit = null; limitEstimated = false }; return }
         val ms = kmh / 3.6
         // fork FR : une limitation estimée (route sans limitation dans OpenStreetMap) est affichée, mais ni annoncée ni utilisée
         // pour l'alerte de dépassement : c'est elle qui annonçait 80 en agglomération
-        val est = MgSpeedLimit.estimated
+        val est = if (mixFresh) false else MgSpeedLimit.estimated
         if (speedLimit == null || abs((speedLimit ?: 0.0) - ms) > 0.3 || limitEstimated != est) { speedLimit = ms; limitEstimated = est }
         checkLimitChange(ms, est)
         limitOkAt = System.currentTimeMillis(); limitOkPos = p.pos
