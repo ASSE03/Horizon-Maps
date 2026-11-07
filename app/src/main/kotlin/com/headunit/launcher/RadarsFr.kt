@@ -16,7 +16,7 @@ object RadarsFr {
 
     @Volatile private var pts: FloatArray? = null       // lat, lon, direction (-1 : inconnue), vitesse contrôlée (0 : inconnue) à la suite
     /** La vitesse contrôlée (km/h) des radars trouvés, d'après la liste officielle. */
-    val vma = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    val vma = java.util.concurrent.ConcurrentHashMap<Long, Int>()
     @Volatile var status = "pas encore chargé"
     @Volatile private var tryAt = 0L
 

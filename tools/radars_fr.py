@@ -71,8 +71,8 @@ def official():
                 try: v = int(float(str(r.get(vk) or "0").replace(",", "."))) if vk else 0
                 except ValueError: v = 0
                 t = (r.get(tk) or "").lower() if tk else ""
-                # fork FR : tourelles et radars « double sens » contrôlent les deux sens : jamais de direction pour eux
-                both = any(w in t for w in ("double", "deux sens", "bidirection", "tourelle"))
+                # fork FR : tourelles (ETT) et radars « double sens » peuvent contrôler les deux sens : jamais de direction pour eux
+                both = any(w in t for w in ("double", "deux sens", "bidirection", "tourelle", "ett"))
                 if 41 < a < 52 and -6 < o < 10: out.append([round(a, 6), round(o, 6), -1, v if 20 <= v <= 130 else 0, both])
             except (ValueError, TypeError):
                 pass
