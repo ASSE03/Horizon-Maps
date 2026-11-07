@@ -2965,21 +2965,25 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // fork FR : en plein virage, l'avance en ligne droite envoyait la flèche tout droit au-delà du carrefour : elle est réduite
             val turning = abs(angDiff(mHead, gHead)) > 20.0
             val ahead = age + if (turning) 0.0 else lead
-            val predLat = (mp.lat) + cos(rad) * gSpeed * ahead / 110574.0
-            val predLon = (mp.lon) + Math.sin(rad) * gSpeed * ahead / kLon
+            var predLat = (mp.lat) + cos(rad) * gSpeed * ahead / 110574.0
+            var predLon = (mp.lon) + Math.sin(rad) * gSpeed * ahead / kLon
+            // fork FR : c'est le point visé qui est recalé sur la route (10 fois par seconde, l'écart gardé entre deux), et la flèche
+            // glisse vers lui en douceur. Recaler la flèche elle-même à chaque image la faisait trembler et la bloquait (la
+            // projection sur une rue de biais annulait son avance)
+            if (mSpeed > 1.0 && snapRoadOn) {
+                if (now - gSnapAt >= 100L) {
+                    gSnapAt = now
+                    val sn = try { map.snapToRoad(LL(predLat, predLon), mHead, if (turning) 55.0 else 30.0, 15.0) } catch (e: Exception) { null }
+                    gSnapDLat = if (sn != null) sn.lat - predLat else 0.0; gSnapDLon = if (sn != null) sn.lon - predLon else 0.0
+                }
+                predLat += gSnapDLat; predLon += gSnapDLon
+            }
             var nLat = gp.lat + cos(rad) * gSpeed * dt / 110574.0
             var nLon = gp.lon + Math.sin(rad) * gSpeed * dt / kLon
             val eN = (predLat - nLat) * 110574.0; val eE = (predLon - nLon) * kLon
             if (hypot(eN, eE) > 80.0) { nLat = predLat; nLon = predLon }
             else { val k = 1.0 - Math.exp(-dt / 0.9); nLat += (predLat - nLat) * k; nLon += (predLon - nLon) * k }
             gPos = LL(nLat, nLon)
-            // fork FR : la position affichée est elle-même recalée sur la route, image par image : prolongée en ligne droite, elle
-            // sortait de la chaussée dans les ronds-points et les virages serrés (Waze et Google Maps la gardent sur la route)
-            // (10 fois par seconde au plus : chaque recalage parcourt les routes affichées, c'est du calcul pour un autoradio lent)
-            if (mSpeed > 1.0 && now - gSnapAt >= 100L && snapRoadOn) try {
-                gSnapAt = now
-                map.snapToRoad(LL(nLat, nLon), gHead, if (turning) 70.0 else 40.0, 15.0)?.let { gPos = it }
-            } catch (e: Exception) { }
             if (mSpeed > 1.5) gHead = easeAngle(gHead, mHead, dt, if (turning) 0.2 else 0.35)
             lookB = gHead
         }
@@ -5448,6 +5452,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Fork FR : dernier recalage sur la route de la position affichée, et le réglage lu une fois par position. */
     private var gSnapAt = 0L
+    private var gSnapDLat = 0.0
+    private var gSnapDLon = 0.0
     @Volatile private var snapRoadOn = true
 
     /** Fork FR : depuis quand la démo ne tourne plus alors qu'un départ de démo bloque la vraie position. */

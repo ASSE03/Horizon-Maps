@@ -57,6 +57,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Flèche qui tremblait ou restait bloquée à petite vitesse (sans itinéraire) : c'est maintenant le point visé qui est recalé sur la route, et la flèche glisse vers lui en douceur, au lieu d'être recalée elle-même à chaque image.
 - Téléphone en portrait : pendant le guidage, l'alerte (radar, danger…) s'affiche au-dessus du compteur au lieu de le recouvrir.
 - Bouchons non pris en compte dans le trajet : un bouchon pouvait être annoncé sans que le temps restant augmente ni que le tracé passe en orange ou en rouge. Les détails des incidents TomTom étaient mal lus, et un bouchon sans retard indiqué était ignoré. Maintenant, chaque bouchon devant colore le tracé (orange, rouge s'il est important), et son retard est ajouté au temps restant quand le trafic de l'itinéraire ne le compte pas déjà.
 - Travaux et fermetures TomTom non reconnus : à cause de la même erreur de lecture, ils n'étaient ni évités ni affichés aux alentours. Corrigé avec le point précédent.
