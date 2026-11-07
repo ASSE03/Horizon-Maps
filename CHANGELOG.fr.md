@@ -37,6 +37,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Radars : une première alerte dès 500 m, puis un rappel vocal à 400, 300, 200 et 100 m. Sans itinéraire, les radars sur une route sinueuse sont trouvés plus tôt (ils ne l'étaient parfois qu'à 150 m).
 - Recherche d'adresses en France : la Base Adresse Nationale (IGN, toutes les adresses avec leur numéro) s'ajoute à TomTom et Mapbox, qui ne connaissent pas toutes les adresses des petites communes.
 - Réglages réorganisés : Aspect de la carte est séparé en Style de la carte (couleurs, jour et nuit, détail) et Lumière et 3D (lumière et météo, 3D, inclinaison, ciel). Les panneaux en verre et la position du logo Mapbox passent dans Écran et tailles. La recherche des réglages trouve tout à sa nouvelle place, et les réglages se rouvrent là où vous les aviez laissés.
 - Autres itinéraires en direct : cherchés toutes les 2 minutes (au lieu de 3), aussi dans les bouchons, jusqu'aux 5 dernières minutes du trajet, 30 secondes après un recalcul, et auprès des deux services quand vous avez les deux clés.

@@ -2376,19 +2376,30 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 // to the side at 500 m, so cameras on other roads set off alerts). A little more room close in, where the camera
                 // is often beside the road
                 val side = d * kotlin.math.sin(Math.toRadians(diff))
-                if (diff < 80.0 && side < (if (d < 150.0) 40.0 else 30.0) && camFacesUs(c, p.heading)) { best = c; bestD = d }
+                // (fork FR : 45 m au-delà de 150 m : sur une route sinueuse, le radar n'était trouvé qu'à 150 m)
+                if (diff < 80.0 && side < (if (d < 150.0) 40.0 else 45.0) && camFacesUs(c, p.heading)) { best = c; bestD = d }
             }
         }
         cameraDist = if (best != null) bestD.toInt() else null
         if (best != null) {
-            if (camAlerted.size > 100) camAlerted.clear()
+            if (camAlerted.size > 100) { camAlerted.clear(); camStep.clear() }
+            // fork FR : une première alerte (dès 500 m), puis un rappel à chaque centaine de mètres : 400, 300, 200, 100 m
+            val step = if (bestD < 60.0) 0 else Math.ceil((bestD - 20.0) / 100.0).toInt().coerceAtLeast(1)
             if (camAlerted.add(best)) {
+                camStep[best] = step
                 // fork FR : la distance du radar plutôt que « Radar devant »
                 val say = if (bestD < 60.0) "Radar tout de suite" else "Radar dans ${Geo.spoken(bestD, imperial)}"
                 chime(android.media.ToneGenerator.TONE_PROP_PROMPT); raiseAlert("camera", say); speak(say, true)
+            } else if (!imperial && step < (camStep[best] ?: 99) && step in 1..4) {
+                camStep[best] = step
+                val say = "Radar à ${step * 100} mètres"
+                raiseAlert("camera", say); speak(say, true)
             }
         }
     }
+
+    /** Fork FR : la dernière centaine de mètres annoncée pour chaque radar. */
+    private val camStep = HashMap<LL, Int>()
 
     private fun trackParking(p: Fix) {
         if (simMode != 0) return
