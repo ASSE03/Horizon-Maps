@@ -4,7 +4,7 @@
 Sources :
   1. OpenStreetMap (highway=speed_camera en France), via les serveurs Overpass, avec plusieurs essais ;
   2. la « Liste des radars fixes en France » du ministère de l'Intérieur (data.gouv.fr).
-Les radars officiels absents d'OSM (à plus de 40 m d'un radar OSM) sont ajoutés.
+La liste officielle fait foi ; OpenStreetMap ne donne que la direction des radars qu'il connaît.
 Sortie : radars_fr.json = {"date": "...", "sources": {...}, "r": [[lat, lon, direction ou -1], ...]}
 """
 import csv, io, json, math, sys, time, urllib.parse, urllib.request
@@ -75,27 +75,34 @@ def official():
 def main():
     o, osrc = osm()
     g, gsrc = official()
-    # grille de 0,001° pour retrouver vite les voisins
+    if len(g) < 1500:
+        print(f"Liste officielle trop courte ({len(g)}) : fichier non publié"); sys.exit(1)
+    # Fork FR : la liste officielle du ministère fait foi (un radar retiré disparaît de cette liste, alors qu'il reste souvent des
+    # années dans OpenStreetMap : radar annoncé à la sortie de La Versanne, retiré depuis 3 ans). OpenStreetMap ne sert plus qu'à
+    # donner la direction d'un radar officiel quand il le connaît à moins de 60 m.
     grid = {}
-    for p in o:
-        grid.setdefault((int(p[0] * 1000), int(p[1] * 1000)), []).append(p)
-    added = 0
+    for q in o:
+        grid.setdefault((int(q[0] * 1000), int(q[1] * 1000)), []).append(q)
+    out = []; withdir = 0
     for p in g:
         ky, kx = int(p[0] * 1000), int(p[1] * 1000)
-        near = False
+        best = None; bd = 60.0
         for dy in (-1, 0, 1):
             for dx in (-1, 0, 1):
                 for q in grid.get((ky + dy, kx + dx), []):
                     dlat = (p[0] - q[0]) * 111320; dlon = (p[1] - q[1]) * 111320 * math.cos(math.radians(p[0]))
-                    if math.hypot(dlat, dlon) < 40: near = True
-        if not near:
-            o.append(p); grid.setdefault((ky, kx), []).append(p); added += 1
-    if len(o) < 1500:
-        print(f"Trop peu de radars ({len(o)}) : fichier non publié"); sys.exit(1)
-    out = {"date": time.strftime("%Y-%m-%d"), "sources": {"osm": osrc, "officiel": gsrc, "ajoutés": added}, "r": o}
+                    dd = math.hypot(dlat, dlon)
+                    if dd < bd: bd = dd; best = q
+        d = best[2] if best is not None else -1
+        if d >= 0: withdir += 1
+        out.append([p[0], p[1], d])
+    # contrôle : ce qu'OpenStreetMap a en plus (radars retirés, ou trop récents pour la liste) n'est pas repris
+    near = [q for q in o if abs(q[0] - 45.3155) < 0.01 and abs(q[1] - 4.533) < 0.01]
+    print("OSM près de La Versanne :", near)
+    out_ = {"date": time.strftime("%Y-%m-%d"), "sources": {"officiel": gsrc, "osm (directions)": osrc, "avec direction": withdir}, "r": out}
     with open("radars_fr.json", "w") as f:
-        json.dump(out, f, separators=(",", ":"))
-    print(f"Total : {len(o)} radars (dont {added} officiels absents d'OSM)")
+        json.dump(out_, f, separators=(",", ":"))
+    print(f"Total : {len(out)} radars officiels, dont {withdir} avec la direction d'OpenStreetMap")
 
 
 if __name__ == "__main__":
