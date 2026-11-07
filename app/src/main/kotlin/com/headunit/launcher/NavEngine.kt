@@ -1168,7 +1168,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             chime()
             LimitLog.add(ctx, "annonce : limitation $n @ ${LimitLog.pos(fix?.pos)}")
             // fork FR : la bannière peut être coupée, l'annonce vocale reste
-            if (prefs.b("limitbanner", true)) raiseAlert("limit", "Limitation $n")
+            if (prefs.b("limitbanner", false)) raiseAlert("limit", "Limitation $n")
             speak("Limitation à $n", true)
             limitPulse = true
             scope.launch { delay(3500); limitPulse = false }
@@ -2991,7 +2991,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         } else {
             val gp = gPos ?: f.pos
             val mp = mPos ?: f.pos
-            val rad = Math.toRadians(mHead)
+            // fork FR : dans un virage, la direction de la route (au dernier recalage) plutôt que celle du GPS, qui a du retard et
+            // envoyait la flèche vers l'extérieur de la courbe
+            val roadB = if (now - gRoadAt < 400L && gRoadB >= 0.0 && abs(angDiff(gRoadB, mHead)) < 60.0) gRoadB else -1.0
+            val rad = Math.toRadians(if (roadB >= 0.0) roadB else mHead)
             val kLon = 111320.0 * cos(Geo.rad(gp.lat))
             // fork FR : en plein virage, l'avance en ligne droite envoyait la flèche tout droit au-delà du carrefour : elle est réduite
             val turning = abs(angDiff(mHead, gHead)) > 20.0
@@ -3006,6 +3009,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     gSnapAt = now
                     val sn = try { map.snapToRoad(LL(predLat, predLon), mHead, if (turning) 55.0 else 30.0, 15.0) } catch (e: Exception) { null }
                     gSnapDLat = if (sn != null) sn.lat - predLat else 0.0; gSnapDLon = if (sn != null) sn.lon - predLon else 0.0
+                    if (sn != null) { gRoadB = map.lastSnapBearing; gRoadAt = now }
                 }
                 predLat += gSnapDLat; predLon += gSnapDLon
             }
@@ -3015,7 +3019,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (hypot(eN, eE) > 80.0) { nLat = predLat; nLon = predLon }
             else { val k = 1.0 - Math.exp(-dt / 0.9); nLat += (predLat - nLat) * k; nLon += (predLon - nLon) * k }
             gPos = LL(nLat, nLon)
-            if (mSpeed > 1.5) gHead = easeAngle(gHead, mHead, dt, if (turning) 0.2 else 0.35)
+            if (mSpeed > 1.5) gHead = easeAngle(gHead, if (roadB >= 0.0) roadB else mHead, dt, if (turning) 0.2 else 0.35)
             lookB = gHead
         }
         val gp = gPos ?: return
@@ -5483,6 +5487,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Fork FR : dernier recalage sur la route de la position affichée, et le réglage lu une fois par position. */
     private var gSnapAt = 0L
+    private var gRoadB = -1.0
+    private var gRoadAt = 0L
     private var gSnapDLat = 0.0
     private var gSnapDLon = 0.0
     @Volatile private var snapRoadOn = true

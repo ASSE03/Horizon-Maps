@@ -264,7 +264,8 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
         // alerts (cameras, limits, hazards...): beside the turn card on wide screens, under it on tall ones
         val below = if (showTurn && turnH > 0) with(dens) { turnH.toDp() } + 10.dp else if (engine.route == null && topBlockH > 0) with(dens) { topBlockH.toDp() } + 10.dp else 0.dp
         val alertMod = if (portrait) Modifier.align(Alignment.TopStart).padding(start = left, end = rightTop + 64.dp, top = top + below)
-            else Modifier.align(Alignment.TopCenter).padding(top = top, start = if (guiding) maxWidth * 0.42f else left, end = maxOf(rightTop, maxWidth * 0.30f))
+            // (fork FR : toujours à droite de la barre de recherche, qu'elle chevauchait hors guidage)
+            else Modifier.align(Alignment.TopCenter).padding(top = top, start = maxOf(left, maxWidth * 0.42f), end = maxOf(rightTop, maxWidth * 0.22f))
         AnimatedVisibility(alert != null, modifier = alertMod, enter = fadeIn(), exit = fadeOut()) { alert?.let { AlertBanner(it) } }
 
         if (!previewing && !arriving) {

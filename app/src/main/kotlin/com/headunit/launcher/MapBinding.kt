@@ -245,8 +245,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val v = if (top) android.view.Gravity.TOP else android.view.Gravity.BOTTOM
         val h = if (left) android.view.Gravity.START else android.view.Gravity.END
         // a little in from the edge (further down at the top, clear of the app's top bar), inside the visible part of the screen
-        val vEdge = (if (top) (inset?.top ?: 0) else (inset?.bottom ?: 0)) + (if (top) 64f else 12f) * d
-        val hEdge = (if (left) (inset?.left ?: 0) else (inset?.right ?: 0)) + 10f * d
+        // (fork FR : en bas, au plus près du coin)
+        val vEdge = (if (top) (inset?.top ?: 0) else (inset?.bottom ?: 0)) + (if (top) 64f else 3f) * d
+        val hEdge = (if (left) (inset?.left ?: 0) else (inset?.right ?: 0)) + (if (top) 10f else 4f) * d
         try {
             mapView.logo.position = v or h
             mapView.logo.marginTop = if (top) vEdge else 0f; mapView.logo.marginBottom = if (top) 0f else vEdge
@@ -4044,6 +4045,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
      * Moves a GPS position onto the nearest drawn road that runs the way you are heading, or returns null when none is close enough.
      * It never waits on the map: it uses the roads the map last reported (the engine tries the speed-limit roads first anyway).
      */
+    /** Fork FR : la direction de la route au dernier recalage réussi (dans le sens de la marche), -1 sinon. */
+    @Volatile var lastSnapBearing = -1.0
+
     fun snapToRoad(p: LL, heading: Double, maxAngle: Double = 35.0, maxDist: Double = 24.0): LL? {
         val segs = roadSegs
         if (segs.isEmpty() || android.os.SystemClock.uptimeMillis() - roadSegsAt > 20_000L) return null
@@ -4052,6 +4056,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             val k2 = 110574.0
             var best: LL? = null
             var bd = maxDist
+            var bestB = -1.0
             for (pts in segs) {
                 for (i in 0 until pts.size - 1) {
                     val ax = (pts[i].longitude() - p.lon) * k; val ay = (pts[i].latitude() - p.lat) * k2
@@ -4070,8 +4075,10 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                     if (diff > maxAngle && diff < 180.0 - maxAngle) continue
                     bd = d
                     best = LL(p.lat + (ay + dy * t) / k2, p.lon + (ax + dx * t) / k)
+                    bestB = if (diff > 90.0) (segB + 180.0) % 360.0 else segB
                 }
             }
+            lastSnapBearing = if (best != null) bestB else -1.0
             best
         } catch (e: Exception) { null }
     }
