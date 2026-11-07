@@ -5,19 +5,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          UA="HorizonNavFR/1.0"
-          echo "== viaduc"; curl -s -m 20 -A "$UA" "https://nominatim.openstreetmap.org/search?q=Viaduc+Daniel+Aim%C3%A9+Annonay&format=jsonv2&limit=2" | head -c 400; echo
-          for P in "45.26240,4.70720" "45.24700,4.66900"; do
-          Q="[out:json][timeout:60];way(around:150,$P)[highway~\"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential)(_link)?$\"];out tags center;"
-          for ep in https://overpass-api.de/api/interpreter https://overpass.private.coffee/api/interpreter https://maps.mail.ru/osm/tools/overpass/api/interpreter; do
-            echo "== $P $ep"; curl -s -m 70 -A "$UA" --data-urlencode "data=$Q" "$ep" | python3 -c "
-          import json,sys
-          try:
-            d=json.load(sys.stdin)
-            for e in d['elements']:
-              t=e.get('tags',{}); c=e.get('center',{})
-              print(e['id'],t.get('highway'),t.get('junction',''),t.get('name'),t.get('ref'),'max=',t.get('maxspeed'),'zone=',t.get('zone:maxspeed'),t.get('maxspeed:type'),'bridge=',t.get('bridge',''), round(c.get('lat',0),5),round(c.get('lon',0),5))
-            sys.exit(0)
-          except Exception as ex: print('err',ex); sys.exit(1)
-          " && break
-          done; done
+          curl -sL "https://static.data.gouv.fr/resources/liste-des-radars-fixes-en-france/20251230-134204/jeu-de-donnees-liste-des-radars-fixes-en-france-12-2025.csv" -o r.csv
+          head -5 r.csv
+          python3 - <<'P'
+          import csv,collections
+          raw=open('r.csv',encoding='utf-8-sig').read(); sep=';' if raw.count(';')>raw.count(',') else ','
+          rows=list(csv.DictReader(raw.splitlines(),delimiter=sep))
+          print(rows[0].keys())
+          for k in rows[0].keys():
+              c=collections.Counter(r[k] for r in rows)
+              if len(c)<40: print(k, c.most_common(15))
+          P
+          echo "== OSM direction tags sample"
+          Q='[out:json][timeout:120];area["ISO3166-1"="FR"][admin_level=2]->.fr;node(area.fr)["highway"="speed_camera"];out tags;'
+          curl -s -m 150 --data-urlencode "data=$Q" https://overpass-api.de/api/interpreter | python3 -c "
+          import json,sys,collections
+          d=json.load(sys.stdin)['elements']; c=collections.Counter()
+          for e in d:
+            t=e.get('tags',{})
+            for k in t:
+              if 'direction' in k or k in ('enforcement','camera:direction','direction'): c[(k, t[k] if not t[k][:1].isdigit() else 'num')]+=1
+          print(len(d)); print(c.most_common(30))"
