@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Radars : la vitesse contrôlée est annoncée (« Radar à 80 dans 300 mètres »), d'après la liste officielle, et une flèche rouge indique sur la carte le sens contrôlé quand il est connu.
 - Drapeaux 3D : un grand drapeau rouge à destination et des drapeaux orange plus petits aux étapes, au-dessus des bâtiments, visibles de loin. Activé par défaut (Réglages › Votre flèche et tracé › Tracé de l'itinéraire).
 - Ombrage du relief : un ombrage doux sur les pentes, pour voir vallées et crêtes même sur une carte à plat. Désactivé par défaut (Réglages › Lumière et 3D › 3D).
 - Arriver du bon côté de la route : l'itinéraire vous amène du côté de la chaussée où se trouve la destination, pour ne pas traverser (itinéraires Mapbox et hors ligne). Activé par défaut (Réglages › Itinéraires › Choix de l'itinéraire).
@@ -46,6 +47,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Radars : annonce à 300 m puis rappel à 150 m (au lieu de 500 m puis toutes les centaines de mètres) ; tourelles et radars double sens comptés pour les deux sens.
 - Android Auto en écran partagé : dans la partie étroite de l'écran, les cartes et boutons de l'appli rétrécissent encore d'eux-mêmes pour tenir à côté de la carte. La taille générale (Réglages › Android Auto, ou les réglages de la voiture) les règle toujours de 40 % à 300 %.
 - Taille de la flèche sur Android Auto : jusqu'à 30 % (au lieu de 60 %), pour les petits écrans.
 - Couleurs Horizon : un bleu clair de lune frais la nuit (sol, bâtiments et teinte de la carte), bien distinct du violet de Crépuscule.

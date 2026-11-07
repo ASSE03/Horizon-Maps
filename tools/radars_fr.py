@@ -5,7 +5,7 @@ Sources :
   1. OpenStreetMap (highway=speed_camera en France), via les serveurs Overpass, avec plusieurs essais ;
   2. la « Liste des radars fixes en France » du ministère de l'Intérieur (data.gouv.fr).
 La liste officielle fait foi ; OpenStreetMap ne donne que la direction des radars qu'il connaît.
-Sortie : radars_fr.json = {"date": "...", "sources": {...}, "r": [[lat, lon, direction ou -1], ...]}
+Sortie : radars_fr.json = {"date": "...", "sources": {...}, "r": [[lat, lon, direction ou -1, vitesse contrôlée ou 0], ...]}
 """
 import csv, io, json, math, sys, time, urllib.parse, urllib.request
 
@@ -58,11 +58,22 @@ def official():
         keys = list(rows[0].keys())
         la = next(k for k in keys if "lat" in k.lower())
         lo = next(k for k in keys if "lon" in k.lower() or "lng" in k.lower())
+        vk = next((k for k in keys if "vma" in k.lower() or "vitesse" in k.lower()), None)
+        tk = next((k for k in keys if "type" in k.lower()), None)
+        types = {}
+        for r in rows:
+            t = (r.get(tk) or "").strip() if tk else ""; types[t] = types.get(t, 0) + 1
+        print("Types :", types)
         out = []
         for r in rows:
             try:
                 a = float(str(r[la]).replace(",", ".")); o = float(str(r[lo]).replace(",", "."))
-                if 41 < a < 52 and -6 < o < 10: out.append([round(a, 6), round(o, 6), -1])
+                try: v = int(float(str(r.get(vk) or "0").replace(",", "."))) if vk else 0
+                except ValueError: v = 0
+                t = (r.get(tk) or "").lower() if tk else ""
+                # fork FR : tourelles et radars « double sens » contrôlent les deux sens : jamais de direction pour eux
+                both = any(w in t for w in ("double", "deux sens", "bidirection", "tourelle"))
+                if 41 < a < 52 and -6 < o < 10: out.append([round(a, 6), round(o, 6), -1, v if 20 <= v <= 130 else 0, both])
             except (ValueError, TypeError):
                 pass
         print(f"Officiel : {len(out)} radars ({url}, colonnes {la}/{lo})")
@@ -93,9 +104,9 @@ def main():
                     dlat = (p[0] - q[0]) * 111320; dlon = (p[1] - q[1]) * 111320 * math.cos(math.radians(p[0]))
                     dd = math.hypot(dlat, dlon)
                     if dd < bd: bd = dd; best = q
-        d = best[2] if best is not None else -1
+        d = best[2] if best is not None and not p[4] else -1
         if d >= 0: withdir += 1
-        out.append([p[0], p[1], d])
+        out.append([p[0], p[1], d, p[3]])
     # contrôle : ce qu'OpenStreetMap a en plus (radars retirés, ou trop récents pour la liste) n'est pas repris
     near = [q for q in o if abs(q[0] - 45.3155) < 0.01 and abs(q[1] - 4.533) < 0.01]
     print("OSM près de La Versanne :", near)

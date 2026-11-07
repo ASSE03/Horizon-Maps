@@ -2419,16 +2419,16 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         cameraDist = if (best != null) bestD.toInt() else null
         if (best != null) {
             if (camAlerted.size > 100) { camAlerted.clear(); camStep.clear() }
-            // fork FR : une première alerte (dès 500 m), puis un rappel à chaque centaine de mètres : 400, 300, 200, 100 m
-            val step = if (bestD < 60.0) 0 else Math.ceil((bestD - 20.0) / 100.0).toInt().coerceAtLeast(1)
-            if (camAlerted.add(best)) {
-                camStep[best] = step
-                // fork FR : la distance du radar plutôt que « Radar devant »
-                val say = if (bestD < 60.0) "Radar tout de suite" else "Radar dans ${Geo.spoken(bestD, imperial)}"
+            // fork FR : une alerte à 300 m (avec la vitesse contrôlée, d'après la liste officielle), puis un rappel à 150 m
+            val v = RadarsFr.vma[Overpass.camKey(best)]
+            val radar = if (v != null && !imperial) "Radar à $v" else "Radar"
+            if (bestD <= 300.0 && camAlerted.add(best)) {
+                camStep[best] = 2
+                val say = if (bestD < 60.0) "$radar tout de suite" else "$radar dans ${Geo.spoken(bestD, imperial)}"
                 chime(android.media.ToneGenerator.TONE_PROP_PROMPT); raiseAlert("camera", say); speak(say, true)
-            } else if (!imperial && step < (camStep[best] ?: 99) && step in 1..4) {
-                camStep[best] = step
-                val say = "Radar à ${step * 100} mètres"
+            } else if (bestD <= 160.0 && bestD >= 60.0 && (camStep[best] ?: 0) == 2) {
+                camStep[best] = 1
+                val say = "$radar dans ${if (imperial) Geo.spoken(bestD, true) else "150 mètres"}"
                 raiseAlert("camera", say); speak(say, true)
             }
         }

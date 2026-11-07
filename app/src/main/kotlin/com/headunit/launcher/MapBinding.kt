@@ -816,6 +816,19 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     }
 
     /** A blue round badge with a white car, for where you parked. */
+    /** Fork FR : la petite flèche du sens contrôlé par un radar (pointe vers le haut, tournée sur la carte). */
+    private fun camArrowBitmap(): Bitmap {
+        val n = 64
+        val bmp = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val path = android.graphics.Path().apply { moveTo(n / 2f, 6f); lineTo(n - 12f, n - 10f); lineTo(n / 2f, n - 22f); lineTo(12f, n - 10f); close() }
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.style = android.graphics.Paint.Style.STROKE; p.strokeWidth = 7f; p.strokeJoin = android.graphics.Paint.Join.ROUND
+        p.color = android.graphics.Color.WHITE; c.drawPath(path, p)
+        p.style = android.graphics.Paint.Style.FILL; p.color = android.graphics.Color.rgb(229, 57, 53); c.drawPath(path, p)
+        return bmp
+    }
+
     private fun parkedBitmap(): Bitmap {
         val n = 112
         val bmp = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
@@ -2104,6 +2117,13 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             .iconSize(zoomed(1.0, 8 to 0.3, 12 to 0.4, 15 to 0.6, 18 to 0.8)))
         pushLimits()
         addS(st, GeoJsonSource.Builder("dl-cams").featureCollection(empty()).build())
+        // fork FR : sous l'icône des radars à sens unique, une flèche dans le sens contrôlé
+        addImg(st, "dl-cam-arrow", camArrowBitmap())
+        addL(st, SymbolLayer("dl-cams-dir", "dl-cams").filter(Expression.has("dir"))
+            .iconImage("dl-cam-arrow").iconAllowOverlap(true).iconIgnorePlacement(true)
+            .iconRotate(Expression.get("dir")).iconRotationAlignment(IconRotationAlignment.MAP).iconPitchAlignment(IconPitchAlignment.MAP)
+            .iconOffset(listOf(0.0, -46.0)).iconEmissiveStrength(1.0)
+            .iconSize(zoomed(1.0, 10 to 0.25, 14 to 0.4, 17 to 0.6)))
         addL(st, SymbolLayer("dl-cams", "dl-cams")
             .iconImage("dl-hz-cam").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
@@ -2499,7 +2519,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
 
     private fun pushCams() {
         val s = src("dl-cams") ?: return
-        try { s.featureCollection(FeatureCollection.fromFeatures(cams.map { Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat)) })) } catch (e: Exception) { }
+        try { s.featureCollection(FeatureCollection.fromFeatures(cams.map { c ->
+            Feature.fromGeometry(Point.fromLngLat(c.lon, c.lat)).also { f -> Overpass.camDir[Overpass.camKey(c)]?.let { f.addNumberProperty("dir", it) } }
+        })) } catch (e: Exception) { }
         // the 3D cameras face you (turned towards where you are now), standing at the left kerb
         val m = src("dl-cams-m") ?: return
         try {

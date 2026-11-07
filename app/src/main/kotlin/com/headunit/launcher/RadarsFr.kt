@@ -14,7 +14,9 @@ object RadarsFr {
     // (relu chaque jour : un radar retiré disparaît vite)
     private const val WEEK = 86_400_000L
 
-    @Volatile private var pts: FloatArray? = null       // lat, lon, direction (-1 : inconnue) à la suite
+    @Volatile private var pts: FloatArray? = null       // lat, lon, direction (-1 : inconnue), vitesse contrôlée (0 : inconnue) à la suite
+    /** La vitesse contrôlée (km/h) des radars trouvés, d'après la liste officielle. */
+    val vma = java.util.concurrent.ConcurrentHashMap<String, Int>()
     @Volatile var status = "pas encore chargé"
     @Volatile private var tryAt = 0L
 
@@ -43,7 +45,7 @@ object RadarsFr {
             if (a != null) {
                 pts = a
                 val date = try { org.json.JSONObject(f.readText()).optString("date") } catch (e: Exception) { "" }
-                status = "${a.size / 3} radars (fichier du $date)"
+                status = "${a.size / 4} radars (fichier du $date)"
             }
         }
     }
@@ -51,10 +53,11 @@ object RadarsFr {
     private fun parse(body: String): FloatArray? {
         val arr = org.json.JSONObject(body).optJSONArray("r") ?: return null
         if (arr.length() < 1000) return null
-        val out = FloatArray(arr.length() * 3)
+        val out = FloatArray(arr.length() * 4)
         for (i in 0 until arr.length()) {
             val p = arr.getJSONArray(i)
-            out[i * 3] = p.getDouble(0).toFloat(); out[i * 3 + 1] = p.getDouble(1).toFloat(); out[i * 3 + 2] = p.optDouble(2, -1.0).toFloat()
+            out[i * 4] = p.getDouble(0).toFloat(); out[i * 4 + 1] = p.getDouble(1).toFloat(); out[i * 4 + 2] = p.optDouble(2, -1.0).toFloat()
+            out[i * 4 + 3] = p.optDouble(3, 0.0).toFloat()
         }
         return out
     }
@@ -75,9 +78,11 @@ object RadarsFr {
                     out += c
                     val d = a[i + 2]
                     if (d >= 0f) Overpass.camDir[Overpass.camKey(c)] = d.toDouble()
+                    val v = a[i + 3].toInt()
+                    if (v > 0) vma[Overpass.camKey(c)] = v
                 }
             }
-            i += 3
+            i += 4
         }
         return out
     }
