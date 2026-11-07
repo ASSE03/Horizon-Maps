@@ -267,7 +267,15 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
         }
     }
     if (prefs.mapSource() == "mapbox") SGroup("Couleurs") {
-        MapColoursPicker(prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")) { prefs.put(PreferenceKeys.MAP_COLOURS, it) }
+        MapColoursPicker(prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")) { picked ->
+            val now = prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")
+            // Custom starts as exactly the theme you had (nothing changes until you change something)
+            if (picked == "custom" && now != "custom") {
+                prefs.put(PreferenceKeys.CUSTOM_BASE, now)
+                prefs.put(PreferenceKeys.CUSTOM_DAY, ""); prefs.put(PreferenceKeys.CUSTOM_NIGHT, ""); prefs.put(PreferenceKeys.CUSTOM_ROUTE_W, 100)
+            }
+            prefs.put(PreferenceKeys.MAP_COLOURS, picked)
+        }
         if (prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox") == "car") {
             SItem("Couleur de l'éclairage de la voiture", "La carte en prend une touche, surtout la nuit")
             val cur = prefs.s(PreferenceKeys.CAR_TINT, "#8A5AD0")
@@ -282,6 +290,8 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
             SPercent("Intensité", "La part de cette couleur que prend la carte", prefs, PreferenceKeys.CAR_TINT_STR, 10, 100, 40)
         }
     }
+    if (prefs.mapSource() == "mapbox" && prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox") == "custom") CustomThemeGroup(prefs)
+    if (prefs.mapSource() == "mapbox") SavedThemesGroup(prefs)
     SGroup("La carte") {
         SChoice("Source de la carte", listOf("mapbox" to "Mapbox", "tomtom" to "TomTom", "osm" to "OpenStreetMap"), prefs.mapSource(),
             "Mapbox : la carte 3D. TomTom : la carte TomTom aux couleurs Horizon (clé TomTom nécessaire). Toutes demandent le jeton Mapbox, car c'est le moteur Mapbox qui les dessine") { prefs.put(PreferenceKeys.MAP_STYLE, it) }
@@ -514,7 +524,7 @@ private fun STilt(title: String, sub: String, prefs: Prefs, key: String) {
 
 /** A percentage with a slider ([min] to [max], in steps of 10), and Reset back to [def]. Saved when you let go. */
 @Composable
-private fun SPercent(title: String, sub: String, prefs: Prefs, key: String, min: Int, max: Int, def: Int = 100) {
+internal fun SPercent(title: String, sub: String, prefs: Prefs, key: String, min: Int, max: Int, def: Int = 100) {
     val c = LocalVw.current
     val saved = prefs.i(key, def).coerceIn(min, max)
     var v by remember(key, saved) { mutableStateOf(saved.toFloat()) }
@@ -1331,9 +1341,10 @@ private fun MapColoursPicker(value: String, onPick: (String) -> Unit) {
         Triple("neon", "Néon", listOf(0xFFECEBF4, 0xFFA8E4F4, 0xFFC8ECD4, 0xFFFFFFFF, 0xFFE2E0EE)),
         Triple("pastel", "Pastel doux", listOf(0xFFF6F3F0, 0xFFCFE4F2, 0xFFDCECD6, 0xFFFFFFFF, 0xFFECE8E6)),
         Triple("car", "Assorties à ma voiture", listOf(0xFF1A1424, 0xFF14182C, 0xFF232C30, 0xFF5A4A6E, 0xFF2A2240)),
+        Triple("custom", "Personnalisé", listOf(0xFF26304C, 0xFF2F6FB0, 0xFF3F7A5A, 0xFF8A93AE, 0xFFE0A84A)),
     )
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        SItem("Couleurs", "Horizon : la carte Mapbox aux couleurs douces de l'appli, bleu ardoise la nuit. Crépuscule : la même avec une nuit plus violette. Nuit monochrome : des gris, seuls l'itinéraire et les alertes en couleur. Assorties à ma voiture : une touche de la couleur de l'éclairage intérieur de la voiture. Couleurs de jour affichées (la nuit pour Assorties à ma voiture) ; chacune a une version de nuit")
+        SItem("Couleurs", "Horizon : la carte Mapbox aux couleurs douces de l'appli, bleu ardoise la nuit. Crépuscule : la même avec une nuit plus violette. Nuit monochrome : des gris, seuls l'itinéraire et les alertes en couleur. Assorties à ma voiture : une touche de la couleur de l'éclairage intérieur de la voiture. Personnalisé : vos propres couleurs. Couleurs de jour affichées (la nuit pour Assorties à ma voiture) ; chacune a une version de nuit")
         Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             for ((id, name, cols) in sets) {
                 val sel = id == value
@@ -1441,12 +1452,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.locatorPicture(id: 
 @Composable
 private fun SettingsMapPreview(engine: NavEngine, heightDp: Int) {
     val c = LocalVw.current
-    var mode by remember { mutableStateOf("now") }
+    // (shared with the Custom theme's Day / Night tabs, so the preview shows the one being edited)
+    var mode by PreviewLight::mode
     androidx.compose.runtime.DisposableEffect(mode) {
         engine.map.forceLight(when (mode) { "day" -> "day"; "night" -> "night"; else -> null })
         onDispose { }
     }
-    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { engine.map.forceLight(null) } }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { engine.map.forceLight(null); PreviewLight.mode = "now" } }
     Box(Modifier.fillMaxWidth().widthIn(max = 820.dp).height(heightDp.dp).padding(bottom = 10.dp).clip(RoundedCornerShape(20.dp)).border(1.dp, c.line, RoundedCornerShape(20.dp))) {
         MapHost(engine.map, Modifier.fillMaxSize(), cornerDp = 20)
         // (touches stop here: the preview only shows)

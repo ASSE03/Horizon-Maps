@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Thème personnalisé : une vignette « Personnalisé » dans Réglages › Style de la carte › Couleurs. Choisissez le thème de départ, puis changez le sol, l'eau, les parcs, les routes, les grands axes, les bâtiments et la couleur du tracé, séparément le jour et la nuit, ainsi que la largeur du tracé et la luminosité de nuit. L'aperçu en haut montre les couleurs de jour ou de nuit en cours de modification. Enregistrez-le sous un nom (Vos thèmes) pour le reprendre plus tard. Il part exactement du thème que vous aviez : rien ne change tant que vous ne modifiez rien.
 - Limitations « MG4Dash + TomTom » : un nouveau choix dans Réglages › Alertes › Vitesse › Source des limitations. Les paquets MG4Dash (OpenStreetMap) restent la base, et les relevés de TomTom, une autre base de données, passent devant quand TomTom a une limitation pour la route. Utile là où OpenStreetMap n'en a pas ou se trompe. Demande la clé TomTom (une lecture toutes les 6 s environ, dans le quota gratuit).
 - Changement de limitation sans bannière : dans Réglages › Alertes › Vitesse, « Afficher aussi le changement à l'écran » peut être désactivé pour garder seulement l'annonce vocale (le panneau clignote toujours).
 - Bouton Autres itinéraires : pendant le guidage, un bouton sur la carte (sous les options de la carte) ouvre une liste d'itinéraires, comme dans Google Maps : le vôtre et chaque autre trajet avec son temps, la comparaison, l'heure d'arrivée, la distance, la route empruntée et le trafic. Touchez-en un dans la liste ou sur la carte (en gris) pour le prendre. Sur Android Auto, c'est la première ligne des réglages, dans une liste qu'on choisit au toucher ou à la molette.
@@ -38,6 +39,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Couleurs Horizon : un bleu clair de lune frais la nuit (sol, bâtiments et teinte de la carte), bien distinct du violet de Crépuscule.
 - Radars : une première alerte dès 500 m, puis un rappel vocal à 400, 300, 200 et 100 m. Sans itinéraire, les radars sur une route sinueuse sont trouvés plus tôt (ils ne l'étaient parfois qu'à 150 m).
 - Recherche d'adresses en France : la Base Adresse Nationale (IGN, toutes les adresses avec leur numéro) s'ajoute à TomTom et Mapbox, qui ne connaissent pas toutes les adresses des petites communes.
 - Réglages réorganisés : Aspect de la carte est séparé en Style de la carte (couleurs, jour et nuit, détail) et Lumière et 3D (lumière et météo, 3D, inclinaison, ciel). Les panneaux en verre et la position du logo Mapbox passent dans Écran et tailles. La recherche des réglages trouve tout à sa nouvelle place, et les réglages se rouvrent là où vous les aviez laissés.
