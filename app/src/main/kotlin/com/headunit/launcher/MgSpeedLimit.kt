@@ -473,7 +473,10 @@ object MgSpeedLimit {
         }
         // Position projetée en avant selon la vitesse, pour compenser le retard du GPS
         val loc = Location(fix)
-        if (fix.hasSpeed() && fix.speed > 5f && fix.hasBearing()) {
+        // fork FR : pas de projection en avant pendant un virage (rond-point) : en ligne droite, elle tombait sur une route voisine
+        val turning = fix.hasBearing() && prevBearing >= 0f && run { var t = abs(fix.bearing - prevBearing) % 360f; if (t > 180f) t = 360f - t; t > 12f }
+        if (fix.hasBearing()) prevBearing = fix.bearing
+        if (fix.hasSpeed() && fix.speed > 5f && fix.hasBearing() && !turning) {
             val d = fix.speed * LOOKAHEAD_S
             val b = Math.toRadians(fix.bearing.toDouble())
             loc.latitude = fix.latitude + d * Math.cos(b) / 110_540.0
@@ -494,9 +497,13 @@ object MgSpeedLimit {
                 if (diff > 90) diff = 180 - diff
                 if (diff > 35) d += 40
             }
+            // fork FR : la route suivie jusqu'ici est préférée (10 m d'avance) : au milieu du rond-point près de Davézieux, une rue
+            // qui y débouche (Chemin de Gourdan, 50) passait devant l'anneau (90)
+            if (w === lastWay) d -= 10.0
             if (d < bestD) { bestD = d; best = w }
         }
         val found = best?.takeIf { bestD <= maxD }
+        if (found != null) lastWay = found
         val now = android.os.SystemClock.uptimeMillis()
         var est = ""
         val v = if (found != null) { lastFoundAt = now; found.limit ?: estimate(found, loc, list)?.also { est = " (estimée)" } }
@@ -538,6 +545,8 @@ object MgSpeedLimit {
         return 80
     }
     @Volatile private var estimateOn = true
+    @Volatile private var lastWay: Way? = null
+    @Volatile private var prevBearing = -1f
     /** Fork FR : la limitation affichée est estimée (route sans limitation dans OpenStreetMap). */
     @Volatile var estimated = false
 

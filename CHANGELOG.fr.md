@@ -58,6 +58,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Limitation qui changeait au milieu d'un rond-point : la route suivie jusqu'ici est préférée, et la position n'est plus projetée en ligne droite pendant un virage (elle tombait sur une rue qui débouche sur le rond-point).
 - Limitation à 80 annoncée en agglomération : quand une route n'a pas de limitation dans OpenStreetMap, la valeur estimée est maintenant affichée en pâle, sans annonce vocale ni alerte de dépassement. L'estimation reconnaît aussi mieux les villages (50 au lieu de 80 quand les rues voisines sont de petites routes sans classement).
 - Flèche qui tremblait ou restait bloquée à petite vitesse (sans itinéraire) : c'est maintenant le point visé qui est recalé sur la route, et la flèche glisse vers lui en douceur, au lieu d'être recalée elle-même à chaque image.
 - Téléphone en portrait : pendant le guidage, l'alerte (radar, danger…) s'affiche au-dessus du compteur au lieu de le recouvrir.
