@@ -1030,6 +1030,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     @SuppressLint("MissingPermission")
     fun startLocation() {
         if (lm != null) return
+        Gyro.start(ctx)
         val m = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         lm = m
         try {
@@ -1053,6 +1054,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun stopLocation() {
         try { lm?.removeUpdates(this) } catch (_: Exception) {}
+        Gyro.stop()
         lm = null
     }
 
@@ -1352,6 +1354,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             appendLine("Démo : ×$simMode · ${Math.round(simDist)} m sur ${route?.len?.let { Math.round(it) } ?: 0} · départ choisi : ${demoFrom?.name ?: "non"} · aperçu : $previewing · ${simNote.ifBlank { "-" }}")
             appendLine("Adresses (BAN) : ${BanAddr.lastNote.ifBlank { "-" }}")
             appendLine("Fichier des radars de France : ${RadarsFr.status}")
+            appendLine("Gyroscope (flèche dans les virages) : ${if (Gyro.alive()) "actif" else "absent ou arrêté"}, accords avec le GPS $gyroOk, désaccords $gyroBad")
             appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · dernière recherche : ${Overpass.camNote.ifBlank { "aucune" }.take(160)} · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)}" + " · Nominatim : ${NominatimPoi.lastNote.ifBlank { "-" }} · zones : ${Zones.status.take(120)}")
             appendLine("Carte : ${try { map.styleNote } catch (e: Exception) { "?" }} · satellite : ${if (map.isSatellite) "oui" else "non"}")
             if (BisonFute.status.isNotBlank()) appendLine(BisonFute.status)
@@ -3067,6 +3070,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Fork FR : vitesse de rotation de la voiture, en degrés par seconde (positif vers la droite). */
     private var yawRate = 0.0
     private var yawAt = 0L
+    /** Fork FR : l'angle total du gyroscope au dernier point GPS (ce que la voiture a tourné depuis = Gyro.total - gyroAtFix). */
+    private var gyroAtFix = 0.0
+    private var gyroOk = 0
+    private var gyroBad = 0
 
     private fun glideTick(frameNs: Long) {
         // never do more work than the map can actually draw: on a slow head unit this frees the CPU for rendering
@@ -3134,29 +3141,41 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val kLon = 111320.0 * cos(Geo.rad(gp.lat))
             // fork FR : la position visée suit un arc de cercle, au rythme où la voiture tourne (d'après les derniers points GPS),
             // au lieu d'une ligne droite : la flèche partait tout droit puis rattrapait le virage avec un petit retard
-            val yaw = if (gSpeed > 3.0 && abs(yawRate) > 2.0) yawRate else 0.0
-            val turning = abs(yaw) > 6.0 || abs(angDiff(mHead, gHead)) > 20.0
-            val ahead = (age + lead).coerceAtMost(3.5)
+            // fork FR : avec le gyroscope du téléphone, on sait tout de suite que la voiture tourne, et de combien elle a déjà
+            // tourné depuis le dernier point GPS : la flèche prend le virage avec la voiture au lieu de continuer tout droit
+            val gyro = Gyro.alive() && gSpeed > 1.5 && !(gyroBad >= 3 && gyroBad > gyroOk)
+            val turned = if (gyro) (Gyro.total - gyroAtFix).coerceIn(-120.0, 120.0) else 0.0
+            val yaw = if (gyro) (if (abs(Gyro.rate) > 3.0) Gyro.rate.coerceIn(-60.0, 60.0) else 0.0)
+                else if (gSpeed > 3.0 && abs(yawRate) > 2.0) yawRate else 0.0
+            val turning = abs(yaw) > 6.0 || abs(turned) > 10.0 || abs(angDiff(mHead, gHead)) > 20.0
+            // dans un virage serré l'avance est réduite : prolonger l'arc trop loin devant le ferait sortir de la route
+            val ahead = (age + if (abs(yaw) > 15.0) lead * 0.5 else lead).coerceAtMost(3.5)
+            val ageC = age.coerceIn(0.0, ahead)
             var predLat = mp.lat; var predLon = mp.lon
             run {
-                val n = 6; val st = ahead / n
-                var h = mHead
+                // du point GPS à maintenant : de mHead à mHead + ce que le gyroscope a mesuré ; ensuite : la rotation actuelle
+                val n = 8; val st = ahead / n
+                var t = 0.0
                 for (i in 0 until n) {
-                    val hm = Math.toRadians(h + yaw * st / 2.0)
+                    val tm = t + st / 2.0
+                    val h = if (gyro) {
+                        if (tm <= ageC) mHead + turned * (if (ageC > 0.0) tm / ageC else 1.0) else mHead + turned + yaw * (tm - ageC)
+                    } else mHead + yaw * tm
+                    val hm = Math.toRadians(h)
                     predLat += cos(hm) * gSpeed * st / 110574.0; predLon += Math.sin(hm) * gSpeed * st / kLon
-                    h += yaw * st
+                    t += st
                 }
             }
             // le cap de la flèche maintenant : celui du GPS tourné de ce que la voiture a tourné depuis, ou celui de la route recalée
-            val headNowEst = ((mHead + yaw * age.coerceAtMost(2.0)) % 360.0 + 360.0) % 360.0
-            val rad = Math.toRadians(if (roadB >= 0.0 && yaw == 0.0) roadB else headNowEst)
+            val headNowEst = (((if (gyro) mHead + turned else mHead + yaw * age.coerceAtMost(2.0))) % 360.0 + 360.0) % 360.0
+            val rad = Math.toRadians(if (roadB >= 0.0 && yaw == 0.0 && abs(turned) < 10.0) roadB else headNowEst)
             // fork FR : c'est le point visé qui est recalé sur la route (10 fois par seconde, l'écart gardé entre deux), et la flèche
             // glisse vers lui en douceur. Recaler la flèche elle-même à chaque image la faisait trembler et la bloquait (la
             // projection sur une rue de biais annulait son avance)
             if (mSpeed > 1.0 && snapRoadOn) {
                 if (now - gSnapAt >= 100L) {
                     gSnapAt = now
-                    val sn = try { map.snapToRoad(LL(predLat, predLon), ((mHead + yaw * ahead) % 360.0 + 360.0) % 360.0, if (turning) 55.0 else 30.0, 15.0) } catch (e: Exception) { null }
+                    val sn = try { map.snapToRoad(LL(predLat, predLon), (((if (gyro) mHead + turned + yaw * (ahead - ageC) else mHead + yaw * ahead)) % 360.0 + 360.0) % 360.0, if (turning) 55.0 else 30.0, 15.0) } catch (e: Exception) { null }
                     gSnapDLat = if (sn != null) sn.lat - predLat else 0.0; gSnapDLon = if (sn != null) sn.lon - predLon else 0.0
                     if (sn != null) { gRoadB = map.lastSnapBearing; gRoadAt = now }
                 }
@@ -3168,7 +3187,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (hypot(eN, eE) > 80.0) { nLat = predLat; nLon = predLon }
             else { val k = 1.0 - Math.exp(-dt / (if (turning) 0.5 else 0.9)); nLat += (predLat - nLat) * k; nLon += (predLon - nLon) * k }
             gPos = LL(nLat, nLon)
-            if (mSpeed > 1.5) gHead = easeAngle(gHead, if (roadB >= 0.0 && yaw == 0.0) roadB else headNowEst, dt, if (turning) 0.12 else 0.35)
+            if (mSpeed > 1.5) gHead = easeAngle(gHead, if (roadB >= 0.0 && yaw == 0.0 && abs(turned) < 10.0) roadB else headNowEst, dt, if (turning) 0.12 else 0.35)
             lookB = gHead
         }
         val gp = gPos ?: return
@@ -3343,6 +3362,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         yawRate += (y - yawRate) * 0.6
                     } else yawRate = 0.0
                     yawAt = tNow
+                    // contrôle : le gyroscope doit tourner dans le même sens que le cap GPS ; sinon il est ignoré
+                    val dG = angDiff(headNow, mHead); val dY = Gyro.total - gyroAtFix
+                    if (Gyro.alive() && sp > 4.0 && abs(dG) > 15.0 && abs(dY) > 8.0) { if ((dG > 0) == (dY > 0)) gyroOk++ else gyroBad++ }
+                    gyroAtFix = Gyro.total
                     mHead = headNow
                 } else yawRate = 0.0
                 val gp = gPos

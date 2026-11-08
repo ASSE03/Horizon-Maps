@@ -52,6 +52,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Flèche dans les virages en conduite libre : le gyroscope du téléphone indique tout de suite que la voiture tourne, et de combien, sans attendre le cap GPS (qui a une seconde de retard) : la flèche prend le virage avec la voiture au lieu de continuer tout droit. Dans un virage serré, l'avance de la flèche est réduite de moitié.
 - Itinéraires plus simples : à la planification, un itinéraire avec nettement moins de virages est préféré à un autre plus rapide d'une minute et demie au plus, pour rester sur les grands axes. Le plus rapide reste proposé.
 - Temps restant dans les bouchons : le trafic est actualisé toutes les 2 minutes au lieu de 3 quand vous roulez au pas.
 - Bip de survitesse sur Android Auto : il passe par le canal de navigation (comme les instructions vocales), donc il s'entend aussi par-dessus la radio ou la musique de la voiture.
