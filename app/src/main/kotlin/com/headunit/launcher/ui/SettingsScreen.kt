@@ -640,7 +640,7 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
             }) { prefs.put("limitsrc", it) }
         SToggle(prefs, "Afficher les limitations estimées", "limitest", false, "Sans limitation connue, affiche la limitation habituelle pour ce type de route (grisée). Désactivé : aucun panneau plutôt qu'une estimation")
     }
-    SGroup("Radars") {
+    SGroup("Radars", footer = "Radars : liste officielle du ministère de l'Intérieur, sens contrôlé et radars de chantier de Lufop (lufop.net, CC BY-SA 4.0) et d'OpenStreetMap.") {
         SToggle(prefs, "Alertes radar", "cameras", true, "Alertes vocales et à l'écran à l'approche d'un radar")
         if (prefs.b(PreferenceKeys.CAMERA_WARNINGS, true)) SToggle(prefs, "Désactivés là où c'est interdit", "cambanobey", true, "La France, l'Allemagne et la Suisse interdisent les alertes radar : elles s'y coupent d'elles-mêmes")
         SToggle(prefs, "Radars tronçons", "avgzones", true, "Affiche votre moyenne par rapport à la limite")
