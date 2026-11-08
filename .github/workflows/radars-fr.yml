@@ -13,10 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Construire radars_fr.json
+        env:
+          LUFOP_KEY: ${{ secrets.LUFOP_KEY }}
         run: python3 tools/radars_fr.py
       - name: Publier dans la release « radars »
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view radars >/dev/null 2>&1 || gh release create radars --title "Radars France (données)" --notes "Fichier des radars fixes de France pour Horizon Nav FR, mis à jour chaque semaine (OpenStreetMap + liste officielle du ministère de l'Intérieur)." --latest=false
+          gh release view radars >/dev/null 2>&1 || gh release create radars --title "Radars France (données)" --notes "Fichier des radars fixes de France pour Horizon Nav FR, mis à jour chaque semaine (liste officielle du ministère de l'Intérieur, directions Lufop CC BY-SA 4.0 et OpenStreetMap)." --latest=false
           gh release upload radars radars_fr.json --clobber
