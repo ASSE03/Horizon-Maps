@@ -143,6 +143,9 @@ def main():
     for q in o:
         grid.setdefault((int(q[0] * 1000), int(q[1] * 1000)), []).append(q)
     L, lsrc = lufop(g)
+    if lsrc != "pas de clé" and len(L) < 3000:
+        # quota du jour épuisé ou Lufop en panne : l'ancien fichier (avec ses directions) est gardé plutôt qu'un fichier appauvri
+        print(f"Lufop n'a renvoyé que {len(L)} radars : fichier non publié"); sys.exit(1)
     lgrid = {}
     for x in L:
         try:
