@@ -1,7 +1,7 @@
 name: Radars France
 on:
   schedule:
-    - cron: "17 3 * * 1"
+    - cron: "17 3 * * *"
   workflow_dispatch:
   push:
     paths: [tools/radars_fr.py, .github/workflows/radars-fr.yml]
@@ -21,5 +21,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view radars >/dev/null 2>&1 || gh release create radars --title "Radars France (données)" --notes "Fichier des radars fixes de France pour Horizon Nav FR, mis à jour chaque semaine (liste officielle du ministère de l'Intérieur, directions Lufop CC BY-SA 4.0 et OpenStreetMap)." --latest=false
+          gh release view radars >/dev/null 2>&1 || gh release create radars --title "Radars France (données)" --notes "Fichier des radars fixes de France pour Horizon Nav FR, mis à jour chaque jour (liste officielle du ministère de l'Intérieur, directions Lufop CC BY-SA 4.0 et OpenStreetMap)." --latest=false
           gh release upload radars radars_fr.json --clobber
