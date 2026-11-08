@@ -5,7 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
-- Android Auto : la température du lieu où vous êtes, avec une icône du temps, dans une bulle en haut à droite (de la hauteur de la barre de recherche). Mise à jour toutes les 15 min ou tous les 10 km (Open-Meteo).
+- Android Auto : la température du lieu où vous êtes, avec une icône du temps, dans une bulle de la hauteur de la barre de recherche : juste à sa droite hors guidage, en haut à droite sous les boutons d'Android Auto pendant le guidage. Mise à jour toutes les 15 min ou tous les 10 km (Open-Meteo).
 - Radars : sens contrôlé et radars de chantier d'après Lufop (lufop.net, CC BY-SA 4.0), en plus de la liste officielle.
 - Radars : la vitesse contrôlée est annoncée (« Radar à 80 dans 300 mètres »), d'après la liste officielle, et une flèche rouge indique sur la carte le sens contrôlé quand il est connu.
 - Drapeaux 3D : un grand drapeau rouge à destination et des drapeaux orange plus petits aux étapes, au-dessus des bâtiments, visibles de loin. Activé par défaut (Réglages › Votre flèche et tracé › Tracé de l'itinéraire).

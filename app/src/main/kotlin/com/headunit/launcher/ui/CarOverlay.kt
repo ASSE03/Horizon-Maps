@@ -269,22 +269,25 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
             if (engine.prefs.b(PreferenceKeys.QUICKLIST, true)) CarChips(engine, actions, savedRows)
         }
 
-        // fork FR : la température ici, dans une bulle en haut à droite (à gauche des boutons d'Android Auto), de la hauteur de la
-        // barre de recherche
-        if (tempOn && wx != null) Row(Modifier.align(Alignment.TopEnd).padding(end = rightTop, top = top).height(60.dp)
+        // fork FR : la température ici, dans une bulle de la hauteur de la barre de recherche. Hors guidage, juste à droite de la
+        // barre (en haut à droite, elle passait sous les boutons Signaler / Lieux / 2D d'Android Auto) ; en guidage, en haut à droite
+        // sous ces boutons
+        val tempBar = engine.route == null && !arriving
+        if (tempOn && wx != null) Row((if (tempBar && !portrait) Modifier.align(Alignment.TopStart).padding(start = left + topW + 12.dp, top = top)
+            else Modifier.align(Alignment.TopEnd).padding(end = if (portrait) rightTop else insR + edge, top = top + if (portrait) 0.dp else 76.dp)).height(60.dp)
             .onSizeChanged { tempW = it.width }
             .panel(10.dp, RoundedCornerShape(30.dp), c.surface).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Icon(wxIcon(wx.code), null, tint = wxTint(wx.code), modifier = Modifier.size(26.dp))
+            androidx.compose.material3.Icon(wxIcon(wx.code), null, tint = wxTint(wx.code), modifier = Modifier.size(30.dp))
             val f = isImperial(engine.prefs)
             val t = if (f) wx.tempC * 9.0 / 5.0 + 32.0 else wx.tempC
-            Text("${Math.round(t)}°", color = c.text, fontSize = 22.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp))
+            Text("${Math.round(t)}°", color = c.text, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp))
         }
 
         // alerts (cameras, limits, hazards...): beside the turn card on wide screens, under it on tall ones
         val below = if (showTurn && turnH > 0) with(dens) { turnH.toDp() } + 10.dp else if (engine.route == null && topBlockH > 0) with(dens) { topBlockH.toDp() } + 10.dp else 0.dp
         val alertMod = if (portrait) Modifier.align(Alignment.TopStart).padding(start = left, end = rightTop + 64.dp, top = top + below)
             // (fork FR : toujours à droite de la barre de recherche, qu'elle chevauchait hors guidage)
-            else Modifier.align(Alignment.TopCenter).padding(top = top, start = maxOf(left, maxWidth * 0.42f), end = maxOf(rightTop + tempGap, maxWidth * 0.22f))
+            else Modifier.align(Alignment.TopCenter).padding(top = top, start = maxOf(left, maxWidth * 0.42f, if (tempOn && engine.route == null && !arriving) left + topW + 12.dp + tempGap else 0.dp), end = maxOf(rightTop, maxWidth * 0.22f))
         AnimatedVisibility(alert != null, modifier = alertMod, enter = fadeIn(), exit = fadeOut()) { alert?.let { AlertBanner(it) } }
 
         if (!previewing && !arriving) {
