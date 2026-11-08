@@ -5,6 +5,9 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Trafic des deux services : sur un itinéraire Mapbox avec une clé TomTom, TomTom chronomètre aussi la même route à chaque actualisation. Chaque tronçon du tracé montre le service le plus pessimiste, et le temps restant comme l'heure d'arrivée retiennent le plus long des deux.
+- Estimation de batterie : les conducteurs de voiture électrique peuvent masquer les % de batterie de la carte de trajet (téléphone et Android Auto), dans Réglages › Carburant › Votre voiture électrique.
+- Codes postaux britanniques : un code postal du Royaume-Uni s'affiche lui-même en tête des résultats de recherche.
 - Android Auto : la température du lieu où vous êtes, avec une icône du temps, dans une bulle de la hauteur de la barre de recherche : juste à sa droite hors guidage, en haut à droite sous les boutons d'Android Auto pendant le guidage. Mise à jour toutes les 15 min ou tous les 10 km (Open-Meteo).
 - Radars : sens contrôlé et radars de chantier d'après Lufop (lufop.net, CC BY-SA 4.0), en plus de la liste officielle.
 - Radars : la vitesse contrôlée est annoncée (« Radar à 80 dans 300 mètres »), d'après la liste officielle, et une flèche rouge indique sur la carte le sens contrôlé quand il est connu.
@@ -49,6 +52,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Itinéraires plus simples : à la planification, un itinéraire avec nettement moins de virages est préféré à un autre plus rapide d'une minute et demie au plus, pour rester sur les grands axes. Le plus rapide reste proposé.
+- Temps restant dans les bouchons : le trafic est actualisé toutes les 2 minutes au lieu de 3 quand vous roulez au pas.
+- Bip de survitesse sur Android Auto : il passe par le canal de navigation (comme les instructions vocales), donc il s'entend aussi par-dessus la radio ou la musique de la voiture.
+- Zoom à deux doigts sur Android Auto : il zoome en douceur autour du centre de la carte au lieu de sauter.
 - Flèche dans les virages : elle suit maintenant la courbe au rythme où la voiture tourne, au lieu de continuer un instant tout droit avant de rattraper le virage.
 - Radars : annonce à 300 m puis rappel à 150 m (au lieu de 500 m puis toutes les centaines de mètres) ; tourelles et radars double sens comptés pour les deux sens.
 - Android Auto en écran partagé : dans la partie étroite de l'écran, les cartes et boutons de l'appli rétrécissent encore d'eux-mêmes pour tenir à côté de la carte. La taille générale (Réglages › Android Auto, ou les réglages de la voiture) les règle toujours de 40 % à 300 %.
@@ -75,6 +82,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Virage manqué repéré plus tôt : en passant tout droit devant un virage, la flèche ne continue plus dans le virage non pris. Elle vous suit aussitôt et un nouvel itinéraire est demandé en 2 secondes environ (au lieu d'attendre d'être à 40 m ou plus du tracé).
+- Voies à deux bretelles rapprochées : les voies de la seconde ne s'allument plus à la première.
+- Voies trop généreuses : quand Mapbox indique les voies à prendre, seules celles-ci sont allumées.
+- Prochaine limitation : plus de panneau étrange « 0 dans 700 m » quand la limitation de la route devant est inconnue.
+- Carte de virage Android Auto : la ligne « puis » de la manœuvre suivante s'affiche aussi sur les petits écrans.
 - Petits écrans Android Auto (7 pouces, 800 × 480) : la carte de direction n'affichait ni les voies, ni la vue de l'échangeur, ni les conseils. Les voies s'affichent maintenant toujours sur l'écran de la voiture, et le reste sauf sur un écran vraiment bas.
 - Aires de services sur la barre d'itinéraire avec la carte des aires désactivée : la désactiver les retire aussi de la barre.
 - Radars retirés encore annoncés (La Versanne) : le fichier des radars de France ne reprend plus que la liste officielle du ministère de l'Intérieur (environ 3 200 radars fixes), OpenStreetMap ne sert plus qu'à indiquer leur direction. Le fichier est relu chaque jour au lieu de chaque semaine.

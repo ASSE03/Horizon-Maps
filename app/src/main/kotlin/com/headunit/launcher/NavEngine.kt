@@ -390,6 +390,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Routes from one service ("mapbox" or "tomtom"). */
     private fun routesFrom(p: String, from: LL, to: LL, alternatives: Boolean, departAtMs: Long, via: List<LL>, headingDeg: Double, quick: Boolean): List<Route> =
         routesFromInner(p, from, to, alternatives, departAtMs, via, headingDeg, quick).also { rs ->
+            for (r in rs) r.from = p
             if (Vehicle.lorry) for (r in rs) r.lorry = if (p == "mapbox") "partial" else "full"
         }
 
@@ -406,7 +407,39 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      * them isn't working.
      */
     private fun netRoutes(from: LL, to: LL, alternatives: Boolean, departAtMs: Long = 0L, via: List<LL> = emptyList(), headingDeg: Double = -1.0, quick: Boolean = false,
-                          askBoth: Boolean = false): List<Route> {
+                          askBoth: Boolean = false, simple: Boolean = false): List<Route> {
+        val rs = netRoutesRaw(from, to, alternatives, departAtMs, via, headingDeg, quick, askBoth)
+        if (!simple || rs.size < 2 || prefs.b(PreferenceKeys.ROUTE_ECO, false)) return rs
+        val out = simplerFirst(rs)
+        if (out.first() !== rs.first() && out.first().from.isNotBlank()) lastRouteProvider = out.first().from
+        return out
+    }
+
+    /** The turns a driver actually makes on [r]: every step but "carry on", the start and the end. */
+    private fun turnCount(r: Route): Int = r.steps.count { s ->
+        val m = s.maneuver.uppercase()
+        !(m == "STRAIGHT" || m == "FOLLOW" || m.startsWith("DEPART") || m.startsWith("ARRIVE"))
+    }
+
+    /**
+     * The simpler of routes that take about the same time goes first: when another route is no more than a minute and a half
+     * slower (3% on long trips) and has clearly fewer turns, it's the one chosen. A route with far fewer turns keeps to the main
+     * roads instead of cutting through back streets to save a few seconds (the "interesting" routes people mentioned). The
+     * quicker one stays on the list to pick.
+     */
+    private fun simplerFirst(rs: List<Route>): List<Route> {
+        val top = rs.first()
+        val slack = max(90.0, top.time * 0.03)
+        val t0 = turnCount(top)
+        val pick = rs.drop(1).filter { r ->
+            val t = turnCount(r)
+            r.time <= top.time + slack && t0 - t >= 3 && t <= t0 * 0.8
+        }.minWithOrNull(compareBy<Route> { turnCount(it) }.thenBy { it.time }) ?: return rs
+        return listOf(pick) + rs.filter { it !== pick }
+    }
+
+    private fun netRoutesRaw(from: LL, to: LL, alternatives: Boolean, departAtMs: Long, via: List<LL>, headingDeg: Double, quick: Boolean,
+                             askBoth: Boolean): List<Route> {
         val now = System.currentTimeMillis()
         // fork FR : à pied, seulement Mapbox (profil piéton)
         if (walking && hasMapbox) return routesFrom("mapbox", from, to, false, 0L, via, -1.0, quick).also { lastRouteProvider = "mapbox" }
@@ -1162,10 +1195,65 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var toneGen: android.media.ToneGenerator? = null
     private fun chime(tone: Int = android.media.ToneGenerator.TONE_PROP_ACK) {
         if (soundMode == 2 || quiet()) return
+        // on Android Auto the phone's media sound only reaches the car's speakers while Android Auto is the car's sound source
+        // (with the radio or the car's own music on, the speeding beep was never heard): there it goes out on the navigation
+        // channel instead, like the spoken directions, which plays over whatever is on
+        if (isCar) { guidanceBeep(tone == android.media.ToneGenerator.TONE_PROP_BEEP2); return }
         try {
             val g = toneGen ?: android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 100).also { toneGen = it }
             g.startTone(tone, 250)
         } catch (e: Exception) { toneGen = null }
+    }
+
+    // the beep's sound, made once: a short 1 kHz tone (twice for a warning), faded in and out so it doesn't click
+    private fun beepPcm(double: Boolean): ShortArray {
+        val rate = 22050
+        val one = rate * 140 / 1000; val gap = rate * 70 / 1000
+        val n = if (double) one * 2 + gap else one * 2
+        val fade = rate * 0.008
+        return ShortArray(n) { i ->
+            val j = if (double && i >= one + gap) i - one - gap else i
+            val len = if (double) one else n
+            if (double && i in one until one + gap) 0.toShort() else {
+                val env = minOf(1.0, minOf(j, len - j).toDouble() / fade)
+                (Math.sin(2.0 * Math.PI * 1000.0 * i / rate) * env * 0.55 * Short.MAX_VALUE).toInt().toShort()
+            }
+        }
+    }
+    private val beepSingle by lazy { beepPcm(false) }
+    private val beepDouble by lazy { beepPcm(true) }
+    @Volatile private var beepBusy = false
+
+    /** A beep on the navigation channel (Android Auto), with the music lowered for it. */
+    private fun guidanceBeep(double: Boolean) {
+        if (beepBusy) return
+        beepBusy = true
+        scope.launch(Dispatchers.Default) {
+            var tr: android.media.AudioTrack? = null
+            var fr: android.media.AudioFocusRequest? = null
+            try {
+                val pcm = if (double) beepDouble else beepSingle
+                val attrs = android.media.AudioAttributes.Builder()
+                    .setUsage(if (voiceChan == "media") android.media.AudioAttributes.USAGE_MEDIA else android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+                fr = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK).setAudioAttributes(attrs).build()
+                audioMgr.requestAudioFocus(fr)
+                val t = android.media.AudioTrack.Builder().setAudioAttributes(attrs)
+                    .setAudioFormat(android.media.AudioFormat.Builder().setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(22050).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
+                    .setTransferMode(android.media.AudioTrack.MODE_STATIC).setBufferSizeInBytes(pcm.size * 2).build()
+                tr = t
+                t.write(pcm, 0, pcm.size)
+                t.play()
+                delay(pcm.size * 1000L / 22050 + 250)
+            } catch (e: Exception) {
+            } finally {
+                try { tr?.stop() } catch (e: Exception) { }
+                try { tr?.release() } catch (e: Exception) { }
+                try { fr?.let { audioMgr.abandonAudioFocusRequest(it) } } catch (e: Exception) { }
+                beepBusy = false
+            }
+        }
     }
 
     private fun checkLimitChange(newMs: Double, estimated: Boolean) {
@@ -1658,17 +1746,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             // the online search and the saved / downloaded places run at the same time, and their results are merged
             val localJob = async { offlineMatches(q, near) }
+            val pcJob = postcodeJob(q)
             val banJob = async(Dispatchers.IO) { banSearch(q, near) }
             val net0 = try { withContext(Dispatchers.IO) { netGeocode(countryCode(), q, near) } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
             val net = withBan(q, net0, kotlinx.coroutines.withTimeoutOrNull(4000L) { banJob.await() } ?: emptyList())
             // the online results are shown straight away if the downloaded lists are still being searched; those are merged in after
             var local = kotlinx.coroutines.withTimeoutOrNull(500L) { localJob.await() }
             if (local == null) {
-                val first = rankResults(q, near, net ?: emptyList(), emptyList())
+                val first = postcodeFirst(pcJob, rankResults(q, near, net ?: emptyList(), emptyList()))
                 if (first.isNotEmpty()) results = first
                 local = localJob.await()
             }
-            val merged = rankResults(q, near, net ?: emptyList(), local)
+            val merged = postcodeFirst(pcJob, rankResults(q, near, net ?: emptyList(), local))
             results = merged
             if (merged.isEmpty()) toast(if (net == null) "Échec de la recherche : réseau faible ou absent" else "Aucun résultat. Essayez d'ajouter une ville ou un code postal.", 3500)
             else if (net == null) toast("Réseau faible : lieux enregistrés et villes hors ligne affichés", 3500)
@@ -1691,6 +1780,24 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         return if (q.trim().firstOrNull()?.isDigit() == true) extra + base else base + extra
     }
 
+    /** A search that looks like a UK postcode also looks the postcode itself up (at the same time as the other searches). */
+    private fun kotlinx.coroutines.CoroutineScope.postcodeJob(q: String): kotlinx.coroutines.Deferred<List<Place>>? {
+        val cc = countryCode()
+        if (!(cc.isBlank() || cc.equals("gb", true)) || !MapboxRest.looksLikePostcode(q)) return null
+        return async<List<Place>>(Dispatchers.IO) {
+            try { MapboxRest.postcodes(q) } catch (e: Exception) { emptyList<Place>() }
+        }
+    }
+
+    /** The postcode results at the top (waiting at most 4 s for them), with the same postcode not listed twice. */
+    private suspend fun postcodeFirst(job: kotlinx.coroutines.Deferred<List<Place>>?, rest: List<Place>): List<Place> {
+        val pcs = job?.let { kotlinx.coroutines.withTimeoutOrNull(4000L) { it.await() } }.orEmpty()
+        if (pcs.isEmpty()) return rest
+        fun key(s: String) = s.replace(" ", "").uppercase()
+        val names = pcs.map { key(it.name) }.toSet()
+        return pcs + rest.filter { key(it.name) !in names }
+    }
+
     /** Search used by the stops editor: the same sources as the search box, returned instead of shown. */
     suspend fun findPlaces(q: String): List<Place> {
         val near = fix?.pos ?: map.center()
@@ -1698,10 +1805,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // both at once, as in the main search
         return kotlinx.coroutines.coroutineScope {
             val localJob = async { offlineMatches(q, near) }
+            val pcJob = postcodeJob(q)
             val banJob = async(Dispatchers.IO) { banSearch(q, near) }
             val net0 = try { withContext(Dispatchers.IO) { netGeocode(countryCode(), q, near) } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
             val net = withBan(q, net0, kotlinx.coroutines.withTimeoutOrNull(4000L) { banJob.await() } ?: emptyList())
-            rankResults(q, near, net ?: emptyList(), localJob.await())
+            postcodeFirst(pcJob, rankResults(q, near, net ?: emptyList(), localJob.await()))
         }
     }
 
@@ -1820,7 +1928,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val rs = withContext(Dispatchers.IO) {
                     val haveOffline = OfflineRouter.installed(ctx)
                     if (haveOffline && !walking && (!hasOnline || !online())) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, via.map { it.pos }) }
-                    else try { netRoutes(from, to.pos, true, departMs, via.map { it.pos }, askBoth = true) }
+                    else try { netRoutes(from, to.pos, true, departMs, via.map { it.pos }, askBoth = true, simple = true) }
                     catch (e: Exception) {
                         if (haveOffline && !walking && NavigationFallbackPolicy.shouldUseOffline(e)) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, via.map { it.pos }) } else throw e
                     }
@@ -2274,6 +2382,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         var nx: Pair<Double, Double>? = null
         for (sc in secs) {
             if (sc.off <= at || sc.off - at > 800.0) continue
+            // (a stretch with no known limit is 0: it isn't a limit, and showed as "0 in 700 m")
+            if (sc.ms < 2.0) continue
             if (kotlin.math.abs(sc.ms - hit.ms) > 0.5) { nx = sc.ms to (sc.off - at); break }
         }
         val shown = nextLimit
@@ -3192,7 +3302,15 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             speedMps = p.speed,
             elapsedSeconds = (nowT - trustAt) / 1000.0
         )
-        val onR = r != null && s != null && !jump && s.dist < (if (glideOnRoute) offLim + 12.0 else 45.0)
+        // driving straight past the turn: you're a little way off the route and heading a different way from the road it takes
+        // just ahead. The arrow let go of the route only once you were 40 m+ away (until then it carried on round the turn you
+        // hadn't taken), and the reroute waited for three fixes past 30 m: now this lets go at once and reroutes in about 2 s
+        val headingOff = r != null && s != null && !isStill && p.speed > 4.0 && s.dist > 15.0 && gpsReliableForReroute && run {
+            val a = pointAt(r, s.progress).first
+            val b = pointAt(r, s.progress + 25.0).first
+            Geo.dist(a, b) > 5.0 && abs(angDiff(Geo.bearing(a, b), p.heading)) > 55.0
+        }
+        val onR = r != null && s != null && !jump && !headingOff && s.dist < (if (glideOnRoute) offLim + 12.0 else 45.0)
         if (onR && s != null && newFix && s.dist <= offLim) { trustProg = s.progress; trustAt = nowT }
         if (newFix) {
             mAt = tNow; mSpeed = sp
@@ -3245,6 +3363,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 offCount += NavigationPolicy.offRouteStrikeCount(jump, s.dist, offLim)
                 if (offCount >= 3) reroute()
             }
+        } else if (headingOff && newFix) {
+            // past the turn and going another way: two strikes a fix, so two fixes in a row reroute
+            offCount += 2
+            if (offCount >= 3) reroute()
         } else if (gpsReliableForReroute && newFix) {
             // Still close to the route, but a vehicle moving away from its direction can indicate a wrong turn.
             val seg = Geo.bearing(r.pts[s.segmentIndex], r.pts[min(s.segmentIndex + 1, r.pts.size - 1)])
@@ -4296,6 +4418,43 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var lastTrafficAt = 0L
     private var trafficBusy = false
 
+    /** TomTom's timing of the road being driven (a Mapbox route), from where you were when it was asked. */
+    private class TtTiming(val route: Route, val at: Double, val span: Double, val free: Double, val delays: List<DelaySeg>)
+    @Volatile private var ttTiming: TtTiming? = null
+
+    /**
+     * With a Mapbox route and a TomTom key, TomTom also times the same road at each traffic refresh. Each stretch of the line is
+     * coloured with whichever service says it's worse, and the time left is the longer of the two (so a jam either one knows
+     * about shows on the line and in the arrival time; one service alone sometimes said 5 minutes when 15 was nearer the truth).
+     */
+    private suspend fun tomtomOverlay(cur: Route, at: Double) {
+        if (cur.from != "mapbox" || !hasKey || refusedKey == apiKey || System.currentTimeMillis() < ttDownUntil) return
+        if (cur.len - at < 800.0) return
+        val i0 = max(0, idxAt(cur, at))
+        val pts = cur.pts.subList(min(i0 + 1, cur.pts.size - 1), cur.pts.size)
+        val start = pointAt(cur, at).first
+        val tt = withContext(Dispatchers.IO) { try { TomTomRest.timeAlong(apiKey, listOf(start) + pts) } catch (e: Exception) { null } } ?: return
+        if (route !== cur) return
+        val span = cur.len - at
+        val scale = if (tt.len > 0) span / tt.len else 1.0
+        ttTiming = TtTiming(cur, at, span, max(0.0, tt.time - tt.delay), tt.delays.map { DelaySeg(at + it.off * scale, at + it.end * scale, it.secs) })
+        if (tt.sev.isEmpty() || cur.sev.isEmpty()) return
+        if (sevBaseRoute !== cur || sevBase?.size != cur.sev.size) { sevBase = cur.sev.copyOf(); sevBaseRoute = cur }
+        val base = sevBase ?: return
+        for (i in max(0, i0) until cur.sev.size) {
+            if (i + 1 >= cur.cum.size) break
+            val x = ((cur.cum[i] + cur.cum[i + 1]) / 2.0 - at) / scale
+            if (x < 0) continue
+            var j = java.util.Arrays.binarySearch(tt.cum, x)
+            if (j < 0) j = -j - 2
+            j = j.coerceIn(0, tt.sev.size - 1)
+            if (tt.sev[j] > base[i]) base[i] = tt.sev[j]
+        }
+        System.arraycopy(base, 0, cur.sev, 0, base.size)
+        try { applyIncidentSev(cur, incMatches) } catch (e: Exception) { }
+        lastDraw = 0L
+    }
+
     /** Every few minutes asks TomTom for the same trip again, so the amber/red road and the time left follow the traffic as it changes. */
     private fun checkTraffic(cur: Route) {
         val now = System.currentTimeMillis()
@@ -4303,7 +4462,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val d = dest ?: return
         if (previewing || simMode != 0 || trafficBusy || !hasOnline || shadow()) return
         if (lastTrafficAt == 0L) { lastTrafficAt = now - 120_000L }   // first refresh about a minute after setting off
-        if (now - lastTrafficAt < 180_000L) return
+        // every 3 minutes, every 2 when you're crawling along (in a queue the time left goes stale fastest)
+        if (now - lastTrafficAt < (if (f.speed < 4.0) 120_000L else 180_000L)) return
         lastTrafficAt = now
         trafficBusy = true
         val viaPts = via.map { it.pos }
@@ -4311,10 +4471,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         scope.launch {
             try {
                 syncRoutePrefs(f.pos, d.pos)
-                val rs = withContext(Dispatchers.IO) { netRoutes(f.pos, d.pos, false, 0L, viaPts, -1.0, true) }
-                val fresh = rs.firstOrNull() ?: return@launch
+                val rs = try { withContext(Dispatchers.IO) { netRoutes(f.pos, d.pos, false, 0L, viaPts, -1.0, true) } }
+                    catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { emptyList() }
                 if (route !== cur) return@launch
-                refreshTraffic(cur, fresh, at)
+                rs.firstOrNull()?.let { fresh -> refreshTraffic(cur, fresh, at) }
+                // and TomTom's view of the same road, on a Mapbox route
+                tomtomOverlay(cur, at)
             } catch (e: Exception) { }
             finally { trafficBusy = false }
         }
@@ -4483,8 +4645,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 d.secs * ((d.end - max(progress, d.off)) / span).coerceIn(0.0, 1.0)
             }
             val ahead2 = ahead + incAhead
-            val secs = r.freeFlow * frac + ahead2
-            val delayMin = Math.round(ahead2 / 60.0).toInt()
+            var secs = r.freeFlow * frac + ahead2
+            var delayMin = Math.round(ahead2 / 60.0).toInt()
+            // TomTom's own timing of this road (a Mapbox route with a TomTom key): the longer of the two is used
+            ttTiming?.takeIf { it.route === r && it.span > 0 }?.let { t ->
+                val ttAhead = t.delays.sumOf { d ->
+                    val span = max(1.0, d.end - d.off)
+                    d.secs * ((d.end - max(progress, d.off)) / span).coerceIn(0.0, 1.0)
+                }
+                val ttSecs = t.free * (rem / t.span).coerceIn(0.0, 1.2) + ttAhead
+                if (ttSecs > secs) { secs = ttSecs; delayMin = max(delayMin, Math.round(ttAhead / 60.0).toInt()) }
+            }
             val arrive = Clock.hm(System.currentTimeMillis() + (secs * 1000).toLong())
             eta = EtaInfo(arrive, rem, secs, delayMin)
             routeFrac = (1.0 - frac).toFloat().coerceIn(0f, 1f)
@@ -4510,7 +4681,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val fastRoad = cur.exitNo.isNotBlank() || (fix?.let { f -> try { map.roadAt(f.pos, f.heading)?.cls } catch (e: Throwable) { null } }?.let { it.startsWith("motorway") || it.startsWith("trunk") } == true)
             laneFast = fastRoad
             val realSec = if (d < (if (fastRoad) 1900 else 1000) && !arriving) r.lanes.filter {
-                progress < it.end + 5 && abs(it.end - cur.off) < 200
+                // a section has to run up to this junction: one ending well before it belongs to a junction on the way (an
+                // earlier slip road), and lit its exit lane as if that were the turn to take
+                progress < it.end + 5 && it.end > cur.off - 60 && it.end < cur.off + 200
             }.sortedWith(compareByDescending<LaneSec> { it.lanes.size }.thenBy { abs(it.end - cur.off) }).firstOrNull() else null
             // for the feedback report: the lane list in use, as the route data gives it (so a junction with the wrong arrows can be
             // traced to the data or the app)
@@ -4982,6 +5155,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     /** Roughly how much battery (%) you'll arrive with: the charge you set before the trip, less what's been driven and what's left. */
+    /** The battery estimate for the trip card, or null when it's switched off (Settings > Fuel). */
+    fun evCardPct(): Int? = if (prefs.b(PreferenceKeys.EV_PCT_CARD, true)) evArrivalPct() else null
     fun evArrivalPct(): Int? {
         if (!isEv) return null
         val e = eta ?: return null

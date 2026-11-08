@@ -909,6 +909,7 @@ private fun FuelSection(prefs: Prefs, engine: NavEngine) {
         if (auFuel) SFieldItem("Secret API FuelCheck", prefs.s(PreferenceKeys.NSW_FUEL_SECRET, ""), placeholder = "Collez le secret API", password = true) { prefs.put(PreferenceKeys.NSW_FUEL_SECRET, it.trim()) }
     }
     if (prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV") SGroup("Votre voiture électrique", footer = "Avec la consommation et le prix renseignés, chaque itinéraire indique à peu près ce que coûtera la recharge. La consommation et la capacité de batterie servent aussi à l'estimation de batterie sur la carte de trajet et aux suggestions d'arrêt recharge (réglez votre niveau de batterie dans les options d'itinéraire).") {
+        SToggle(prefs, "Estimation de batterie sur la carte de trajet", PreferenceKeys.EV_PCT_CARD, true, "Le pourcentage de batterie (maintenant, à la borne, à l'arrivée), sur le téléphone et Android Auto")
         // fork FR : la batterie réelle de la voiture, lue dans Home Assistant au moment de choisir une destination
         SFieldItem("Home Assistant : adresse", prefs.s(com.headunit.launcher.HaBattery.URL_KEY, ""),
             "Pour lire la batterie réelle de la voiture (ex. https://xxxx.ui.nabu.casa)" + com.headunit.launcher.HaBattery.status.takeIf { it.isNotBlank() }.let { if (it != null) " · $it" else "" },

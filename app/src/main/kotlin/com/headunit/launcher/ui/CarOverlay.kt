@@ -464,9 +464,9 @@ private fun TripCard(engine: NavEngine, fill: Boolean) {
             CarStat(e.arrive, "arrivée", c.text)
             CarStat(Geo.fmtDist(e.dist, engine.imperial), "restants", c.text)
             // fork FR : la batterie maintenant et à l'arrivée
-            engine.evNowPct()?.let { p -> CarStat("$p%", "batterie", if (p < 10) Bad else if (p < 20) Warn else c.text) }
-            engine.evChargerPct()?.let { p -> CarStat("$p%", "à la borne", if (p < 10) Bad else if (p < 20) Warn else Good) }
-            engine.evArrivalPct()?.let { p -> CarStat("$p%", "à l'arrivée", if (p < 10) Bad else if (p < 20) Warn else Good) }
+            engine.evCardPct()?.let { engine.evNowPct() }?.let { p -> CarStat("$p%", "batterie", if (p < 10) Bad else if (p < 20) Warn else c.text) }
+            engine.evCardPct()?.let { engine.evChargerPct() }?.let { p -> CarStat("$p%", "à la borne", if (p < 10) Bad else if (p < 20) Warn else Good) }
+            engine.evCardPct()?.let { p -> CarStat("$p%", "à l'arrivée", if (p < 10) Bad else if (p < 20) Warn else Good) }
         }
         // the whole route, and other routes (as in the app): Android Auto has no room left for them among its own buttons
         val small: @Composable (androidx.compose.ui.graphics.vector.ImageVector, String, () -> Unit, androidx.compose.ui.unit.Dp) -> Unit = { icon, id, act, sz ->

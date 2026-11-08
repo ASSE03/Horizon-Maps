@@ -147,6 +147,7 @@ internal val settingsIndex = listOf(
     SettingRef("Consommation (miles par kWh)", "", "Prix des carburants hors Royaume-Uni", 9),
     SettingRef("Consommation (miles par kWh)", "", "Votre voiture électrique", 9),
     SettingRef("Afficher aussi les stations-service", "Voiture électrique : le bouton Carburant sur la carte aussi", "Votre voiture électrique", 9),
+    SettingRef("Estimation de batterie sur la carte de trajet", "Voiture électrique : afficher ou masquer le % de batterie", "Votre voiture électrique", 9),
     SettingRef("Batterie utile (kWh)", "", "Votre voiture électrique", 9),
     SettingRef("Prix de l'électricité (pence par kWh)", "", "Votre voiture électrique", 9),
     SettingRef("Consommation (miles par gallon)", "", "Coût du carburant dans les options d'itinéraire", 9),

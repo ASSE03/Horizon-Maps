@@ -43,6 +43,13 @@ Add user-facing Horizon Nav changes under **Unreleased** before publishing each 
 - No TomTom key is built into the app any more (anyone could pull it out of a shared APK); paste your own in Settings if you use TomTom search.
 
 ### Fixed
+- Missed turns noticed sooner: driving straight past a turn, the arrow no longer carries on round the turn you didn't take. It follows you straight away and a new route is asked for in about 2 seconds (it used to wait until you were 40 m or more off the route).
+- Speeding beep on Android Auto: now plays on the navigation channel (like the spoken directions), so it is heard over the radio or the car's own music too. Before, it only reached the speakers while Android Auto was the sound source.
+- Lanes at two slip roads close together: the second junction's lanes no longer light up at the first one, which made it look like the exit to take.
+- Lanes lit too generously: where Mapbox picks the lanes to be in, only those are lit now, not every lane that could work.
+- Next speed limit: no longer shows a strange "0 in 700 m" sign above the speed when the road ahead has no known limit.
+- Car turn card: the "then" line for the turn after next now shows on small Android Auto screens too.
+- Pinch zoom on Android Auto: zooms smoothly around the middle of the map instead of jumping about.
 - Small Android Auto screens (GitHub, Pioneer SPH-DA160): on 7-inch 800 x 480 units the turn card left out the lanes, the junction close-up and the driving advice, as if the screen were too small. Lanes now always show on the car's turn card, and the close-up and advice show unless the screen is really short.
 - Services on the route bar with the services card off: switching off Next services card now takes them off the route bar too.
 - Traffic jams not added to the route: a jam could be announced ("Traffic jam ahead") without the time left going up or the route line turning amber or red. TomTom's incident details were read wrongly (the kind of incident as a word when it's a number, and the delay under the wrong name), and a jam with no delay given was skipped. Now every jam ahead colours the route (amber, red when it's major), and its hold-up is added to the time left when the route's own traffic doesn't already have it.
@@ -92,6 +99,8 @@ Add user-facing Horizon Nav changes under **Unreleased** before publishing each 
 - Where lanes are painted on the road, the route line runs through the lit-up lanes right up to the junction and carries smoothly into the turn arrow, then eases back onto the road over the next 25 m, with no gap or step where the lane guidance ends.
 
 ### New
+- Postcode search: typing a UK postcode now shows the postcode itself at the top of the results (not just addresses in it), on the phone and Android Auto. A half-typed one ("SO17 1") lists the postcodes it could be, and a district ("SO17") works too.
+- Battery estimate toggle: electric car drivers can hide the battery % on the trip card (phone and Android Auto) in Settings › Fuel › Your electric car.
 - 3D flags: a tall red flag at where you're going, and smaller amber ones at your stops, standing above the buildings so you can see them from a distance. On by default; Settings > Your arrow & route line > Route line.
 - Hill shading: soft shading on hillsides, so valleys and ridges show even on a flat map, with its own day and night shades. Off by default; Settings > Light & 3D > 3D.
 - Arrive on your side of the road: routes bring you to the kerb side of where you're going, so you don't have to cross the traffic (Mapbox and offline routes). On by default; Settings > Routes > Choosing a route.
@@ -135,6 +144,9 @@ Add user-facing Horizon Nav changes under **Unreleased** before publishing each 
 - 2D / 3D on Android Auto: a 2D / 3D button in Android Auto's own buttons, as in the app (while navigating it takes the Demo button's place unless Demo is switched on in Settings).
 
 ### Improved
+- Traffic from both services: on a Mapbox route with a TomTom key, TomTom also times the same road at every traffic refresh. Each stretch of the route line shows whichever service says it's worse, and the time left and arrival time use the longer of the two, so a jam either one knows about is counted.
+- Time left in queues: traffic is refreshed every 2 minutes instead of 3 while you're crawling along, so the arrival time catches up with a jam sooner.
+- Simpler routes: when planning, a route with clearly fewer turns is chosen over one that's only up to about a minute and a half quicker, so it keeps to the main roads instead of cutting through back streets. The quicker one is still offered to pick.
 - Android Auto split screen: in the narrow part of the screen the app's cards and buttons now shrink further by themselves, so they fit beside the map. The Overall size setting (Settings > Android Auto, or the car's own Settings) still sets them bigger or smaller, 40% to 300%.
 - Android Auto: Route overview and Other routes buttons on the trip card (beside sound and end), and Route overview in the car's Settings too.
 - Android Auto arrow size now goes down to 30% (was 60%), for small car screens where even 60% looked big.
