@@ -513,6 +513,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var msgToken = 0
     private var lm: LocationManager? = null
     private var weatherAt = 0L
+    /** Fork FR : la température ici (bulle en haut à droite d'Android Auto), lue toutes les 15 min ou après 10 km. */
+    var tempHere by mutableStateOf<Weather.Now?>(null)
+    private var tempAt = 0L
+    private var tempPos: LL? = null
     private var limitAt = 0L
     private var limitPos: LL? = null
     private var camAt = 0L
@@ -1100,6 +1104,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         onPosition(Fix(cur, h, speed, if (l.hasAltitude()) l.altitude else 0.0, if (l.hasAccuracy()) l.accuracy.toDouble() else 0.0), firstFix || first)
         if (firstFix) {
             map.cameraTo(cur, null, if (tilt3d) 55.0 else 0.0, 15.5, 0, 0.0)
+        }
+        if (isCar && prefs.b("cartemp", true) && (now - tempAt > 15 * 60 * 1000L || (tempPos?.let { Geo.dist(it, cur) > 10_000.0 } ?: true)) && now - tempAt > 60_000L) {
+            tempAt = now; tempPos = cur
+            scope.launch { tempHere = withContext(Dispatchers.IO) { Weather.fetch(cur) } ?: tempHere }
         }
         // current weather is only used for the rain effect on the map, so it is only fetched when that is switched on
         if (prefs.b(PreferenceKeys.RAIN_EFFECTS, false) && now - weatherAt > 20 * 60 * 1000L) {
