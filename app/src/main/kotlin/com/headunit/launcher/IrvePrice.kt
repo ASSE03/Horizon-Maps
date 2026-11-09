@@ -20,7 +20,7 @@ object IrvePrice {
         val out = try {
             val u = "https://odre.opendatasoft.com/api/records/1.0/search/?dataset=bornes-irve&rows=20" +
                 "&geofilter.distance=" + URLEncoder.encode(String.format(java.util.Locale.US, "%.6f,%.6f,120", p.lat, p.lon), "UTF-8")
-            val c = URL(u).openConnection() as HttpURLConnection
+            val c = URL(u).also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
             val body = try {
                 c.connectTimeout = 6000; c.readTimeout = 8000
                 c.setRequestProperty("User-Agent", "HorizonNavFR")

@@ -139,6 +139,10 @@ internal fun OfflineMapsContent(prefs: Prefs, engine: NavEngine) {
         if (engine.packStatus.isNotBlank()) SNote((engine.packDownloading?.let { PackRegions.byId(it).name + ": " } ?: "") + engine.packStatus + if (engine.packBusy) " · vous pouvez quitter cette page" else "")
     }
     SGroup("Sans réseau") {
+        SToggle(prefs, "Mode hors ligne", PreferenceKeys.OFFLINE_MODE, false,
+            "Rien ne passe en ligne : ni trafic, ni météo, ni recherche en ligne, et l'appli ne cherche plus de réseau. Itinéraires, recherche, limitations et radars viennent de votre pack téléchargé. Les téléchargements que vous lancez fonctionnent toujours")
+        val offlineOn = prefs.b(PreferenceKeys.OFFLINE_MODE, false)
+        androidx.compose.runtime.LaunchedEffect(offlineOn) { engine.setOfflineMode(offlineOn) }
         SChoice("Carte à afficher", listOf("auto" to "Auto", "always" to "Téléchargée", "never" to "En ligne"), prefs.s(PreferenceKeys.OFF_MAP, "auto"),
             "Auto : sans réseau, la carte Mapbox continue avec les zones en mémoire (là où vous êtes passé récemment, et les zones Mapbox enregistrées) ; la carte du pack téléchargé ne prend le relais que là où Mapbox n'a rien, et la carte en ligne revient avec le réseau") { prefs.put(PreferenceKeys.OFF_MAP, it); engine.restyle() }
     }

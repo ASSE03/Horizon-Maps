@@ -19,7 +19,7 @@ object BanAddr {
         val bias = near?.let { String.format(java.util.Locale.US, "&lat=%.5f&lon=%.5f", it.lat, it.lon) } ?: ""
         for (ep in ENDPOINTS) {
             try {
-                val c = URL("$ep?q=$enc&limit=6$bias").openConnection() as HttpURLConnection
+                val c = URL("$ep?q=$enc&limit=6$bias").also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
                 c.connectTimeout = 5000; c.readTimeout = 7000
                 c.setRequestProperty("User-Agent", "HorizonNav/1.0 (Android navigation app)")
                 if (c.responseCode !in 200..299) { lastNote = "${ep.substringAfter("//").substringBefore('/')}: HTTP ${c.responseCode}"; continue }

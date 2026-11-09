@@ -30,7 +30,7 @@ object RadarsFr {
         if (stale && now - tryAt > 30 * 60_000L) {
             tryAt = now
             try {
-                val c = URL(URL_FILE).openConnection() as HttpURLConnection
+                val c = URL(URL_FILE).also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
                 c.connectTimeout = 8000; c.readTimeout = 20000; c.instanceFollowRedirects = true
                 c.setRequestProperty("User-Agent", "HorizonNav/1.0 (Android navigation app)")
                 if (c.responseCode in 200..299) {

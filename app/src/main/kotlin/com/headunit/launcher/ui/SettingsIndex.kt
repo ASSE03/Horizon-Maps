@@ -131,6 +131,7 @@ internal val settingsIndex = listOf(
     SettingRef("Canal audio de la voix", "Si vous entendez les bips mais pas la voix", "Voix et volume", 7),
     SettingRef("Voix et langue", "Utilise la synthèse vocale du système (installez la voix française)", "Voix et volume", 7),
     SettingRef("Volume", "", "Voix et volume", 7),
+    SettingRef("Raccourcis sous la barre de recherche", "Boutons carburant, recharge, restauration, café, parking, toilettes, aires de service", "", 8),
     SettingRef("Ajouter un lieu", "", "Vos lieux", 8),
     SettingRef("Supprimer tous les favoris", "", "Favoris", 8),
     SettingRef("Enregistrés et récents sous la barre de recherche", "La liste des favoris et lieux récents sur la carte", "Historique", 8),

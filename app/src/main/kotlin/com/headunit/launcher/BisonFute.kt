@@ -50,7 +50,7 @@ object BisonFute {
         val f = File(ctx.filesDir, "bisonfute.json")
         if (f.exists() && System.currentTimeMillis() - f.lastModified() < 12 * 3_600_000L) try { return JSONObject(f.readText()) } catch (e: Exception) { }
         return try {
-            val c = URL(URL_JSON).openConnection() as HttpURLConnection
+            val c = URL(URL_JSON).also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
             val body = try {
                 c.connectTimeout = 8000; c.readTimeout = 15000
                 c.setRequestProperty("User-Agent", "HorizonNavFR")

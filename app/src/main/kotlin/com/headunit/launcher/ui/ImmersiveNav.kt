@@ -256,7 +256,8 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         // the panels' outlines (as parts of the screen) go to the camera, so your arrow is moved clear of whatever is beside it
         val boxW = constraints.maxWidth.toFloat().coerceAtLeast(1f); val boxH = constraints.maxHeight.toFloat().coerceAtLeast(1f)
         fun report(i: Int, r: androidx.compose.ui.geometry.Rect) { engine.setPanel(i, r.left / boxW, r.top / boxH, r.right / boxW, r.bottom / boxH) }
-        Column(Modifier.align(side(Alignment.TopStart)).padding(16.dp).then(if (narrow) Modifier.fillMaxWidth().sides(end = 52.dp * mainButtonScale + 10.dp) else Modifier.width(380.dp))
+        // the "all locations" panel sits in the same corner and lets the map show through, so the search and its results step aside while it's open
+        if (engine.chain == null && !engine.chainBusy) Column(Modifier.align(side(Alignment.TopStart)).padding(16.dp).then(if (narrow) Modifier.fillMaxWidth().sides(end = 52.dp * mainButtonScale + 10.dp) else Modifier.width(380.dp))
             .onGloballyPositioned { report(0, it.boundsInParent()) }
             // the turn list opens over the trip card below it
             .zIndex(if (engine.itineraryOpen) 2f else 0f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -267,7 +268,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
                 engine.phoneDest?.let { pd -> PhoneDestCard(engine, pd) }
                 val showResults = engine.results.isNotEmpty()
                 AnimatedVisibility(showResults, enter = fadeIn(tween(180)) + androidx.compose.animation.expandVertically(tween(240)), exit = fadeOut(tween(120)) + androidx.compose.animation.shrinkVertically(tween(180))) {
-                    ImmResults(engine) { q = "" }
+                    ImmResults(engine, q) { q = "" }
                 }
                 AnimatedVisibility(!showResults && q.isEmpty() && engine.nearbyKind == null, enter = fadeIn(tween(220)) + androidx.compose.animation.expandVertically(tween(260)), exit = fadeOut(tween(140)) + androidx.compose.animation.shrinkVertically(tween(200))) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -289,7 +290,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
               }
             }
             if (routing) {
-                if (engine.results.isNotEmpty()) ImmResults(engine) { q = "" }
+                if (engine.results.isNotEmpty()) ImmResults(engine, q) { q = "" }
                 else {
                     val curTurn = engine.turn
                     val lastTurn = remember { mutableStateOf(curTurn) }
@@ -394,9 +395,19 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
             }
         } else androidx.compose.runtime.SideEffect { engine.setPanel(2, 0f, 0f, 0f, 0f); if (buttonsWPx != 0) buttonsWPx = 0 }
 
+        // ---- "See all locations": the branches in a panel down the driver's side (over the search), the map beside it
+        if (engine.chain != null || engine.chainBusy) {
+            ChainPanel(engine, Modifier.align(side(Alignment.TopStart)).zIndex(6f).padding(16.dp)
+                .then(if (narrow) Modifier.fillMaxWidth().heightIn(max = maxHeight * 0.5f) else Modifier.width(420.dp).fillMaxHeight()))
+            if (engine.chainMoved || (engine.chainBusy && engine.chain != null))
+                ChainSearchHere(engine, Modifier.align(if (narrow) Alignment.BottomCenter else Alignment.TopCenter).zIndex(6f)
+                    .padding(top = 18.dp, bottom = 110.dp).then(if (narrow) Modifier else Modifier.sides(start = 440.dp)))
+        }
+
         // ---- What's here (holding on the map): the road, its limit and the area, with Go / Add as a stop
         engine.here?.let { h ->
-            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp)) { HereCardView(engine, h) }
+            // above everything else, so the route options (which reach up this far on a phone) can't cover its buttons
+            Box(Modifier.align(Alignment.BottomCenter).zIndex(8f).padding(bottom = 96.dp)) { HereCardView(engine, h) }
         }
 
         // ---- the routes box, folded out beside the buttons by Other routes (as in Google Maps): your route and the other ways, with
@@ -1098,15 +1109,21 @@ private fun ImmSearch(engine: NavEngine, q: String, onQ: (String) -> Unit, locke
 }
 
 @Composable
-private fun ImmResults(engine: NavEngine, onPicked: () -> Unit) {
+private fun ImmResults(engine: NavEngine, q: String, onPicked: () -> Unit) {
     val c = LocalVw.current
     val shape = RoundedCornerShape(26.dp)
     val here = engine.fix?.pos
+    // several branches of what was searched nearby (Lidl, Sainsbury's…): "See all N locations" at the top
+    val chainN = remember(engine.results, q) { if (q.trim().length >= 2) engine.chainCount(q.trim()) else 0 }
     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp).panel(10.dp, shape, c.surface).padding(vertical = 6.dp)) {
+        if (chainN >= 2) item { SeeAllRow(engine, q.trim(), chainN) { } }
         items(engine.results) { p ->
             Row(Modifier.fillMaxWidth().clickable { onPicked(); engine.pickPlace(p) }.padding(horizontal = 16.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(42.dp).clip(CircleShape).background(c.tile), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Place, null, tint = Color(0xFFEA4335), modifier = Modifier.size(22.dp))
+                // the shop's own logo where there is one
+                PlaceLogo(p, 42.dp) {
+                    Box(Modifier.size(42.dp).clip(CircleShape).background(c.tile), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Place, null, tint = Color(0xFFEA4335), modifier = Modifier.size(22.dp))
+                    }
                 }
                 Column(Modifier.padding(start = 14.dp).weight(1f)) {
                     Text(p.name, color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1147,18 +1164,11 @@ private fun ImmChips(engine: NavEngine, focusSearch: () -> Unit) {
                 if (work != null) engine.startRoute(work) else { engine.pendingSave = "work"; engine.toast("Cherchez l'adresse de votre travail", 3500); focusSearch() }
             }
         }
-        // things to find nearby: always all five on show, no scrolling sideways to find them
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            // (an electric car: Charging first, and Toilets where Fuel was, unless petrol stations are wanted too)
-            val noFuel = engine.hideFuel
-            if (!noFuel) FindButton(Icons.Rounded.LocalGasStation, Color(0xFFEA4335), "Carburant à proximité") { engine.loadNearby("fuel", false) }
-            FindButton(Icons.Rounded.EvStation, Color(0xFF34A853), "Recharge à proximité") { engine.loadNearby("charging", false) }
-            FindButton(Icons.Rounded.Restaurant, Color(0xFFF29900), "Restauration à proximité") { engine.loadNearby("food", false) }
-            FindButton(Icons.Rounded.LocalCafe, Color(0xFFA56BFF), "Café à proximité") { engine.loadNearby("coffee", false) }
-            // (a lorry: lorry parks instead of car parks)
-            if (engine.prefs.s(PreferenceKeys.VEHICLE, "car") == "lorry") FindButton(Icons.Rounded.LocalShipping, Color(0xFF4C8DFF), "Parkings poids lourds à proximité") { engine.loadNearby("lorrypark", false) }
-            else FindButton(Icons.Rounded.LocalParking, Color(0xFF4C8DFF), "Parking à proximité") { engine.loadNearby("parking", false) }
-            if (noFuel) FindButton(Icons.Rounded.Wc, Color(0xFF4C8DFF), "Toilettes à proximité") { engine.loadNearby("toilets", false) }
+        // things to find nearby: the ones picked in Settings › Places & trips (up to five, all on show, no scrolling sideways);
+        // as before when none are picked (Charging and Toilets in place of Fuel for an electric car, lorry parks for a lorry)
+        val picks = chosenShortcuts(engine)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = if (picks.size >= 4) Arrangement.SpaceBetween else Arrangement.spacedBy(14.dp)) {
+            for (s in picks) FindButton(s.icon, s.color, L.t(s.desc)) { engine.loadNearby(s.kind, false) }
         }
     }
 }

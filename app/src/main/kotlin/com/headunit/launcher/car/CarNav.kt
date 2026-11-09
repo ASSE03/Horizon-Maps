@@ -2,6 +2,8 @@ package com.headunit.launcher.car
 
 import com.headunit.launcher.PreferenceKeys
 import com.headunit.launcher.L
+import com.headunit.launcher.Logos
+import com.headunit.launcher.Geo
 import android.app.Presentation
 import android.content.Intent
 import android.content.res.Configuration
@@ -820,6 +822,45 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
 object CarTicks { var tick: (() -> Unit)? = null }
 
 /** A coloured icon for a list row. */
+/** A place's logo for a car list row, when it has already been loaded (lists can't wait for one); null otherwise. */
+private fun logoIcon(p: Place): CarIcon? = Logos.cached(Logos.domainFor(p))?.let { CarIcon.Builder(IconCompat.createWithBitmap(it)).build() }
+
+/**
+ * "See all locations" on the car: the branches as a list, quickest first (drive time and distance), and on the map. Picking one
+ * goes there; Back closes it. Waits for the look-up with the list's loading spinner.
+ */
+private class CarChainScreen(ctx: CarContext, private val holder: CarHolder) : Screen(ctx) {
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val poll = object : Runnable { override fun run() { invalidate(); val e = holder.engine; if (e != null && e.chain == null && e.chainBusy) handler.postDelayed(this, 500) } }
+    init {
+        handler.postDelayed(poll, 500)
+        lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) { handler.removeCallbacks(poll); holder.engine?.let { if (it.chain != null) it.closeChain() } }
+        })
+    }
+    override fun onGetTemplate(): Template {
+        val e = holder.engine ?: return ListTemplate.Builder().setTitle("Recherche…").setHeaderAction(Action.BACK).setLoading(true).build()
+        val view = e.chain
+        val b = ListTemplate.Builder().setTitle(view?.name ?: "Recherche…").setHeaderAction(Action.BACK)
+        if (view == null) {
+            if (e.chainBusy) return b.setLoading(true).build()
+            return b.setSingleList(ItemList.Builder().setNoItemsMessage("Aucune autre enseigne trouvée à proximité").build()).build()
+        }
+        val limit = try { carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST) } catch (x: Exception) { 6 }
+        val list = ItemList.Builder()
+        for (s in e.chainSorted().take(limit.coerceIn(1, 25))) {
+            val parts = s.place.sub.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            val road = parts.firstOrNull()?.replace(Regex("^[0-9]+[A-Za-z]?(-[0-9]+)?\\s+"), "") ?: s.place.name
+            val time = if (s.secs >= 0) "${Math.max(1, Math.round(s.secs / 60.0).toInt())} min" + " · " else ""
+            val r = Row.Builder().setTitle(road).addText(time + Geo.fmtDist(if (s.road >= 0) s.road else s.dist, e.imperial) + (parts.getOrNull(1)?.let { " · $it" } ?: ""))
+                .setImage(logoIcon(s.place) ?: rowIcon(carContext, R.drawable.ic_car_pin, 0xFFEA4335.toInt()))
+            r.setOnClickListener { e.chainGo(s); screenManager.popToRoot() }
+            list.addItem(r.build())
+        }
+        return b.setSingleList(list.build()).build()
+    }
+}
+
 private fun rowIcon(ctx: CarContext, res: Int, color: Int): CarIcon =
     CarIcon.Builder(IconCompat.createWithResource(ctx, res)).setTint(androidx.car.app.model.CarColor.createCustom(color, color)).build()
 
@@ -998,9 +1039,19 @@ class SearchScreen(carContext: CarContext, private val holder: CarHolder, initia
         val e = holder.engine
         val limit = try { carContext.getCarService(ConstraintManager::class.java).getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST) } catch (x: Exception) { 6 }
         val list = ItemList.Builder().setNoItemsMessage(if (query.length < 3) "Tapez un lieu, une adresse ou un code postal" else "Recherche…")
-        if (query.length >= 3) for (p in shown.take(limit.coerceIn(1, 12))) {
-            // a red pin, the name, and how far it is with the address under it (as in the app's results)
-            val r = Row.Builder().setTitle(p.name).setImage(rowIcon(carContext, R.drawable.ic_car_pin, 0xFFEA4335.toInt()))
+        // several branches of what was searched nearby: "See all N locations" first
+        val chainN = if (query.length >= 3 && e != null && shown.isNotEmpty()) try { e.chainCount(query.trim()) } catch (x: Exception) { 0 } else 0
+        if (chainN >= 2) {
+            val first = shown.firstOrNull { Logos.norm(it.name).startsWith(Logos.norm(query)) }
+            val r = Row.Builder().setTitle("Voir les $chainN emplacements").addText(L.t(if (e?.imperial == true) "Within 10 miles" else "Within 15 km"))
+                .setImage(first?.let { logoIcon(it) } ?: rowIcon(carContext, R.drawable.ic_car_pin, 0xFF4C8DFF.toInt()))
+            val q = query.trim()
+            r.setOnClickListener { e?.openChain(q); screenManager.push(CarChainScreen(carContext, holder)) }
+            list.addItem(r.build())
+        }
+        if (query.length >= 3) for (p in shown.take((limit - (if (chainN >= 2) 1 else 0)).coerceIn(1, 12))) {
+            // the shop's logo (once it's been loaded) or a red pin, the name, and how far it is with the address under it
+            val r = Row.Builder().setTitle(p.name).setImage(logoIcon(p) ?: rowIcon(carContext, R.drawable.ic_car_pin, 0xFFEA4335.toInt()))
             val line = listOf(distFrom(e, p), p.sub).filter { it.isNotBlank() }.joinToString(" · ")
             if (line.isNotBlank()) r.addText(line)
             r.setOnClickListener { e?.startRoute(p); screenManager.popToRoot() }

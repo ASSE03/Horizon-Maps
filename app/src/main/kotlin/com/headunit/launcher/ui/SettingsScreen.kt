@@ -758,6 +758,7 @@ private fun PlacesSection(engine: NavEngine) {
         }
         if (favs.size > 1) SItem("Supprimer tous les favoris") { SButton("Tout supprimer", danger = true) { pl.clearFavourites() } }
     }
+    ShortcutsGroup(engine)
     SGroup("Historique", footer = "Faites glisser un lieu sur le côté dans la liste Enregistrés et récents pour le retirer.") {
         SToggle(engine.prefs, "Enregistrés et récents sous la barre de recherche", "quicklist", true, "La liste des favoris et lieux récents sur la carte")
         SItem("Destinations récentes", "${pl.recents().size} récentes, plus les lieux mémorisés pour chercher sans réseau") {

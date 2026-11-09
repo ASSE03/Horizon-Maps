@@ -18,7 +18,7 @@ object NominatimPoi {
         val url = String.format(java.util.Locale.US,
             "https://nominatim.openstreetmap.org/search?amenity=toilets&viewbox=%.5f,%.5f,%.5f,%.5f&bounded=1&format=jsonv2&limit=40&extratags=1&accept-language=fr",
             c.lon - dLon, c.lat + dLat, c.lon + dLon, c.lat - dLat)
-        val conn = URL(url).openConnection() as HttpURLConnection
+        val conn = URL(url).also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
         conn.connectTimeout = 6000; conn.readTimeout = 9000
         conn.setRequestProperty("User-Agent", "HorizonNav/1.0 (Android navigation app)")
         val code = conn.responseCode
@@ -71,7 +71,7 @@ object NominatimPoi {
         roadAt = now
         val url = String.format(java.util.Locale.US,
             "https://nominatim.openstreetmap.org/reverse?lat=%.6f&lon=%.6f&format=jsonv2&zoom=17&layer=address&accept-language=fr", p.lat, p.lon)
-        val conn = URL(url).openConnection() as HttpURLConnection
+        val conn = URL(url).also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
         conn.connectTimeout = 5000; conn.readTimeout = 6000
         conn.setRequestProperty("User-Agent", "HorizonNav/1.0 (Android navigation app)")
         if (conn.responseCode !in 200..299) return null

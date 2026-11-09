@@ -24,7 +24,7 @@ object HaBattery {
 
     /** Valeur numérique d'une entité, ou null (réseau : hors du fil principal). */
     private fun number(base: String, token: String, entity: String): Double? = try {
-        val c = URL("$base/api/states/$entity").openConnection() as HttpURLConnection
+        val c = URL("$base/api/states/$entity").also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
         try {
             c.connectTimeout = 8_000; c.readTimeout = 10_000
             c.setRequestProperty("Authorization", "Bearer $token")
@@ -71,7 +71,7 @@ object HaBattery {
         val base = p.s(URL_KEY, "").trim().trimEnd('/')
         val entity = p.s(ENTITY_KEY, "").trim()
         return try {
-            val c = URL("$base/api/states/$entity").openConnection() as HttpURLConnection
+            val c = URL("$base/api/states/$entity").also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
             try {
                 c.connectTimeout = 8_000; c.readTimeout = 10_000
                 c.setRequestProperty("Authorization", "Bearer ${p.s(TOKEN_KEY, "").trim()}")

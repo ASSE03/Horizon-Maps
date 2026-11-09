@@ -5,6 +5,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Voir tous les emplacements : cherchez une enseigne (Lidl, Carrefour, Total…) et, quand il y en a plusieurs autour, « Voir les N emplacements » les montre toutes. Un panneau les classe par La plus rapide (temps de trajet avec le trafic), Le plus proche ou Sur mon trajet, et la carte montre chacune avec son logo et son temps de trajet. « Rechercher dans cette zone » relance la recherche là où vous avez déplacé la carte. Aussi sur Android Auto.
+- Logos dans les résultats de recherche : les magasins et enseignes affichent leur logo (pris sur leur site, ou dans une liste intégrée des grandes enseignes), gardé sur l'appareil après la première fois.
+- Vos raccourcis : choisissez les boutons ronds « à proximité » sous la barre de recherche (jusqu'à 5, dans votre ordre) parmi Carburant, Recharge, Restauration, Café, Parking, Toilettes et Aires de service, dans Réglages › Lieux et trajets.
+- Mode hors ligne : un interrupteur général dans Réglages › Cartes hors ligne. Plus rien ne passe en ligne (trafic, météo, recherche, radars, limitations…) et l'appli ne cherche plus de réseau : fini les clignotements et nouvelles tentatives avec un réseau faible. Tout vient du pack téléchargé ; les téléchargements que vous lancez fonctionnent toujours.
+- Ajouter une étape pendant la planification : appui long sur la carte de l'écran des itinéraires, puis « Ajouter comme étape ». Autant d'étapes que vous voulez.
 - Trafic des deux services : sur un itinéraire Mapbox avec une clé TomTom, TomTom chronomètre aussi la même route à chaque actualisation. Chaque tronçon du tracé montre le service le plus pessimiste, et le temps restant comme l'heure d'arrivée retiennent le plus long des deux.
 - Estimation de batterie : les conducteurs de voiture électrique peuvent masquer les % de batterie de la carte de trajet (téléphone et Android Auto), dans Réglages › Carburant › Votre voiture électrique.
 - Codes postaux britanniques : un code postal du Royaume-Uni s'affiche lui-même en tête des résultats de recherche.
@@ -86,6 +91,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Lieu touché caché derrière les choix d'itinéraire : sur téléphone, sa carte s'affiche maintenant par-dessus.
 - Couleurs de trafic qui ne s'effaçaient pas : un bouchon ou un incident peint sur le tracé pouvait rester rouge une fois résorbé. Chaque actualisation repart du trafic du service d'itinéraire.
 - Virage manqué : détection plus sûre en ville face aux dérives du GPS (seulement au-delà de la précision du GPS et avec un angle plus franc), pour ne jamais recalculer à l'approche d'un virage.
 - Virage manqué repéré plus tôt : en passant tout droit devant un virage, la flèche ne continue plus dans le virage non pris. Elle vous suit aussitôt et un nouvel itinéraire est demandé en 2 secondes environ (au lieu d'attendre d'être à 40 m ou plus du tracé).

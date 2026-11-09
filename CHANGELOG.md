@@ -43,6 +43,7 @@ Add user-facing Horizon Nav changes under **Unreleased** before publishing each 
 - No TomTom key is built into the app any more (anyone could pull it out of a shared APK); paste your own in Settings if you use TomTom search.
 
 ### Fixed
+- Tapped spot hidden behind route options: on a phone, the card for a spot you tap while choosing a route (Go / Add as a stop) now shows on top of the route options instead of behind them.
 - Traffic colours that never faded: a jam or incident painted on the route line could stay red after it cleared, as each refresh was built on the already-painted line. Each refresh now starts from the route service's own traffic and adds TomTom and incidents on top.
 - Missed-turn detection: made safer against GPS drift in town. It only triggers beyond the GPS's own error and at a sharper angle, so approaching a turn never sets off a reroute.
 - Postcode district search: a district on its own ("M25", "B1") is also how roads are named, so it now shows third, and a search for the M25 still shows the motorway first.
@@ -103,6 +104,11 @@ Add user-facing Horizon Nav changes under **Unreleased** before publishing each 
 - Where lanes are painted on the road, the route line runs through the lit-up lanes right up to the junction and carries smoothly into the turn arrow, then eases back onto the road over the next 25 m, with no gap or step where the lane guidance ends.
 
 ### New
+- See all locations: search for a shop or chain (Lidl, Sainsbury's, Costa…) and, when there are several nearby, "See all N locations" shows them all. A panel lists them by Quickest (drive time with today's traffic), Nearest or On my route, and the map zooms out to show each as its logo with the drive time. Tap a pin or a row, then Go or Add as a stop. "Search this area" looks again wherever you move the map. On Android Auto it's a list.
+- Logos in search results: shops and brands show their own logo (taken from their website, or a built-in list of common chains). Logos are kept on the unit after the first time, and the usual pin shows without a signal or in offline mode.
+- Your own shortcuts: choose which round "find nearby" buttons show under the search bar (up to 5, in your order) from Fuel, Charging, Food, Coffee, Parking, Toilets and Services, in Settings › Places & trips. Reset brings back the usual ones.
+- Offline mode: a master switch in Settings › Offline maps. Nothing goes online and the app stops looking for a signal, so there is no more flickering and retrying with a weak or missing connection. Everything comes from the downloaded pack. Downloads you start yourself still work.
+- Add a stop while planning: hold on the map on the route options screen, then tap "Add as a stop" on the card. It goes on the route being planned, and you can add as many as you like.
 - Italian, Portuguese and Polish: the whole app (screens, Android Auto, spoken directions, alerts and spoken commands) is now also in Italiano, Português and Polski. Portuguese uses the Brazilian voice on a Brazilian phone.
 - Request a language: Settings › Sound & voice › "Missing your language?" opens a GitHub issue filled in with the language wanted, whether the person can help check the wording, and their phone's language.
 - Languages (part 3c, the last part): the whole app is now in Dutch, German, French and Spanish. This adds the first-time setup, the Offline maps page, the donate and What's new screens, and the settings search (search in your language or in English). Spoken commands work in each language, such as "naar huis", "nächste Tankstelle", "signaler accident" and "ir a Madrid", with voice search listening in that language. Lorry height and weight warnings are spoken in it too.

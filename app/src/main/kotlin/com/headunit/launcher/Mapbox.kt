@@ -44,7 +44,7 @@ object MapboxRest {
      * "TokenExpired" or "TokenRevoked", with the account it belongs to. Null when Mapbox couldn't be asked (no signal).
      */
     fun checkToken(t: String): Pair<String, String>? = try {
-        val c = URL("$API/tokens/v2?access_token=" + enc(t)).openConnection() as HttpURLConnection
+        val c = URL("$API/tokens/v2?access_token=" + enc(t)).also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
         c.connectTimeout = 8000
         c.readTimeout = 10000
         c.setRequestProperty("User-Agent", "HorizonNav/1.0")
@@ -71,7 +71,7 @@ object MapboxRest {
     })
 
     private fun get(url: String, connectMs: Int = 12000, readMs: Int = 20000): String {
-        val c = URL(url).openConnection() as HttpURLConnection
+        val c = URL(url).also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
         c.connectTimeout = connectMs
         c.readTimeout = readMs
         c.setRequestProperty("User-Agent", "HorizonNav/1.0")
@@ -622,7 +622,39 @@ object MapboxRest {
         val name = pr.optString("name").ifBlank { pr.optString("full_address").substringBefore(',') }.ifBlank { q }
         val sub = pr.optString("full_address").takeIf { it.isNotBlank() && it != name && pr.optString("feature_type") == "poi" }
             ?: pr.optString("place_formatted")
-        return Place(name, sub, LL(lat, lon))
+        val web = pr.optJSONObject("metadata")?.optString("website").orEmpty()
+        return Place(name, sub, LL(lat, lon), web)
+    }
+
+    /** Branches of a shop or chain named [q] near [near] (Mapbox gives up to 10), for "See all locations". */
+    fun chain(token: String, q: String, near: LL): List<Place> {
+        val t = token.trim()
+        val arr = JSONObject(get("$API/search/searchbox/v1/forward?q=${enc(q)}&types=poi&limit=10&proximity=${near.lon},${near.lat}&language=${L.lang}&access_token=${enc(t)}", 8000, 10000))
+            .optJSONArray("features") ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { feature(arr.optJSONObject(it) ?: return@mapNotNull null, q) }
+    }
+
+    /**
+     * Drive time (seconds) and distance (metres) from [from] to each of [to], with today's traffic, from Mapbox's matrix service
+     * (one request per 9 places). Null for a place it couldn't time.
+     */
+    fun matrix(token: String, from: LL, to: List<LL>): List<Pair<Double, Double>?> {
+        val t = token.trim()
+        val out = ArrayList<Pair<Double, Double>?>()
+        for (part in to.chunked(9)) {
+            val coords = (listOf(from) + part).joinToString(";") { "${it.lon},${it.lat}" }
+            val res = try {
+                JSONObject(get("$API/directions-matrix/v1/mapbox/driving-traffic/$coords?sources=0&annotations=duration,distance&access_token=${enc(t)}", 8000, 12000))
+            } catch (e: Exception) { null }
+            val dur = res?.optJSONArray("durations")?.optJSONArray(0)
+            val dis = res?.optJSONArray("distances")?.optJSONArray(0)
+            for (i in part.indices) {
+                val d = dur?.optDouble(i + 1, Double.NaN) ?: Double.NaN
+                val m = dis?.optDouble(i + 1, Double.NaN) ?: Double.NaN
+                out += if (d.isNaN()) null else d to (if (m.isNaN()) Geo.dist(from, part[i]) else m)
+            }
+        }
+        return out
     }
 
     /** Why the last Mapbox search failed (both of its searches), or null: shown instead of "no matches". */

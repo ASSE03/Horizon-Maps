@@ -433,7 +433,7 @@ object MgSpeedLimit {
      */
     private fun post(url: String, q: String, hops: Int = 0): String {
         val full = if (hops == 0) url + "?data=" + URLEncoder.encode(q, "UTF-8") else url
-        val c = URL(full).openConnection() as HttpURLConnection
+        val c = URL(full).also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
         val body = try {
             c.connectTimeout = 10_000; c.readTimeout = 30_000
             c.instanceFollowRedirects = false

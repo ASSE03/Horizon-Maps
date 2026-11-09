@@ -570,6 +570,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     init {
         // the language for directions (Settings > Sound & voice > Language): before the voice starts, so it starts in it
         try { L.set(prefs.s(PreferenceKeys.APP_LANG, "auto")) } catch (e: Exception) { }
+        // offline mode (Settings > Offline maps): set before anything goes online
+        Net.offline = prefs.b(PreferenceKeys.OFFLINE_MODE, false)
+        mapboxOffline(Net.offline)
         // 12 or 24-hour clock times: the device's own setting unless Settings picks one
         try { Clock.init(ctx, prefs) } catch (e: Exception) { }
         // an older pack on the unit goes into its own area folder (it's the area that was chosen then)
@@ -668,8 +671,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         map.onAlprTap = { who -> toast("Caméra de lecture de plaques" + (if (who.isNotBlank()) " · $who" else ""), 3500) }
         map.onPoiTap = { name, p -> tappedPoi = name to p; tappedAt = android.os.SystemClock.uptimeMillis(); toast(if (route != null && !previewing) "$name : appui long pour l'ajouter comme étape" else "$name : appui long pour y aller", 3000) }
-        map.onUserGesture = { if (following) { following = false }; scheduleRecentre(12_000) }
+        // (with "all locations" open the map stays where it's moved, and "Search this area" shows)
+        map.onUserGesture = { if (chain != null) chainMoved = true else { if (following) { following = false }; scheduleRecentre(12_000) } }
         map.onAltTap = { i -> switchToAlt(i) }
+        map.onChainTap = { i -> chainTapped(i) }
         // the parked-car spot is no longer used (the app lives in the car): drop any old one
         if (prefs.s(PreferenceKeys.PLACE_PARKED, "").isNotBlank()) places.clearParked()
         map.onError = { msg -> onMapError(msg) }
@@ -889,6 +894,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             toast("La carte n'a pas pu établir de connexion sécurisée. Vérifiez la date et l'heure de l'autoradio.", 9000)
             return
         }
+        // offline mode: the map isn't meant to reach the network, so there's nothing to report or retry
+        if (Net.offline) return
         val network = m.contains("resolve") || m.contains("host") || m.contains("timeout") || m.contains("timed out") || m.contains("connect") || m.contains("network") || m.contains("unreachable")
         if (!network) { toast("Carte : $msg", 5000); return }
         styleRetry++
@@ -917,6 +924,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun useOfflineMap(): Boolean {
         if (!OfflineMap.installed(ctx) || !OfflineMap.hasFonts(ctx)) return false
+        if (Net.offline) return true
         return when (prefs.s(PreferenceKeys.OFF_MAP, "auto")) {
             "always" -> true
             "never" -> false
@@ -1484,6 +1492,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     // ---- search + routing ----
     /** True when the device has a network that claims internet access (it can still be too weak to use). */
     fun online(): Boolean {
+        // offline mode: as if there were never a signal (nothing tries the network, so nothing waits on it)
+        if (Net.offline) return false
         return try {
             val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
             val n = cm.activeNetwork
@@ -1841,6 +1851,131 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun cancelWaiting() { waitingFor = null; waitJob?.cancel() }
 
+    // ---- "See all locations": every branch of a shop or chain near you, on the map and in a list ----
+    /** One branch: [secs]/[road] from the matrix service (or -1 when it couldn't be timed), [detour] extra seconds on the route. */
+    class ChainSpot(val place: Place, val dist: Double, val secs: Double, val road: Double, val detour: Double)
+    /** The list on show: [name] as searched, [domain] for its logo, [radius] metres looked within. */
+    class ChainView(val name: String, val domain: String?, val spots: List<ChainSpot>, val radius: Int, val centre: LL)
+    var chain by mutableStateOf<ChainView?>(null)
+    var chainSel by mutableStateOf<ChainSpot?>(null)
+    /** "quick", "near" or "route" (On my route, only while driving somewhere). */
+    var chainSort by mutableStateOf("quick")
+    var chainBusy by mutableStateOf(false)
+    /** The map was moved away from where the branches were looked for: "Search this area" shows. */
+    var chainMoved by mutableStateOf(false)
+    private var chainJob: kotlinx.coroutines.Job? = null
+    /** What was searched, for "Search this area". */
+    var chainQuery = ""
+    private val CHAIN_RADIUS = 16_000
+
+    /** The name a result has in common with what was searched: "Lidl" for "lidl", "Sainsbury's" for "sainsburys". */
+    private fun chainHit(p: Place, q: String): Boolean {
+        val n = Logos.norm(p.name); val k = Logos.norm(q)
+        if (k.length < 2) return false
+        return n == k || n.startsWith("$k ") || n.replace(" ", "").startsWith(k.replace(" ", ""))
+    }
+
+    /** How many of the current search results are branches of the same thing near you (2 or more shows "See all locations"). */
+    fun chainCount(q: String): Int {
+        val near = fix?.pos ?: map.center() ?: return 0
+        return results.count { chainHit(it, q) && Geo.dist(near, it.pos) <= CHAIN_RADIUS }
+    }
+
+    /** "See all locations" for [q]: looks every branch up near you (or round the map's middle for "Search this area"). */
+    fun openChain(q: String, aroundMap: Boolean = false) {
+        val here = fix?.pos
+        val centre = (if (aroundMap) map.center() else here ?: map.center()) ?: return
+        chainQuery = q
+        chainJob?.cancel()
+        chainBusy = true
+        chainJob = scope.launch {
+            val found = withContext(Dispatchers.IO) {
+                val all = ArrayList<Place>()
+                if (hasKey && online()) try { all += TomTomRest.chain(apiKey, q, centre, CHAIN_RADIUS) } catch (e: Exception) { }
+                if (all.size < 4 && mbToken.isNotBlank() && online()) try { all += MapboxRest.chain(mbToken, q, centre) } catch (e: Exception) { }
+                // what the search already found counts too (and is all there is without a signal)
+                all += results
+                val out = ArrayList<Place>()
+                for (p in all) if (chainHit(p, q) && Geo.dist(centre, p.pos) <= CHAIN_RADIUS && out.none { Geo.dist(it.pos, p.pos) < 80 }) out += p
+                out.sortedBy { Geo.dist(centre, it.pos) }.take(25)
+            }
+            if (found.isEmpty()) { chainBusy = false; toast("Aucune autre enseigne trouvée à proximité", 3000); return@launch }
+            val from = here ?: centre
+            // drive times with today's traffic, all in one go (straight-line distances without a signal)
+            val times = withContext(Dispatchers.IO) {
+                if (mbToken.isNotBlank() && online()) try { MapboxRest.matrix(mbToken, from, found.map { it.pos }) } catch (e: Exception) { null } else null
+            }
+            val r = route
+            val spots = found.mapIndexed { i, p ->
+                val t = times?.getOrNull(i)
+                ChainSpot(p, Geo.dist(from, p.pos), t?.first ?: -1.0, t?.second ?: -1.0, if (r != null && !previewing) chainDetour(r, p.pos) else -1.0)
+            }
+            val domain = found.asSequence().mapNotNull { Logos.domainFor(it) }.firstOrNull()
+            // logos (once each) off the main thread, then the map is drawn with them
+            withContext(Dispatchers.IO) { found.mapNotNull { Logos.domainFor(it) }.distinct().take(6).forEach { Logos.load(ctx, it) } }
+            val view = ChainView(found.first().name.let { n -> if (Logos.norm(n) == Logos.norm(q) || n.length > q.length + 14) q.replaceFirstChar { it.uppercase() } else n }, domain, spots, CHAIN_RADIUS, centre)
+            chainSort = if (spots.any { it.secs >= 0 }) "quick" else "near"
+            chain = view
+            chainSel = chainSorted().firstOrNull()
+            chainMoved = false
+            chainBusy = false
+            following = false
+            drawChain()
+        }
+    }
+
+    /** Roughly how much time a branch adds to the route being driven: there and back from the nearest point of the route. */
+    private fun chainDetour(r: Route, p: LL): Double {
+        var best = Double.MAX_VALUE
+        val step = maxOf(1, r.pts.size / 400)
+        var i = 0
+        while (i < r.pts.size) { best = min(best, Geo.dist(r.pts[i], p)); i += step }
+        return best * 2.6 / 13.0
+    }
+
+    /** The branches in the order picked: Quickest, Nearest or On my route. */
+    fun chainSorted(): List<ChainSpot> {
+        val c = chain ?: return emptyList()
+        return when (chainSort) {
+            "route" -> c.spots.sortedBy { if (it.detour >= 0) it.detour else Double.MAX_VALUE }
+            "quick" -> c.spots.sortedBy { if (it.secs >= 0) it.secs else it.dist / 9.0 }
+            else -> c.spots.sortedBy { it.dist }
+        }
+    }
+
+    fun sortChainBy(s: String) { chainSort = s; chainSel = chainSorted().firstOrNull(); drawChain(fit = false) }
+
+    fun selectChain(s: ChainSpot) { chainSel = s; drawChain(fit = false) }
+
+    /** A pin on the map tapped: that branch. */
+    fun chainTapped(i: Int) { chain?.spots?.getOrNull(i)?.let { selectChain(it) } }
+
+    fun chainGo(s: ChainSpot) { closeChain(); startRoute(s.place) }
+
+    fun chainAddStop(s: ChainSpot) { closeChain(); if (route != null && dest != null) addStop(s.place) else startRoute(s.place) }
+
+    /** Closes "all locations"; [back] puts the map back to following you (the ✕), as it was before. */
+    fun closeChain(back: Boolean = false) {
+        chainJob?.cancel()
+        chain = null; chainSel = null; chainBusy = false; chainMoved = false
+        try { map.clearChain() } catch (e: Exception) { }
+        if (back) try { recenter() } catch (e: Exception) { }
+    }
+
+    /** Puts the branches on the map (the selected one bigger, with a dotted line to it), and fits them all in. */
+    fun drawChain(fit: Boolean = true) {
+        val c = chain ?: return
+        val sorted = chainSorted()
+        val nearest = c.spots.minByOrNull { if (it.secs >= 0) it.secs else it.dist / 9.0 }
+        val pins = c.spots.map { s ->
+            val label = if (s.secs >= 0) "${Math.max(1, Math.round(s.secs / 60.0).toInt())} min" else Geo.fmtDist(s.dist, imperial)
+            MapBinding.ChainPin(s.place.pos, label + if (s === nearest && s === chainSel) " · le plus proche" else "", Logos.cached(Logos.domainFor(s.place)), s === chainSel)
+        }
+        try { map.showChain(pins, fix?.pos) } catch (e: Exception) { }
+        if (fit) try { map.fitChain(c.spots.map { it.place.pos } + listOfNotNull(fix?.pos), mirrored) } catch (e: Exception) { }
+        if (sorted.isEmpty()) return
+    }
+
     fun pickPlace(p: Place) {
         val slot = pendingSave
         if (slot != null) {
@@ -2193,7 +2328,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun scheduleRecentre(ms: Long) {
         if (route == null || previewing) return
         val t = ++recentreToken
-        scope.launch { delay(ms); if (t == recentreToken && !following && route != null && !previewing) recenter() }
+        scope.launch { delay(ms); if (t == recentreToken && !following && route != null && !previewing && chain == null) recenter() }
     }
 
     /** Shows the rest of the route on screen, then goes back to following the car after a few seconds. */
@@ -4134,7 +4269,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     fun hereGo(asStop: Boolean) {
         val h = here ?: return
         here = null
-        if (asStop && route != null && !previewing && dest != null) addStop(h.place) else startRoute(h.place)
+        // (while choosing a route too: a stop held on the map goes on the route being planned)
+        if (asStop && route != null && dest != null) addStop(h.place) else startRoute(h.place)
     }
 
     /** Road closures the route is being kept off this trip (id to the closed road's points). */
@@ -4832,7 +4968,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             while (true) {
                 val url = withContext(Dispatchers.IO) {
                     try {
-                        val c = java.net.URL("https://api.rainviewer.com/public/weather-maps.json").openConnection() as java.net.HttpURLConnection
+                        val c = java.net.URL("https://api.rainviewer.com/public/weather-maps.json").also { com.headunit.launcher.Net.check() }.openConnection() as java.net.HttpURLConnection
                         c.connectTimeout = 10_000; c.readTimeout = 15_000
                         val body = c.inputStream.bufferedReader().use { it.readText() }
                         val o = org.json.JSONObject(body)
@@ -5718,6 +5854,23 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             via = stops
             startRoute(to, keepVia = true, startNow = true)
         }
+    }
+
+    /** Mapbox's own map engine kept off the network too (it then draws only what it has stored). */
+    private fun mapboxOffline(on: Boolean) {
+        try { com.mapbox.common.OfflineSwitch.getInstance().setMapboxStackConnected(!on) } catch (e: Throwable) { }
+    }
+
+    /**
+     * Offline mode switched on or off: nothing goes online while it's on, and the map is drawn from the downloaded pack (or what
+     * Mapbox has stored) without trying for a signal. Switching it off picks the online map and live data straight back up.
+     */
+    fun setOfflineMode(on: Boolean) {
+        if (Net.offline == on) return
+        Net.offline = on
+        mapboxOffline(on)
+        styleRetry = 0
+        try { applyStyle(lastDark) } catch (e: Exception) { }
     }
 
     /** The language setting changed: the directions and the voice switch to it (the voice says so if it has no voice for it). */

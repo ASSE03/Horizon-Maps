@@ -68,7 +68,7 @@ object MapErrors {
                 "style satellite" to "https://api.mapbox.com/styles/v1/mapbox/standard-satellite")
             for ((name, u) in tests) {
                 try {
-                    val c = java.net.URL("$u?access_token=" + java.net.URLEncoder.encode(token, "UTF-8")).openConnection() as java.net.HttpURLConnection
+                    val c = java.net.URL("$u?access_token=" + java.net.URLEncoder.encode(token, "UTF-8")).also { com.headunit.launcher.Net.check() }.openConnection() as java.net.HttpURLConnection
                     c.connectTimeout = 8000; c.readTimeout = 10000
                     c.setRequestProperty("User-Agent", "HorizonNavFR")
                     val code = c.responseCode
