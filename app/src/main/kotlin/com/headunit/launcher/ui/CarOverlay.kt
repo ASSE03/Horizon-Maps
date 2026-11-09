@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.headunit.launcher.Geo
+import com.headunit.launcher.L
 import com.headunit.launcher.NavEngine
 import com.headunit.launcher.PreferenceKeys
 
@@ -231,7 +232,7 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
                     ImmTurnCard(engine, t, compact = compact, car = true, slim = slimHold[0],
                         footer = {
                             if (incShown || camShown) Column(Modifier.fillMaxWidth().background(GmGreenDeep).padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                if (incShown && inc != null) CarHazardLine("incident", inc.label, Geo.fmtDist(inc.dist, engine.imperial))
+                                if (incShown && inc != null) CarHazardLine("incident", L.t(inc.label), Geo.fmtDist(inc.dist, engine.imperial))
                                 if (camShown && cam != null) CarHazardLine("camera", "Radar", Geo.fmtDist(cam.toDouble(), engine.imperial))
                             }
                         })
@@ -294,7 +295,7 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
             val hazards: @Composable () -> Unit = {
                 // (only when there's no turn card to carry them)
                 if (!showTurn && (incShown || camShown)) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (incShown && inc != null) HazardBadge("incident", inc.label, Geo.fmtDist(inc.dist, engine.imperial))
+                    if (incShown && inc != null) HazardBadge("incident", L.t(inc.label), Geo.fmtDist(inc.dist, engine.imperial))
                     if (camShown && cam != null) HazardBadge("camera", "Radar", Geo.fmtDist(cam.toDouble(), engine.imperial))
                 }
             }

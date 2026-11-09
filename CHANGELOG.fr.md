@@ -52,6 +52,9 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Vue d'ensemble de l'itinéraire sur Android Auto : le trajet occupe tout l'écran au lieu du tiers du haut, donc plus zoomé et les noms de lieux plus lisibles.
+- Aperçu en direct du thème personnalisé : chaque changement s'affiche aussitôt dans l'aperçu, même pendant qu'un curseur bouge ; rien n'est gardé avant Enregistrer, et en quittant sans enregistrer la carte revient comme avant.
+- Commandes vocales : l'appli (l'original est maintenant traduit en plusieurs langues) comprend aussi les commandes en français par sa propre traduction, en plus de celles déjà reconnues.
 - Flèche dans les virages en conduite libre : le gyroscope du téléphone indique tout de suite que la voiture tourne, et de combien, sans attendre le cap GPS (qui a une seconde de retard) : la flèche prend le virage avec la voiture au lieu de continuer tout droit. Dans un virage serré, l'avance de la flèche est réduite de moitié.
 - Itinéraires plus simples : à la planification, un itinéraire avec nettement moins de virages est préféré à un autre plus rapide d'une minute et demie au plus, pour rester sur les grands axes. Le plus rapide reste proposé.
 - Temps restant dans les bouchons : le trafic est actualisé toutes les 2 minutes au lieu de 3 quand vous roulez au pas.
@@ -83,6 +86,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Couleurs de trafic qui ne s'effaçaient pas : un bouchon ou un incident peint sur le tracé pouvait rester rouge une fois résorbé. Chaque actualisation repart du trafic du service d'itinéraire.
+- Virage manqué : détection plus sûre en ville face aux dérives du GPS (seulement au-delà de la précision du GPS et avec un angle plus franc), pour ne jamais recalculer à l'approche d'un virage.
 - Virage manqué repéré plus tôt : en passant tout droit devant un virage, la flèche ne continue plus dans le virage non pris. Elle vous suit aussitôt et un nouvel itinéraire est demandé en 2 secondes environ (au lieu d'attendre d'être à 40 m ou plus du tracé).
 - Voies à deux bretelles rapprochées : les voies de la seconde ne s'allument plus à la première.
 - Voies trop généreuses : quand Mapbox indique les voies à prendre, seules celles-ci sont allumées.

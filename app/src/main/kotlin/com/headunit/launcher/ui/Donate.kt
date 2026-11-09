@@ -1,5 +1,7 @@
 package com.headunit.launcher.ui
 
+import com.headunit.launcher.L
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri

@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.sp
 import com.headunit.launcher.BuildConfig
 import com.headunit.launcher.FuelFinder
 import com.headunit.launcher.Geo
+import com.headunit.launcher.L
 import com.headunit.launcher.NavEngine
 import com.headunit.launcher.OfflinePlaces
 import com.headunit.launcher.Place
@@ -134,9 +135,10 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
     val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
     val matches = remember(query) {
         if (words.isEmpty()) emptyList() else settingsIndex.filter { r ->
-            val hay = (r.title + " " + r.sub + " " + r.group + " " + sections[r.section].title).lowercase()
+            // (English and the chosen language both match, so "Sprache" and "language" find the same setting)
+            val hay = (r.title + " " + L.t(r.title) + " " + r.sub + " " + r.group + " " + L.t(r.group) + " " + sections[r.section].title).lowercase()
             words.all { hay.contains(it) }
-        }.sortedBy { if (it.title.lowercase().startsWith(words[0])) 0 else if (it.title.lowercase().contains(words[0])) 1 else 2 }.take(40)
+        }.sortedBy { val t = it.title.lowercase() + " " + L.t(it.title).lowercase(); if (t.startsWith(words[0]) || L.t(it.title).lowercase().startsWith(words[0])) 0 else if (t.contains(words[0])) 1 else 2 }.take(40)
     }
     Row(Modifier.fillMaxSize().background(c.bg).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         // the list of sections
@@ -177,13 +179,13 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
                             cat = r.section; highlight = r.title; query = ""; focus.clearFocus(); showList = false
                         }.padding(horizontal = 12.dp, vertical = 9.dp),
                     ) {
-                        Text(r.title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(sections[r.section].title + (if (r.group.isNotBlank()) " · " + r.group else ""), color = c.sub, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(L.t(r.title), color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(sections[r.section].title + (if (r.group.isNotBlank()) " · " + L.t(r.group) else ""), color = c.sub, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             } else sections.forEachIndexed { i, s ->
                 // the small group headings in the list: Map, Driving, You, Device
-                if (s.heading != null) Text(s.heading, color = c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp,
+                if (s.heading != null) Text(L.t(s.heading), color = c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp,
                     modifier = Modifier.padding(start = 14.dp, top = if (i == 0) 2.dp else 12.dp, bottom = 2.dp))
                 val on = i == cat
                 val rowBg by androidx.compose.animation.animateColorAsState(if (on) c.accent.copy(alpha = 0.16f) else Color.Transparent, androidx.compose.animation.core.tween(200), label = "secBg")
@@ -290,7 +292,7 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
             SPercent("Intensité", "La part de cette couleur que prend la carte", prefs, PreferenceKeys.CAR_TINT_STR, 10, 100, 40)
         }
     }
-    if (prefs.mapSource() == "mapbox" && prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox") == "custom") CustomThemeGroup(prefs)
+    if (prefs.mapSource() == "mapbox" && prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox") == "custom") CustomThemeGroup(prefs, engine)
     if (prefs.mapSource() == "mapbox") SavedThemesGroup(prefs)
     SGroup("La carte") {
         SChoice("Source de la carte", listOf("mapbox" to "Mapbox", "tomtom" to "TomTom", "osm" to "OpenStreetMap"), prefs.mapSource(),
@@ -1320,6 +1322,55 @@ private fun FeedbackDialog(engine: NavEngine, onClose: () -> Unit) {
                     val url = "https://github.com/${BuildConfig.UPDATE_REPO}/issues/new?title=" + android.net.Uri.encode(title) + "&body=" + android.net.Uri.encode(body)
                     try { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
                     catch (e: Exception) { engine.toast("Pas de navigateur sur cet appareil : utilisez Copier", 3500) }
+                    onClose()
+                }
+            }
+        }
+    }
+}
+
+/**
+ * "Request a language": the language wanted (and anything else) goes to GitHub as an issue, filled in, from the browser. The
+ * title and the details stay in English so they can be read there; only what the person typed is theirs.
+ */
+@Composable
+private fun LanguageRequestDialog(engine: NavEngine, onClose: () -> Unit) {
+    val c = LocalVw.current
+    val ctx = LocalContext.current
+    var lang by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    var helper by remember { mutableStateOf(false) }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.panel).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Demander une langue", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("Dans quelle langue voulez-vous Horizon Nav ? Si vous la parlez, dites-le : vous pourriez aider à vérifier les textes.", color = c.sub, fontSize = 14.sp)
+            SField(lang, { lang = it.take(40) }, placeholder = "ex. suédois", width = 516.dp, fill = true)
+            SField(note, { note = it.take(400) }, placeholder = "Autre chose (facultatif)", width = 516.dp, fill = true)
+            Row(Modifier.fillMaxWidth().pressClick { helper = !helper }, verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(helper, { helper = it })
+                Text("Je peux aider à vérifier les textes", color = c.text, fontSize = 15.sp)
+            }
+            Text("Ouvre GitHub avec la demande remplie : touchez Submit pour l'envoyer.", color = c.sub, fontSize = 12.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                SButton("Fermer") { onClose() }
+                SButton("Envoyer sur GitHub", primary = true) {
+                    val want = lang.trim()
+                    if (want.isEmpty()) { engine.toast("Saisissez d'abord la langue", 2500); return@SButton }
+                    val phone = java.util.Locale.getDefault()
+                    val body = buildString {
+                        append("**Language requested:** ").append(want).append("\n\n")
+                        append("**Can help check the wording:** ").append(if (helper) "yes" else "no").append("\n\n")
+                        if (note.isNotBlank()) append("**Notes:** ").append(note.trim()).append("\n\n")
+                        append("---\n")
+                        append("Phone language: ").append(phone.getDisplayName(java.util.Locale.ENGLISH)).append(" (").append(phone.toLanguageTag()).append(")\n")
+                        append("App language: ").append(L.lang).append("\n")
+                        append("Horizon Nav ").append(BuildConfig.VERSION_NAME).append("\n")
+                        append("_Sent from Settings › Sound & voice › Request a language_")
+                    }
+                    val title = "Language request: " + want
+                    val url = "https://github.com/${BuildConfig.UPDATE_REPO}/issues/new?title=" + android.net.Uri.encode(title) + "&body=" + android.net.Uri.encode(body)
+                    try { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    catch (e: Exception) { engine.toast("Aucun navigateur sur cet appareil : utilisez Copier", 3500) }
                     onClose()
                 }
             }

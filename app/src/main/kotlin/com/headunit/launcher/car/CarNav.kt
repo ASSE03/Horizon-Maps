@@ -1,6 +1,7 @@
 package com.headunit.launcher.car
 
 import com.headunit.launcher.PreferenceKeys
+import com.headunit.launcher.L
 import android.app.Presentation
 import android.content.Intent
 import android.content.res.Configuration
@@ -1086,8 +1087,8 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
     private val prefs = Prefs(carContext.applicationContext)
 
     private fun toggleRow(title: String, key: String, def: Boolean, sub: String?, after: (Boolean) -> Unit = {}): Row {
-        val r = Row.Builder().setTitle(title)
-        if (sub != null) r.addText(sub)
+        val r = Row.Builder().setTitle(L.t(title))
+        if (sub != null) r.addText(L.t(sub))
         r.setToggle(Toggle.Builder { on -> prefs.put(key, on); after(on); invalidate() }.setChecked(prefs.b(key, def)).build())
         return r.build()
     }

@@ -1,5 +1,7 @@
 package com.headunit.launcher.ui
 
+import com.headunit.launcher.L
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.animation.animateContentSize
@@ -68,7 +70,8 @@ internal val LocalSettingHighlight = androidx.compose.runtime.compositionLocalOf
 @Composable
 internal fun SItem(title: String, sub: String? = null, onClick: (() -> Unit)? = null, trailing: @Composable () -> Unit = {}) {
     val c = LocalVw.current
-    val hl = LocalSettingHighlight.current == title
+    // (the settings search names a setting in English: it matches here in whichever language the screen is in)
+    val hl = LocalSettingHighlight.current?.let { it == title || L.t(it) == title } == true
     var hlMod: Modifier = Modifier
     if (hl) {
         val req = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }

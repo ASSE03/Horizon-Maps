@@ -161,7 +161,7 @@ object Geo {
     }
 
     /** "Stay in the left two lanes" and similar, from the lanes that lead where the route goes. Null when every lane works. */
-    fun laneAdvice(sec: LaneSec, maneuver: String): String? {
+    fun laneAdvice(sec: LaneSec, maneuver: String, move: Boolean = false): String? {
         val n = sec.lanes.size
         if (n < 2) return null
         val anyFollow = sec.lanes.any { it.follow != null }
@@ -169,11 +169,13 @@ object Geo {
         if (act.isEmpty() || act.size == n) return null
         val cnt = act.size
         val lanes = if (cnt == 1) "la voie" else "les ${if (cnt == 2) "deux" else if (cnt == 3) "trois" else cnt.toString()} voies"
+        // fork FR : « Utilisez… », ou pour l'annonce anticipée sur route rapide « Placez-vous sur… »
+        val v = if (move) "placez-vous sur" else "Utilisez"
         return when {
-            act.first() == 0 -> "Utilisez $lanes de gauche"
-            act.last() == n - 1 -> "Utilisez $lanes de droite"
-            cnt == 1 -> "Utilisez la voie ${act[0] + 1} en partant de la gauche"
-            else -> "Utilisez $lanes du milieu"
+            act.first() == 0 -> "$v $lanes de gauche"
+            act.last() == n - 1 -> "$v $lanes de droite"
+            cnt == 1 -> "$v la voie ${act[0] + 1} en partant de la gauche"
+            else -> "$v $lanes du milieu"
         }
     }
 
