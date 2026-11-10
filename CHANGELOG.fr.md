@@ -103,6 +103,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Lampadaires : les vrais lampadaires d'OpenStreetMap n'arrivaient jamais, car les serveurs Overpass mettent souvent 20 à 40 s à répondre et l'appli abandonnait au bout de 30 s. Elle attend maintenant jusqu'à 90 s, et essaie le serveur de mail.ru en second (deux autres serveurs ne répondent plus). Sur l'écran Android Auto, la ligne d'état dit maintenant clairement que les lampadaires n'y sont pas affichés.
 - Plantage en touchant un lieu sur la carte : un lieu sans nom dans les données de Mapbox est maintenant ignoré, et rien d'autre dans un appui sur la carte ne peut plus fermer l'appli.
 - Image des voies sous la carte de virage sur Android Auto : sur un écran de voiture bas, elle passait sous la carte de trajet. Elle rétrécit maintenant pour tenir, ou n'est pas affichée si elle ne tient pas (les voies restent dans la carte de virage).
 - Lieu touché caché derrière les choix d'itinéraire : sur téléphone, sa carte s'affiche maintenant par-dessus.

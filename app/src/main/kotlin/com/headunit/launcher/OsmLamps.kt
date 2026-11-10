@@ -78,7 +78,8 @@ object OsmLamps {
         // the lamps, and the roads (not footpaths) that say whether they're lit
         val q = "[out:json][timeout:25];(node[\"highway\"=\"street_lamp\"]($bb);" +
             "way[\"highway\"~\"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|road)(_link)?$\"][\"lit\"~\"^(yes|no)$\"]($bb););out geom qt;"
-        val els = Overpass.query(q, connectMs = 10000, readMs = 30000, tries = 2)
+        // fork FR : les serveurs Overpass mettent souvent 20 à 40 s à répondre : 30 s ne suffisaient pas, aucun vrai lampadaire n'arrivait
+        val els = Overpass.query(q, connectMs = 15000, readMs = 90000, tries = 2)
         val lamps = JSONArray(); val ways = JSONArray()
         for (x in 0 until els.length()) {
             val o = els.optJSONObject(x) ?: continue

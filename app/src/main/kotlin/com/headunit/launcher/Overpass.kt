@@ -25,10 +25,11 @@ fun fmtFuelPrice(price: Double, unit: String): String = when (unit) {
 /** Free OpenStreetMap queries: speed limits, speed cameras and nearby fuel / charging / parking. */
 object Overpass {
     private val endpoints = listOf(
+        // fork FR : mail.ru en second : en novembre 2026, kumi et private.coffee ne répondaient plus du tout
         "https://overpass-api.de/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
         "https://overpass.private.coffee/api/interpreter",
-        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
     )
 
     /** Fork FR : jusqu'à quand chaque serveur est mis de côté après un échec. */
