@@ -1366,7 +1366,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     @Volatile var lampStage = "en attente de la carte"
     /** Real lamps and lit / unlit roads from OpenStreetMap online (never in offline mode: OsmLamps checks). */
     @Volatile var lampsOsmOn = true
-    fun lampInfo(): String = if (!lampsOn) "désactivés" else lampStage
+    /** Fork FR : vrai pour la carte de l'écran de la voiture (Android Auto), qui n'affiche jamais de lampadaires, pour l'alléger. */
+    var carMap = false
+    fun lampInfo(): String = if (carMap) "non affichés sur l'écran Android Auto (pour l'alléger) ; ouvrez la carte du téléphone pour voir les siens" else if (!lampsOn) "désactivés" else lampStage
 
     /** Streets lamps stand along (not motorways or tunnels), from the last look at the roads on screen. */
     @Volatile private var lampRoads: List<List<Point>> = emptyList()
@@ -1390,7 +1392,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
 
     private fun installLamps(st: Style) {
         lampsCentre = null
-        if (!lampsOn) { lampStage = "off"; return }
+        if (!lampsOn) { lampStage = "désactivés"; return }
         Furniture.addModels(st)
         val night = nightStyle
         addS(st, GeoJsonSource.Builder("dl-lamps").featureCollection(empty()).build())

@@ -368,7 +368,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
             // Android Auto: keep street-lamp models and their light pools off to reduce visual clutter
             // and rendering work on the car display. This is scoped to the car map; the phone app's
             // Street lamps preference remains unchanged.
-            m.lampsEnabled(false)
+            m.lampsEnabled(false); m.carMap = true
             // a touch thicker route line on the car screen, where it looked thin against the buildings
             m.routeBoost = 1.2f
             val root = FrameLayout(p.context)
