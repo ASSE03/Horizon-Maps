@@ -1366,7 +1366,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     @Volatile var lampStage = "en attente de la carte"
     /** Real lamps and lit / unlit roads from OpenStreetMap online (never in offline mode: OsmLamps checks). */
     @Volatile var lampsOsmOn = true
-    fun lampInfo(): String = if (!lampsOn) "off" else lampStage
+    fun lampInfo(): String = if (!lampsOn) "désactivés" else lampStage
 
     /** Streets lamps stand along (not motorways or tunnels), from the last look at the roads on screen. */
     @Volatile private var lampRoads: List<List<Point>> = emptyList()
@@ -1438,7 +1438,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                         if (wantLights) src("dl-signals-near")?.featureCollection(FeatureCollection.fromFeatures(lights))
                     }
                 } catch (e: Throwable) {
-                    lampStage = "error: ${e.javaClass.simpleName} ${e.message ?: ""}".take(120)
+                    lampStage = "erreur : ${e.javaClass.simpleName} ${e.message ?: ""}".take(120)
                     main0.post { lampsBusy = false }
                 }
             }
