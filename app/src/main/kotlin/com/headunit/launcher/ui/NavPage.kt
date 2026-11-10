@@ -285,7 +285,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         rs.forEachIndexed { i, r ->
             val sel = i == engine.active
             val shape = RoundedCornerShape(18.dp)
-            val label = if (i == fastest) "Plus rapide" else if (i == shortest) "Plus court" else "Autre"
+            val label = if (i == fastest) "La plus rapide" else if (rs[i].simpler) "La plus simple" else if (i == shortest) "La plus courte" else "Alternative"
             Column(
                 Modifier.weight(1f).inset(18.dp, if (sel) c.accent else null)
                                         .clickable { engine.selectRoute(i) }.padding(horizontal = 14.dp, vertical = 9.dp),

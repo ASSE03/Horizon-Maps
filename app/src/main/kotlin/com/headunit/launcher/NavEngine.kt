@@ -412,7 +412,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun netRoutes(from: LL, to: LL, alternatives: Boolean, departAtMs: Long = 0L, via: List<LL> = emptyList(), headingDeg: Double = -1.0, quick: Boolean = false,
                           askBoth: Boolean = false, simple: Boolean = false): List<Route> {
         val rs = netRoutesRaw(from, to, alternatives, departAtMs, via, headingDeg, quick, askBoth)
-        if (!simple || rs.size < 2 || prefs.b(PreferenceKeys.ROUTE_ECO, false)) return rs
+        // (Settings > Routes > Prefer simpler routes off: the quickest always comes first)
+        if (!simple || rs.size < 2 || prefs.b(PreferenceKeys.ROUTE_ECO, false) || !prefs.b(PreferenceKeys.PREFER_SIMPLE, true)) return rs
         val out = simplerFirst(rs)
         if (out.first() !== rs.first() && out.first().from.isNotBlank()) lastRouteProvider = out.first().from
         return out
@@ -438,6 +439,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val t = turnCount(r)
             r.time <= top.time + slack && t0 - t >= 3 && t <= t0 * 0.8
         }.minWithOrNull(compareBy<Route> { turnCount(it) }.thenBy { it.time }) ?: return rs
+        pick.simpler = true
         return listOf(pick) + rs.filter { it !== pick }
     }
 
@@ -1284,11 +1286,16 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (n == limitCandidate) candidateHits++ else { limitCandidate = n; candidateHits = 1 }
         if (candidateHits >= 2 && (fix?.speed ?: 0.0) > 3.0) {
             announcedLimit = n; candidateHits = 0; limitCandidate = -1
-            chime()
             LimitLog.add(ctx, "annonce : limitation $n @ ${LimitLog.pos(fix?.pos)}")
-            // fork FR : la bannière peut être coupée, l'annonce vocale reste
+            // Réglages › Alertes › Comment : bip et voix, voix seule ou bip seul ; fork FR : la bannière peut être coupée
+            val how = prefs.s(PreferenceKeys.LIMITCHANGE_HOW, "both")
             if (prefs.b("limitbanner", false)) raiseAlert("limit", "Limitation $n")
-            speak("Limitation à $n", true)
+            if (how != "voice") chime()
+            if (how != "chime") {
+                // après le bip, pour que les deux ne se couvrent pas (sur certains autoradios la voix se perdait dessous)
+                if (how == "voice") speak("Limitation à $n", true)
+                else scope.launch { delay(450); speak("Limitation à $n", true) }
+            }
             limitPulse = true
             scope.launch { delay(3500); limitPulse = false }
         }
@@ -2188,8 +2195,40 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (!isCar && demoFrom != null && prefs.b(PreferenceKeys.DEMO, false) && simMode == 0 && route != null) cycleSim()
     }
 
+    // ---- delay labels on the queues ("+8 min") ----
+    private var jamSig = 0
+
+    /**
+     * The queues of a minute or more still ahead on the route (and, while choosing, on the other routes too, dimmed), each labelled
+     * with the time it adds at the point where it starts. From the route's live delays (TomTom's or Mapbox's traffic).
+     */
+    private fun pushJams(progress: Double = curProgress) {
+        val r = route
+        if (r == null || simMode != 0 && !previewing) { if (jamSig != 0) { jamSig = 0; map.showJams(emptyList()) }; return }
+        val out = ArrayList<MapBinding.JamPin>()
+        fun add(rt: Route, from: Double, dim: Boolean) {
+            for (dseg in rt.delays) {
+                if (dseg.secs < 60.0 || dseg.off < from) continue
+                // red when most of the queue is heavy traffic, amber when it's slow
+                val i0 = idxAt(rt, dseg.off); val i1 = idxAt(rt, dseg.end)
+                var heavy = 0; var all = 0
+                for (i in i0 until minOf(i1 + 1, rt.sev.size)) { all++; if (rt.sev[i] >= 2) heavy++ }
+                val (p, _) = pointAt(rt, dseg.off)
+                out += MapBinding.JamPin(p, Math.round(dseg.secs / 60.0).toInt().coerceAtLeast(1), all > 0 && heavy * 2 >= all, dim)
+            }
+        }
+        add(r, if (previewing) 0.0 else progress, false)
+        if (previewing) routes.forEachIndexed { i, rt -> if (i != active) add(rt, 0.0, true) }
+        var sig = out.size + 1
+        for (p in out) sig = sig * 31 + (p.pos.lat * 1e4).toInt() * 7 + (p.pos.lon * 1e4).toInt() + p.mins * 3 + (if (p.heavy) 1 else 0) + (if (p.dim) 2 else 0)
+        if (sig == jamSig) return
+        jamSig = sig
+        map.showJams(out)
+    }
+
     private fun drawRoutes() {
         val r = route ?: return
+        try { pushJams() } catch (e: Exception) { }
         map.setRoute(r.pts, routes.filterIndexed { i, _ -> i != active }.map { it.pts }, r.sev)
         map.setStopFlags(via.map { it.pos })
         map.setTunnels(r.tunnels.map { (a, b) -> slice(r, a, b) })
@@ -2304,6 +2343,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         rawServices = emptyList(); servicesFor = null; rawHz = emptyList(); rawAvg = emptyList(); hzWinRoute = null; hzWinEnd = -1.0
         placed = null; placedSig = 0; avgAlerted.clear(); hzAlerted.clear(); zoneAlerted.clear(); stopsEditor = false
         map.setVias(emptyList()); chargeVias = emptyList()
+        jamSig = 0; map.showJams(emptyList())
         map.setRoute(emptyList(), emptyList()); map.setDest(null); map.setTurnPulse(false); laneKey = null; map.setLanes(emptyList()); map.setLaneSign(null, emptyList()); laneSignFor = -1.0; map.setRouteShift(emptyList()); laneLatAt = null; laneShiftEnd = 0.0
         map.highlightDestination(null)
         stopSim()
@@ -4456,6 +4496,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     private fun checkIncidents(r: Route, progress: Double) {
         try { if (camerasOn()) updateRouteCams(r, progress); pushHazards(progress) } catch (e: Exception) { }
+        try { pushJams(progress) } catch (e: Exception) { }
         // TomTom's incident data when there's a key; otherwise the incidents that came with a Mapbox route
         val fromRoute = (!hasKey || ttDown()) && r.incidents.isNotEmpty()
         if ((!hasKey && !fromRoute) || simMode != 0 || !prefs.b(PreferenceKeys.INCIDENTS, true)) { incidentAhead = null; return }

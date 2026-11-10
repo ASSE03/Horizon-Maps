@@ -486,6 +486,7 @@ private fun RoutesSection(prefs: Prefs, engine: NavEngine) {
     }
     SGroup("Choix de l'itinéraire") {
         SToggle(prefs, "Itinéraires éco", "route_eco", false, "Économes en carburant plutôt que les plus rapides")
+        SToggle(prefs, "Préférer les itinéraires plus simples", "prefer_simple", true, "Quand un itinéraire n'est qu'environ une minute plus lent mais a bien moins de virages, il est choisi en premier (indiqué La plus simple). Désactivé choisit toujours le plus rapide")
         SToggle(prefs, "Proposer des itinéraires plus rapides", "fasterroute", true)
         if (prefs.b(PreferenceKeys.FASTER_ROUTE, true)) SToggle(prefs, "Garder les autres itinéraires sur la carte", "livealts", true, "Lignes grises avec +/− minutes, à toucher à tout moment. Désactivé : une carte « Itinéraire plus rapide trouvé » à la place")
         SToggle(prefs, "Deviner votre destination", "predict", true, "Avec le temps de trajet en direct, y compris domicile et travail à vos heures habituelles")
@@ -642,6 +643,8 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Avertir en cas d'excès de vitesse", "speedwarn", true)
         if (prefs.b(PreferenceKeys.SPEEDWARN, true)) SChoice("Avertir au-delà de", listOf("0", "5", "10").map { it to it + if (engine.imperial) " mph" else " km/h" }, prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5")) { prefs.put(PreferenceKeys.TRAFFIC_WARNING, it) }
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
+        if (prefs.b(PreferenceKeys.LIMITCHANGE, true)) SChoice("Comment", listOf("both" to "Bip et voix", "voice" to "Voix seule", "chime" to "Bip seul"),
+            prefs.s(PreferenceKeys.LIMITCHANGE_HOW, "both")) { prefs.put(PreferenceKeys.LIMITCHANGE_HOW, it) }
         if (prefs.b("limitchange", true)) SToggle(prefs, "Afficher aussi le changement à l'écran", "limitbanner", false, "Désactivé : seulement l'annonce vocale (et le panneau qui clignote), sans la grande bannière")
         SToggle(prefs, "Prochaine limitation", PreferenceKeys.NEXT_LIMIT, true, "Un petit panneau au-dessus de la limitation avec la suivante sur votre itinéraire et sa distance, à partir d'environ 800 m")
         SChoice("Source des limitations", listOf("mg4" to "Comme MG4Dash", "mix" to "MG4Dash + TomTom", "auto" to "TomTom et Mapbox"), prefs.s("limitsrc", "mg4"),

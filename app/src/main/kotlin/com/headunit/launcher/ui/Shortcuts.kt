@@ -108,11 +108,11 @@ internal fun ShortcutsGroup(engine: NavEngine) {
 }
 
 /** The buttons on the Android Auto trip card, in their order: id, name, icon, colour. */
-internal val carTripButtons: List<Triple<String, String, Pair<ImageVector, Color>>> = listOf(
-    Triple("overview", "Overview", androidx.compose.material.icons.Icons.Rounded.ZoomOutMap to Color(0xFF4C8DFF)),
-    Triple("routes", "Other routes", androidx.compose.material.icons.Icons.Rounded.AltRoute to Color(0xFF4C8DFF)),
-    Triple("sound", "Sound", androidx.compose.material.icons.Icons.Rounded.VolumeUp to Color(0xFF4C8DFF)),
-    Triple("end", "End", androidx.compose.material.icons.Icons.Rounded.Close to Color(0xFFE5484D)),
+internal val carTripButtons: List<Triple<String, String, Pair<ImageVector, Color>>> = listOf<Triple<String, String, Pair<ImageVector, Color>>>(
+    Triple("overview", "Overview", Icons.Rounded.ZoomOutMap to Color(0xFF4C8DFF)),
+    Triple("routes", "Other routes", Icons.Rounded.AltRoute to Color(0xFF4C8DFF)),
+    Triple("sound", "Sound", Icons.Rounded.VolumeUp to Color(0xFF4C8DFF)),
+    Triple("end", "End", Icons.Rounded.Close to Color(0xFFE5484D)),
 )
 
 /** Which trip card buttons are switched on (all of them unless changed). */

@@ -5,6 +5,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Retard sur les bouchons : chaque bouchon d'une minute ou plus sur votre itinéraire porte une petite pastille « +8 min » à son début, rouge pour un trafic dense, orange pour un trafic ralenti. Pendant le choix de l'itinéraire, ceux des autres itinéraires s'affichent aussi, atténués. Chacune disparaît une fois passée.
+- Changement de limitation à votre façon : Réglages › Alertes › Vitesse › Comment : bip et voix, voix seule ou bip seul. Avec les deux, la voix attend la fin du bip pour ne pas être couverte.
+- Interrupteur « Préférer les itinéraires plus simples » (Réglages › Itinéraires › Choix de l'itinéraire) : un itinéraire à peine plus lent mais avec bien moins de virages est choisi en premier, et il est maintenant indiqué « Le plus simple » (au lieu de « Le plus court »). Désactivé : toujours le plus rapide en premier.
+- Votre image de position sur Android Auto : l'écran de la voiture affiche aussi votre image à la place de la flèche.
 - Enregistrer l'itinéraire : le signet des options d'itinéraire devient « Enregistrer l'itinéraire ». Il garde la destination, les étapes et la route choisie (« Lyon par l'A7 »). Les itinéraires enregistrés s'affichent sous la barre de recherche (et dans Lieux sur Android Auto) : touchez-en un pour repartir par le même chemin avec le trafic du jour, glissez-le pour le supprimer.
 - Boutons de la carte de trajet sur Android Auto : Réglages › Android Auto › Boutons de la carte de trajet active ou non Vue d'ensemble, Autres itinéraires, Son et Fin, en taille Normale, Grande ou Très grande. Moins de boutons, c'est une carte plus étroite et plus de carte visible.
 - Épingle rouge là où vous touchez : toucher ou appuyer longuement sur la carte pose une épingle rouge à l'endroit exact tant que sa fiche est ouverte.
@@ -61,6 +65,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Arriver du bon côté sans faire le tour du pâté de maisons : quand arriver du côté du trottoir de la destination ajouterait une boucle de virages à la fin, l'itinéraire est aussi calculé sans, et le plus simple est pris quand il est nettement plus rapide ou plus court.
+- Lampadaires à leur vraie place : ils viennent aussi d'OpenStreetMap en ligne (pas seulement d'un pack hors ligne). Les lampadaires devinés ne comblent que les trous, et les rues indiquées non éclairées restent sombres. Lus une fois par zone, gardés un mois, jamais en mode hors ligne.
 - Virages au bout d'une bretelle : la carte de virage, la voie allumée et la voix comptent d'abord jusqu'à la bretelle (« prenez la sortie à gauche »), puis jusqu'au virage au bout de celle-ci, au lieu de compter jusqu'au bout de la bretelle.
 - Mode Phares : la carte suit seulement les feux (sombre dans les tunnels, de nouveau jour juste après), sans la teinte du coucher et du lever du soleil. Les réglages indiquent si l'autoradio a déjà été vu basculer avec les feux, et l'état du signal des phares.
 - Vue d'ensemble de l'itinéraire sur Android Auto : le trajet occupe tout l'écran au lieu du tiers du haut, donc plus zoomé et les noms de lieux plus lisibles.
@@ -97,6 +103,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Plantage en touchant un lieu sur la carte : un lieu sans nom dans les données de Mapbox est maintenant ignoré, et rien d'autre dans un appui sur la carte ne peut plus fermer l'appli.
 - Image des voies sous la carte de virage sur Android Auto : sur un écran de voiture bas, elle passait sous la carte de trajet. Elle rétrécit maintenant pour tenir, ou n'est pas affichée si elle ne tient pas (les voies restent dans la carte de virage).
 - Lieu touché caché derrière les choix d'itinéraire : sur téléphone, sa carte s'affiche maintenant par-dessus.
 - Couleurs de trafic qui ne s'effaçaient pas : un bouchon ou un incident peint sur le tracé pouvait rester rouge une fois résorbé. Chaque actualisation repart du trafic du service d'itinéraire.

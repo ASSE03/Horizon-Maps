@@ -76,6 +76,7 @@ internal val settingsIndex = listOf(
     SettingRef("Éviter les routes non goudronnées", "", "À éviter", 4),
     SettingRef("Éviter les ZFE (zones à faibles émissions)", "Une zone où vous partez ou arrivez ne peut pas être évitée", "À éviter", 4),
     SettingRef("Itinéraires éco", "Économes en carburant plutôt que les plus rapides", "Choix de l'itinéraire", 4),
+    SettingRef("Préférer les itinéraires plus simples", "Désactivé : toujours le plus rapide en premier", "Choix de l'itinéraire", 4),
     SettingRef("Arriver du bon côté de la route", "Du côté de la chaussée où se trouve la destination", "Choix de l'itinéraire", 4),
     SettingRef("Proposer des itinéraires plus rapides", "", "Choix de l'itinéraire", 4),
     SettingRef("Garder les autres itinéraires sur la carte", "Lignes grises avec +/− minutes, à toucher à tout moment. Désactivé : une carte Itinéraire plus rapide trouvé à la place", "Choix de l'itinéraire", 4),
