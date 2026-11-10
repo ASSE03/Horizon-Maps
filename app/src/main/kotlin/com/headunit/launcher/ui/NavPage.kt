@@ -38,7 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BookmarkAdd
+import androidx.compose.material.icons.rounded.AddRoad
 import androidx.compose.foundation.layout.widthIn
 import com.headunit.launcher.LaneSec
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -271,13 +271,13 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
                     modifier = Modifier.size(26.dp).clickable { engine.places.setSlot("home", d); engine.toast("Domicile défini : ${d.name}", 2500) })
                 Icon(Icons.Rounded.Work, "Définir comme travail", tint = c.sub,
                     modifier = Modifier.size(26.dp).clickable { engine.places.setSlot("work", d); engine.toast("Travail défini : ${d.name}", 2500) })
-                var saving by remember { mutableStateOf(false) }
-                val mine = engine.places.customAt(d) != null
-                Icon(Icons.Rounded.BookmarkAdd, "Enregistrer avec un nom", tint = if (mine) c.accent else c.sub, modifier = Modifier.size(26.dp).clickable { saving = true })
+                // Save route: the destination, the stops and the road picked, to plan again later (the star already saves the place)
+                val rawRoutes = engine.prefs.s(PreferenceKeys.PLACES_ROUTES, "[]")
+                val routeSaved = remember(rawRoutes, engine.active, engine.routes, engine.via) { engine.routeIsSaved() }
+                Icon(Icons.Rounded.AddRoad, "Enregistrer l'itinéraire", tint = if (routeSaved) c.accent else c.sub, modifier = Modifier.size(26.dp).clickable { engine.toggleSaveRoute() })
                 // paired with your car (Settings > Places & trips): send it there instead of driving it from here
                 if (engine.prefs.s(PreferenceKeys.LINK_ROLE, "") == "phone" && engine.prefs.s(PreferenceKeys.LINK_CODE, "").isNotBlank())
                     Icon(Icons.Rounded.DirectionsCar, "Envoyer à la voiture", tint = c.accent, modifier = Modifier.size(26.dp).clickable { engine.sendToCar(d) })
-                if (saving) AddPlaceDialog(engine, d) { saving = false }
             }
         }
     }
@@ -588,7 +588,10 @@ internal fun LaneRow(sec: LaneSec, maneuver: String, near: Boolean = false) {
  * drawn on the map itself in this style, so it can never sit in the wrong place.
  */
 @Composable
-internal fun JunctionCloseup(engine: NavEngine, modifier: Modifier = Modifier) {
+internal fun JunctionCloseup(engine: NavEngine, modifier: Modifier = Modifier, maxH: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Unspecified) {
+    // [maxH]: the room there is for it (on the car screen, the gap between the turn card and the trip card): the picture is made
+    // smaller to fit, and left out when even a small one wouldn't (the turn card's own lane strip still shows the lanes)
+    val limited = maxH != androidx.compose.ui.unit.Dp.Unspecified
     // Mapbox's own picture of a motorway junction, when it has one (Settings > Turn card & lanes > Junction pictures)
     run {
         val t = engine.turn
@@ -596,10 +599,11 @@ internal fun JunctionCloseup(engine: NavEngine, modifier: Modifier = Modifier) {
             var bmp by remember(t.junctionPic) { mutableStateOf(JunctionPics.cached(t.junctionPic)) }
             if (bmp == null) LaunchedEffect(t.junctionPic) { bmp = JunctionPics.load(t.junctionPic, engine.mbToken) }
             val b = bmp
-            if (b != null) {
+            if (b != null && (!limited || maxH >= 90.dp)) {
                 val shape = RoundedCornerShape(18.dp)
                 Box(modifier.widthIn(max = 420.dp).fillMaxWidth().shadow(8.dp, shape).clip(shape).background(Color.Black)) {
-                    androidx.compose.foundation.Image(b.asImageBitmap(), "Échangeur", Modifier.fillMaxWidth(), contentScale = androidx.compose.ui.layout.ContentScale.FillWidth)
+                    androidx.compose.foundation.Image(b.asImageBitmap(), "Échangeur", if (limited) Modifier.fillMaxWidth().heightIn(max = maxH) else Modifier.fillMaxWidth(),
+                        contentScale = if (limited) androidx.compose.ui.layout.ContentScale.Fit else androidx.compose.ui.layout.ContentScale.FillWidth)
                     Text(Geo.fmtDist(t.dist, engine.imperial), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(10.dp).clip(RoundedCornerShape(10.dp)).background(Color(0x99000000)).padding(horizontal = 10.dp, vertical = 4.dp))
                 }
@@ -612,20 +616,23 @@ internal fun JunctionCloseup(engine: NavEngine, modifier: Modifier = Modifier) {
     val t = engine.turn ?: return
     val sec = t.lanes ?: return
     if (t.dist > 400.0 || t.dist < 5.0 || sec.lanes.size < 2) return
+    // (the distance line and padding take about 56 dp; the lanes drawing is 118 dp when there's room, down to 50)
+    val canvasH = if (limited) (maxH - 56.dp).coerceAtMost(118.dp) else 118.dp
+    if (canvasH < 50.dp) return
     val shape = RoundedCornerShape(18.dp)
     Column(modifier.widthIn(max = 420.dp).fillMaxWidth().shadow(8.dp, shape).clip(shape).background(Color(0xFF0E2A30))) {
         Text(Geo.fmtDist(t.dist, engine.imperial), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 14.dp, top = 10.dp))
-        LaneHero(sec, t.maneuver, null)
+        LaneHero(sec, t.maneuver, null, canvasH)
     }
 }
 
 @Composable
-internal fun LaneHero(sec: LaneSec, maneuver: String, advice: String?) {
+internal fun LaneHero(sec: LaneSec, maneuver: String, advice: String?, canvasH: androidx.compose.ui.unit.Dp = 118.dp) {
     val anyFollow = sec.lanes.any { it.follow != null }
     val appear by androidx.compose.animation.core.animateFloatAsState(1f, androidx.compose.animation.core.tween(380), label = "heroIn")
     val n = sec.lanes.size
     Column(Modifier.fillMaxWidth().background(Color(0xFF0E2A30)).padding(top = 10.dp, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(118.dp).padding(horizontal = 14.dp)) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(canvasH).padding(horizontal = 14.dp)) {
             val a = appear.coerceIn(0f, 1f)
             val w = size.width; val h = size.height
             // the road narrows a little towards the top, as if seen from the driver's seat

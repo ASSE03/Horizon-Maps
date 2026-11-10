@@ -5,6 +5,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Enregistrer l'itinéraire : le signet des options d'itinéraire devient « Enregistrer l'itinéraire ». Il garde la destination, les étapes et la route choisie (« Lyon par l'A7 »). Les itinéraires enregistrés s'affichent sous la barre de recherche (et dans Lieux sur Android Auto) : touchez-en un pour repartir par le même chemin avec le trafic du jour, glissez-le pour le supprimer.
+- Boutons de la carte de trajet sur Android Auto : Réglages › Android Auto › Boutons de la carte de trajet active ou non Vue d'ensemble, Autres itinéraires, Son et Fin, en taille Normale, Grande ou Très grande. Moins de boutons, c'est une carte plus étroite et plus de carte visible.
+- Épingle rouge là où vous touchez : toucher ou appuyer longuement sur la carte pose une épingle rouge à l'endroit exact tant que sa fiche est ouverte.
+- Envoyer à la voiture envoie tout le trajet : depuis les options d'itinéraire, les étapes et la route choisie partent aussi, pas seulement la destination.
 - Voir tous les emplacements : cherchez une enseigne (Lidl, Carrefour, Total…) et, quand il y en a plusieurs autour, « Voir les N emplacements » les montre toutes. Un panneau les classe par La plus rapide (temps de trajet avec le trafic), Le plus proche ou Sur mon trajet, et la carte montre chacune avec son logo et son temps de trajet. « Rechercher dans cette zone » relance la recherche là où vous avez déplacé la carte. Aussi sur Android Auto.
 - Logos dans les résultats de recherche : les magasins et enseignes affichent leur logo (pris sur leur site, ou dans une liste intégrée des grandes enseignes), gardé sur l'appareil après la première fois.
 - Vos raccourcis : choisissez les boutons ronds « à proximité » sous la barre de recherche (jusqu'à 5, dans votre ordre) parmi Carburant, Recharge, Restauration, Café, Parking, Toilettes et Aires de service, dans Réglages › Lieux et trajets.
@@ -57,6 +61,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Virages au bout d'une bretelle : la carte de virage, la voie allumée et la voix comptent d'abord jusqu'à la bretelle (« prenez la sortie à gauche »), puis jusqu'au virage au bout de celle-ci, au lieu de compter jusqu'au bout de la bretelle.
+- Mode Phares : la carte suit seulement les feux (sombre dans les tunnels, de nouveau jour juste après), sans la teinte du coucher et du lever du soleil. Les réglages indiquent si l'autoradio a déjà été vu basculer avec les feux, et l'état du signal des phares.
 - Vue d'ensemble de l'itinéraire sur Android Auto : le trajet occupe tout l'écran au lieu du tiers du haut, donc plus zoomé et les noms de lieux plus lisibles.
 - Aperçu en direct du thème personnalisé : chaque changement s'affiche aussitôt dans l'aperçu, même pendant qu'un curseur bouge ; rien n'est gardé avant Enregistrer, et en quittant sans enregistrer la carte revient comme avant.
 - Commandes vocales : l'appli (l'original est maintenant traduit en plusieurs langues) comprend aussi les commandes en français par sa propre traduction, en plus de celles déjà reconnues.
@@ -91,6 +97,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Image des voies sous la carte de virage sur Android Auto : sur un écran de voiture bas, elle passait sous la carte de trajet. Elle rétrécit maintenant pour tenir, ou n'est pas affichée si elle ne tient pas (les voies restent dans la carte de virage).
 - Lieu touché caché derrière les choix d'itinéraire : sur téléphone, sa carte s'affiche maintenant par-dessus.
 - Couleurs de trafic qui ne s'effaçaient pas : un bouchon ou un incident peint sur le tracé pouvait rester rouge une fois résorbé. Chaque actualisation repart du trafic du service d'itinéraire.
 - Virage manqué : détection plus sûre en ville face aux dérives du GPS (seulement au-delà de la précision du GPS et avec un angle plus franc), pour ne jamais recalculer à l'approche d'un virage.

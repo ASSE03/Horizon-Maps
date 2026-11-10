@@ -1215,7 +1215,9 @@ private fun PhoneDestCard(engine: NavEngine, p: com.headunit.launcher.Place) {
         }
         Column(Modifier.weight(1f)) {
             Text("Depuis votre téléphone : ${p.name}", color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Départ dans $left s", color = c.sub, fontSize = 13.sp)
+            // the whole trip came along: say how many stops, so it's clear they're coming too
+            val n = engine.phoneStops.size
+            Text("Départ dans $left s" + (if (n == 1) " · " + "1 arrêt" else if (n > 1) " · " + "$n arrêts" else ""), color = c.sub, fontSize = 13.sp)
         }
         ImmPill("Partir", { engine.takePhoneDest(true) }, filled = true)
         ImmPill("Pas maintenant", { engine.takePhoneDest(false) })
@@ -1273,12 +1275,14 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
     val rawCustom = engine.prefs.s(PreferenceKeys.PLACES_CUSTOM, "")
     val rawFav = engine.prefs.s(PreferenceKeys.PLACES_FAVOURITES, "")
     val rawRecent = engine.prefs.s(PreferenceKeys.PLACES_RECENT, "")
-    // (kind 0 = one of your own labelled places, 1 = a favourite, 2 = recent; the label is the name shown)
-    val saved: List<Triple<com.headunit.launcher.Place, Int, String>> = remember(rawCustom, rawFav, rawRecent) {
+    val rawRoutes = engine.prefs.s(PreferenceKeys.PLACES_ROUTES, "[]")
+    val routes = remember(rawRoutes) { engine.savedRoutes() }
+    // (kind 0 = one of your own labelled places, 1 = a favourite, 2 = recent, 3 = a saved route; the label is the name shown)
+    val saved: List<Triple<com.headunit.launcher.Place, Int, String>> = remember(rawCustom, rawFav, rawRecent, routes) {
         val mine = engine.places.customs()
         val favs = engine.places.favourites().filter { f -> mine.none { Geo.dist(it.place.pos, f.pos) < 60 } }
         val recents = engine.places.recents().filter { r -> favs.none { Geo.dist(it.pos, r.pos) < 60 } && mine.none { Geo.dist(it.place.pos, r.pos) < 60 } }
-        mine.map { Triple(it.place, 0, it.label) } + favs.map { Triple(it, 1, it.name) } + recents.take(4).map { Triple(it, 2, it.name) }
+        mine.map { Triple(it.place, 0, it.label) } + routes.map { Triple(it.dest, 3, it.name) } + favs.map { Triple(it, 1, it.name) } + recents.take(4).map { Triple(it, 2, it.name) }
     }
     var showAll by rememberSaveable { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
@@ -1347,6 +1351,7 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
             LazyColumn(Modifier.heightIn(max = 250.dp)) {
                 items(if (showAll) saved else saved.take(3)) { (p, kind, label) ->
                     val fav = kind != 2
+                    val sr = if (kind == 3) routes.firstOrNull { it.dest === p && it.name == label } else null
                     // swipe a place sideways to take it off the list (a favourite is unstarred, a recent one forgotten, your own place removed)
                     var dx by remember { mutableStateOf(0f) }
                     var w by remember { mutableStateOf(1) }
@@ -1357,6 +1362,7 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
                                 onDragEnd = {
                                     if (kotlin.math.abs(dx) > w * 0.35f) when (kind) {
                                         0 -> { engine.places.removeCustom(label); engine.toast("$label retiré", 2000) }
+                                        3 -> { sr?.let { engine.deleteSavedRoute(it) }; engine.toast("Retiré des itinéraires enregistrés", 2000) }
                                         1 -> { engine.places.toggleFavourite(p); engine.toast("Retiré des favoris", 2000) }
                                         else -> { engine.places.removeRecent(p); engine.toast("Retiré des lieux récents", 2000) }
                                     }
@@ -1366,13 +1372,16 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
                             ) { change, amount -> change.consume(); dx += amount }
                         }
                         .graphicsLayer { translationX = shown; alpha = 1f - (kotlin.math.abs(shown) / w.toFloat()).coerceIn(0f, 0.7f) }
-                        .clickable { engine.startRoute(p) }.padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                        .clickable { if (sr != null) engine.startSavedRoute(sr) else engine.startRoute(p) }.padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(44.dp).clip(CircleShape).background(c.tile), contentAlignment = Alignment.Center) {
-                            Icon(if (fav) Icons.Rounded.Star else Icons.Rounded.History, null, tint = if (fav) Warn else c.sub, modifier = Modifier.size(22.dp))
+                            if (kind == 3) Icon(Icons.Rounded.Route, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                            else Icon(if (fav) Icons.Rounded.Star else Icons.Rounded.History, null, tint = if (fav) Warn else c.sub, modifier = Modifier.size(22.dp))
                         }
                         Column(Modifier.padding(start = 14.dp).weight(1f)) {
                             Text(label, color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (p.sub.isNotBlank()) Text(p.sub, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (sr != null) Text(when (sr.stops.size) { 0 -> "Itinéraire enregistré"; 1 -> "Itinéraire enregistré · 1 arrêt"; else -> "Itinéraire enregistré · ${sr.stops.size} arrêts" },
+                                color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            else if (p.sub.isNotBlank()) Text(p.sub, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         if (here != null) Text(Geo.fmtDist(Geo.dist(here, p.pos), engine.imperial), color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
                     }

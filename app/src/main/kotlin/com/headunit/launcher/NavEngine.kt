@@ -62,6 +62,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var stoppedSince = 0L
     /** A place sent from your phone, waiting to be started (head unit). */
     var phoneDest by mutableStateOf<Place?>(null)
+    /** The stops and road picked on the phone for [phoneDest] (empty when only the place was sent). */
+    var phoneStops: List<Place> = emptyList()
+    var phoneVia = ""
     /** Additional auto-zoom adjustment for Android Auto's usable viewport. Negative values zoom out
      * on compact or narrow displays, where the same camera zoom shows too little road ahead. */
     @Volatile private var carViewportZoomOffset = 0.0
@@ -590,7 +593,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     if (!isCar && code.isNotBlank() && prefs.s(PreferenceKeys.LINK_ROLE, "") == "car" && appVisible && route == null && phoneDest == null && online()) {
                         val last = prefs.s(PreferenceKeys.LINK_LAST, "")
                         val got = withContext(Dispatchers.IO) { try { CarLink.latest(code, last) } catch (e: Exception) { null } }
-                        if (got != null && got.id != last) { prefs.put(PreferenceKeys.LINK_LAST, got.id); if (route == null) phoneDest = got.place }
+                        if (got != null && got.id != last) { prefs.put(PreferenceKeys.LINK_LAST, got.id); if (route == null) { phoneStops = got.stops; phoneVia = got.via; phoneDest = got.place } }
                     }
                 } catch (e: Exception) { }
                 delay(60_000)
@@ -973,6 +976,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (theme == "day") return "day"
         if (theme == "night") return "night"
         if (theme == "times") return if (dark) "night" else "day"
+        // Headlights (and the car screen following the car): only the lights decide, so a tunnel at midday goes properly dark and
+        // coming out goes straight back to day. The sun's dawn and dusk light is left out, as it would tint the map whatever the
+        // lights say. (Until the head unit has been seen switching with the lights, sun times stand in, so dark already follows them.)
+        if (theme == "lights" || (isCar && prefs.s(PreferenceKeys.CARTHEME, "car") == "car")) return if (dark) "night" else "day"
         val pos = fix?.pos ?: prefs.s(PreferenceKeys.LASTLAT, "").toDoubleOrNull()?.let { la -> prefs.s(PreferenceKeys.LASTLON, "").toDoubleOrNull()?.let { lo -> LL(la, lo) } }
         val ph = pos?.let { Sun.phase(it.lat, it.lon, System.currentTimeMillis()) } ?: ""
         return when {
@@ -2048,7 +2055,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             else prefs.s(PreferenceKeys.AVOID_TOLL_COUNTRIES, "").split(',').map { it.trim().uppercase() }.filter { it.length == 2 }.toSet()
     }
 
-    fun startRoute(to0: Place, departInMin: Int = 0, keepVia: Boolean = false, startNow: Boolean = false) {
+    fun startRoute(to0: Place, departInMin: Int = 0, keepVia: Boolean = false, startNow: Boolean = false, preferVia: String = "") {
         var to = to0
         walking = walkNext; walkNext = false; MapboxRest.walkProfile = walking
         // fork FR : choix du départ de la démo : le lieu cherché (ou posé d'un appui long) devient le départ, la destination reste
@@ -2097,7 +2104,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 results = emptyList()
                 stopSim()
                 if (TomTomRest.avoidDropped && !usedOffline) toast("Impossible de contourner les zones à éviter, l'itinéraire les traverse", 5000)
-                dest = to; routes = rs; active = 0
+                dest = to; routes = rs
+                // a saved (or sent) route: the choice that goes the same way as before, when one does
+                active = if (preferVia.isBlank()) 0 else rs.indexOfFirst { com.headunit.launcher.ui.viaOf(it) == preferVia }.coerceAtLeast(0)
                 prediction = null; predictionAt = 0L
                 updateRouteZones()
                 said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0
@@ -2113,7 +2122,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 // (on long routes the fly-through has to load map tiles all along the way, which made the start of a trip stutter;
                 // those go straight to the overview)
                 if (!startNow && prefs.b(PreferenceKeys.CINEMATIC, true) && rs[0].len < 40_000.0) {
-                    val r0 = rs[0]
+                    val r0 = rs[active.coerceIn(0, rs.size - 1)]
                     map.flyRoute(r0.pts, r0.cum, r0.len, 50.0) { if (previewing && routes === rs) map.fit(allPts) }
                 } else map.fit(allPts)
                 waitingFor = null; waitJob?.cancel()
@@ -2978,18 +2987,84 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (code.isBlank()) { toast("Associez d'abord votre voiture : Réglages > Lieux et trajets", 4000); return }
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { CarLink.send(code, p) }
+                // the planned trip goes along when it's to this place: the stops and the road picked
+                val trip = route != null && dest?.let { Geo.dist(it.pos, p.pos) < 30.0 } == true
+                val stops = if (trip) via else emptyList()
+                val road = if (trip) route?.let { com.headunit.launcher.ui.viaOf(it) }.orEmpty() else ""
+                withContext(Dispatchers.IO) { CarLink.send(code, p, stops, road) }
                 toast("Envoyé à votre voiture : ${p.name}", 3500)
                 if (previewing) endRoute()
             } catch (e: Exception) { toast("Envoi impossible : " + (e.message ?: "pas de réseau"), 4500) }
         }
     }
 
+    // ---- saved routes: a destination with its stops and the road picked, to plan again later (with that day's traffic) ----
+    class SavedRoute(val name: String, val dest: Place, val stops: List<Place>, val via: String)
+
+    private fun placeJson(p: Place) = org.json.JSONObject().put("n", p.name).put("s", p.sub).put("la", p.pos.lat).put("lo", p.pos.lon)
+    private fun placeOf(q: org.json.JSONObject) = Place(q.optString("n"), q.optString("s"), LL(q.getDouble("la"), q.getDouble("lo")))
+
+    fun savedRoutes(): List<SavedRoute> = try {
+        val a = org.json.JSONArray(prefs.s(PreferenceKeys.PLACES_ROUTES, "[]"))
+        (0 until a.length()).mapNotNull { i ->
+            try {
+                val o = a.getJSONObject(i)
+                val vs = o.optJSONArray("v")
+                SavedRoute(o.optString("name"), placeOf(o.getJSONObject("d")),
+                    if (vs == null) emptyList() else (0 until vs.length()).map { placeOf(vs.getJSONObject(it)) }, o.optString("r"))
+            } catch (e: Exception) { null }
+        }
+    } catch (e: Exception) { emptyList() }
+
+    private fun writeRoutes(list: List<SavedRoute>) {
+        val a = org.json.JSONArray()
+        list.forEach { r ->
+            a.put(org.json.JSONObject().put("name", r.name).put("d", placeJson(r.dest)).put("r", r.via)
+                .put("v", org.json.JSONArray().apply { r.stops.forEach { put(placeJson(it)) } }))
+        }
+        prefs.put(PreferenceKeys.PLACES_ROUTES, a.toString())
+    }
+
+    private fun sameRoute(a: SavedRoute, d: Place, stops: List<Place>, road: String) =
+        Geo.dist(a.dest.pos, d.pos) < 30.0 && a.via == road && a.stops.size == stops.size && a.stops.zip(stops).all { Geo.dist(it.first.pos, it.second.pos) < 30.0 }
+
+    /** The route being planned now is already among the saved routes. */
+    fun routeIsSaved(): Boolean {
+        val d = dest ?: return false
+        val road = route?.let { com.headunit.launcher.ui.viaOf(it) }.orEmpty()
+        return savedRoutes().any { sameRoute(it, d, via, road) }
+    }
+
+    /** Saves the route being planned (destination, stops and the road picked), or takes it off again if it's saved already. */
+    fun toggleSaveRoute() {
+        val d = dest ?: return
+        val road = route?.let { com.headunit.launcher.ui.viaOf(it) }.orEmpty()
+        val cur = savedRoutes()
+        if (cur.any { sameRoute(it, d, via, road) }) {
+            writeRoutes(cur.filterNot { sameRoute(it, d, via, road) })
+            toast("Retiré des itinéraires enregistrés", 2000)
+            return
+        }
+        val name = if (road.isNotBlank()) "${d.name} par $road" else d.name
+        writeRoutes(listOf(SavedRoute(name, d, via, road)) + cur.take(19))
+        toast("Itinéraire enregistré : $name", 2500)
+    }
+
+    /** Plans a saved route again: the same stops, and the choice that goes the same way (with today's traffic). */
+    fun startSavedRoute(r: SavedRoute) {
+        via = r.stops
+        startRoute(r.dest, keepVia = true, preferVia = r.via)
+    }
+
+    fun deleteSavedRoute(r: SavedRoute) {
+        writeRoutes(savedRoutes().filterNot { sameRoute(it, r.dest, r.stops, r.via) })
+    }
+
     /** Head unit: the place sent from the phone has been started or turned down. */
     fun takePhoneDest(go: Boolean) {
         val p = phoneDest ?: return
         phoneDest = null
-        if (go) startRoute(p)
+        if (go) { via = phoneStops; startRoute(p, keepVia = true, preferVia = phoneVia) }
     }
 
     /** A search failure in plain words (it used to show the servers' own errors, like "HTTP 429" or "HTTP 502"). */
@@ -4238,7 +4313,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val place: Place, val loading: Boolean, val road: String = "", val roadKind: String = "", val roadClass: String = "", val ref: String = "",
         val limitMs: Double = 0.0, val limitEstimated: Boolean = false, val land: String = "", val landClass: String = "", val area: String = "", val distM: Double = -1.0,
     )
-    var here by mutableStateOf<HereCard?>(null)
+    private var hereState by mutableStateOf<HereCard?>(null)
+    /** The What's here card; while it's open, a red pin marks the spot on the map. */
+    var here: HereCard?
+        get() = hereState
+        set(v) { hereState = v; try { map.setTapPin(v?.place?.pos) } catch (e: Exception) { } }
 
     private fun showHere(place: Place) {
         val p = place.pos
@@ -4851,11 +4930,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         var k = ins.indexOfFirst { it.off > progress + 4 }
         if (k < 0) k = ins.size - 1
         if (k >= 0) {
-            val cur = ins[k]
+            val realCur = ins[k]
+            // a turn at the end of a slip road (the route data puts it where the slip road meets the next road): until you're on
+            // the slip road, the card, the voice and the lanes are for leaving the main road where the slip road splits off, so the
+            // countdown runs to there (the start of the slip road), not to the far end of it. The turn itself comes after.
+            val split = slipSplit(r, k, realCur, progress)
+            val onApproach = split != null && progress < split - 3.0
+            val cur = if (onApproach) realCur.copy(off = split!!, maneuver = if (splitLeft) "MOTORWAY_EXIT_LEFT" else "MOTORWAY_EXIT_RIGHT", roundExit = 0, exitNo = "") else realCur
+            // (its own keys, so the turn at the end of the slip road still gets its spoken call-outs and arrow afterwards)
+            val sk = if (onApproach) "s$k" else "$k"
             val d = max(0.0, cur.off - progress)
             val arriving = cur.maneuver.uppercase().startsWith("ARRIVE")
             val side = if (arriving) arrivalSide(r, cur.maneuver) else ""
-            val nxt = ins.getOrNull(k + 1)
+            val nxt = if (onApproach) realCur else ins.getOrNull(k + 1)
             val street = if (arriving) (dest?.name ?: "Destination") + (if (side.isNotEmpty()) " · ${Geo.sideFr(side)}" else "") else cur.street.ifBlank { Geo.maneuverText(cur.maneuver, cur.roundExit).replaceFirstChar { it.uppercase() } }
             // several lane sections can touch one junction (the road often widens on the approach): use the one with the most lanes, then the nearest to the junction
             // on motorways and dual carriageways the lanes are looked at (and shown, and spoken) much earlier, as there's further to move over
@@ -4882,7 +4969,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 speak(dist + ", " + laneAdv.replaceFirst("Utilisez", "placez-vous sur"))
             }
             updateLaneMarks(r, cur, laneSec, d)
-            updateTurnArrow(r, k, cur, d, arriving)
+            updateTurnArrow(r, if (onApproach) k + 100_000 else k, cur, d, arriving)
             // (after an unnamed slip road the step's "street" is the exit sign's text, not a road: the map's own name is used then)
             onRoad = ins.getOrNull(k - 1)?.let { st -> if (st.exitNo.isNotBlank() || st.maneuver.uppercase().contains("RAMP")) "" else st.street } ?: ""
             refreshRoad()
@@ -4915,11 +5002,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val familiar = prefs.b(PreferenceKeys.SMARTVOICE, true) && onRoad.isNotBlank() && (roadFam[onRoad] ?: 0) >= 6
             val fFrom = if (familiar) 330.0 else 520.0
             // a heads-up well ahead on fast roads, then the main call-out, then the final one at the junction
-            if (!familiar && d <= 1700 && d > 1100 && p0Speed() > 18.0 && !arriving && said.add("${k}e"))
+            if (!familiar && d <= 1700 && d > 1100 && p0Speed() > 18.0 && !arriving && said.add("${sk}e"))
                 speak("Dans ${Geo.spoken(d, imperial)}, $phrase")
-            if (d <= fFrom && d > 200 && said.add("${k}f"))
+            if (d <= fFrom && d > 200 && said.add("${sk}f"))
                 speak(if (arriving) "Dans ${Geo.spoken(d, imperial)}, vous serez arrivé" + (if (side.isNotEmpty()) ". Votre destination est ${Geo.sideFr(side)}" else "") else "Dans ${Geo.spoken(d, imperial)}, $phrase$lane")
-            if (d <= 120 && said.add("${k}n"))
+            if (d <= 120 && said.add("${sk}n"))
                 speak(if (arriving) (if (side.isNotEmpty()) "Votre destination est ${Geo.sideFr(side)}" else "Vous êtes arrivé") else phrase.replaceFirstChar { it.uppercase() })
         }
         // a route that stops short of the destination (the downloaded map ran out): at its end, plan on from here instead
@@ -5070,6 +5157,58 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var turnArrowKey = -1
 
     /** Draws a white arrow on the route through the next junction once it's within ~700 m (not for "carry straight on"). */
+    // ---- slip roads: where the route leaves the main road for a slip road that ends at the next turn ----
+    private var splitFor = -1.0
+    private var splitAt: Double? = null
+    private var splitDone = false
+    private var splitAskAt = 0L
+    /** The slip road leaves to the left (true) or right. */
+    private var splitLeft = true
+
+    /**
+     * Where the slip road leading to step [k] splits off the main road (a distance along the route), when that step is a turn at the
+     * far end of a slip road and no step of its own covers leaving the main road. Read from the map's road types (a "link" road is
+     * a slip road) along the route, looking back from the turn. Null when it isn't one, or the map hasn't shown it yet (asked again
+     * every 2 seconds while the turn is within a kilometre).
+     */
+    private fun slipSplit(r: Route, k: Int, cur: Step, progress: Double): Double? {
+        if (splitFor != cur.off) { splitFor = cur.off; splitAt = null; splitDone = false }
+        if (splitDone) return splitAt
+        val m = cur.maneuver.uppercase()
+        if (m.startsWith("ARRIVE") || m.startsWith("ROUNDABOUT") || m.contains("EXIT") || m.contains("RAMP") || m.startsWith("DEPART")) { splitDone = true; return null }
+        val d = cur.off - progress
+        if (d > 1000.0) return null
+        // too late to matter once you're nearly there
+        if (d < 120.0) { splitDone = true; return null }
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - splitAskAt < 2000L) return null
+        splitAskAt = now
+        fun cls(off: Double): String? {
+            val (p, b) = pointAt(r, off)
+            return try { map.roadAt(p, b, maxDistance = 8.0, headingTolerance = 30.0)?.cls } catch (e: Throwable) { null }
+        }
+        // just before the turn the route has to be on a slip road; if the map says it isn't, it's an ordinary turn
+        val last = cls(cur.off - 25.0) ?: return null
+        if (!last.endsWith("_link")) { splitDone = true; return null }
+        val prevOff = r.steps.getOrNull(k - 1)?.off ?: 0.0
+        val stopAt = max(prevOff + 5.0, max(progress - 50.0, cur.off - 700.0))
+        var o = cur.off - 25.0
+        var start: Double? = null
+        while (o - 10.0 > stopAt) {
+            o -= 10.0
+            val c = cls(o) ?: return null   // (not on the map yet: asked again shortly)
+            if (!c.endsWith("_link")) { start = o + 10.0; break }
+        }
+        // no main road found before the turn (or a step of its own already covers it): nothing to change
+        if (start == null || cur.off - start < 60.0) { splitDone = true; return null }
+        // which side it leaves to: the route's direction just before the split against just after it
+        val b0 = pointAt(r, max(0.0, start - 30.0)).second
+        val b1 = pointAt(r, min(r.len, start + 40.0)).second
+        splitLeft = ((b1 - b0 + 540.0) % 360.0) - 180.0 < 0.0
+        splitAt = start; splitDone = true
+        return start
+    }
+
     private fun updateTurnArrow(r: Route, k: Int, cur: Step, d: Double, arriving: Boolean) {
         val m = cur.maneuver.uppercase()
         val wanted = prefs.b(PreferenceKeys.TURNARROWS, true) && !previewing && !arriving && d < 700.0 &&

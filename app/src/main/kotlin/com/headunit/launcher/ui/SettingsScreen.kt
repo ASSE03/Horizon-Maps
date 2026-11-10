@@ -261,8 +261,18 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
 @Composable
 private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Jour et nuit") {
-        SChoice("Jour et nuit", listOf("auto" to "Auto", "lights" to "Phares", "sun" to "Soleil", "times" to "Mes horaires", "day" to "Jour", "night" to "Nuit"), prefs.s(PreferenceKeys.THEME, "auto"),
-            "Auto suit le mode nuit de l'autoradio dès qu'il l'a activé, et le lever et coucher du soleil en attendant. Phares suit le mode nuit de l'autoradio quand il bascule avec vos feux (activez son option de mode nuit liée aux phares ou à l'éclairage), avec les heures du soleil en attendant. Soleil bascule au lever et au coucher du soleil. Mes horaires bascule aux heures que vous choisissez") { prefs.put(PreferenceKeys.THEME, it) }
+        SChoice("Jour et nuit", listOf("auto" to "Auto", "lights" to "Phares", "sun" to "Heures du soleil", "times" to "Mes horaires", "day" to "Jour", "night" to "Nuit"), prefs.s(PreferenceKeys.THEME, "auto"),
+            "Auto suit le mode nuit de l'autoradio dès qu'il y passe, et le lever et coucher du soleil en attendant. Phares suit le mode nuit de l'autoradio quand il change avec vos feux (activez son option phares ou éclairage), avec les heures du soleil en attendant. Heures du soleil change au lever et au coucher du soleil. Mes horaires change aux heures que vous choisissez") { prefs.put(PreferenceKeys.THEME, it) }
+        // Headlights: whether this head unit has been seen switching with the lights yet (until then sun times stand in), and what the
+        // lights signal says right now, so it's easy to check it works (lights on: it should say on within a couple of seconds)
+        if (prefs.s(PreferenceKeys.THEME, "auto") == "lights") {
+            val lightsOn = rememberSystemNight()
+            val seen = prefs.b(PreferenceKeys.SYSDARKSEEN, false) || lightsOn
+            SNote(
+                if (seen) "Seuls vos phares décident, même dans les tunnels. Signal des phares : ${if (lightsOn) L.t("on") else L.t("off")}"
+                else "Votre autoradio n'a pas encore basculé avec les phares, donc le lever et le coucher du soleil servent en attendant. Activez son option de mode nuit liée aux phares ou à l'éclairage, puis allumez vos phares pour vérifier"
+            )
+        }
         if (prefs.s(PreferenceKeys.THEME, "auto") == "times") {
             SFieldItem("La nuit commence à", prefs.s(PreferenceKeys.NIGHT_FROM, "19:00"), "Format 24 h, par exemple 19:30", placeholder = "19:00") { prefs.put(PreferenceKeys.NIGHT_FROM, it.trim()) }
             SFieldItem("Le jour commence à", prefs.s(PreferenceKeys.DAY_FROM, "07:00"), "Format 24 h, par exemple 06:45", placeholder = "07:00") { prefs.put(PreferenceKeys.DAY_FROM, it.trim()) }
@@ -711,8 +721,8 @@ private fun PlacesSection(engine: NavEngine) {
     val mine = remember(raw) { pl.customs() }
     var renaming by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
-    SGroup("Vos lieux", footer = "Affichés en pastilles sous la barre de recherche, après Domicile et Travail. Ajoutez-en un avec la pastille +, ou le signet dans les options d'itinéraire.") {
-        if (mine.isEmpty()) SNote("Aucun lieu personnel pour l'instant.")
+    SGroup("Vos lieux", footer = "Affichés en boutons sous la barre de recherche, après Domicile et Travail. Ajoutez-en un avec le + là-bas.") {
+        if (mine.isEmpty()) SNote("Pas encore de lieux à vous.")
         mine.forEachIndexed { i, lp ->
             if (renaming == lp.label) {
                 var t by remember(lp.label) { mutableStateOf(lp.label) }
@@ -1070,6 +1080,7 @@ private fun AndroidAutoSection(prefs: Prefs) {
             }
         } catch (e: Exception) { "Inconnu" }
     }
+    CarTripButtonsGroup(prefs)
     SGroup("Jour et nuit sur l'écran de la voiture") {
         SChoice("Jour et nuit", listOf("sun" to "Soleil", "car" to "Voiture", "day" to "Jour", "night" to "Nuit"), prefs.s(PreferenceKeys.CARTHEME, "sun"),
             when (prefs.s(PreferenceKeys.CARTHEME, "sun")) { "sun" -> "Passe en mode nuit au coucher du soleil et en mode jour à son lever, là où vous êtes"; "car" -> "Suit le réglage de la voiture (ses phares ou son propre mode)"; else -> null }) { prefs.put(PreferenceKeys.CARTHEME, it) }
