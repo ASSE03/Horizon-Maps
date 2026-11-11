@@ -1839,12 +1839,20 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val i = out.indexOfFirst { k ->
                 val kn = norm(k.name); val d = Geo.dist(k.pos, p.pos)
                 val sameName = kn == pn || pn.startsWith("$kn ") || kn.startsWith("$pn ")
-                (sameName && d < 400.0) || (ps.isNotBlank() && !poor(p.sub) && norm(k.sub) == ps && d < 150.0 && (sameName || kn.split(" ").firstOrNull() == pn.split(" ").firstOrNull()))
+                // la même enseigne (même logo, ou même premier mot : « Carrefour Market Davézieux » et « Carrefour du Relais… »)
+                val dk = Logos.domainFor(k); val dp = Logos.domainFor(p)
+                val sameBrand = (dk != null && dk == dp) || (kn.split(" ").first().length >= 4 && kn.split(" ").first() == pn.split(" ").first())
+                (sameName && d < 400.0) || (sameBrand && d < 400.0) || (ps.isNotBlank() && !poor(p.sub) && norm(k.sub) == ps && d < 150.0 && (sameName || kn.split(" ").firstOrNull() == pn.split(" ").firstOrNull()))
             }
             if (i < 0) out += p
             else if (poor(out[i].sub) && !poor(p.sub)) out[i] = out[i].copy(sub = p.sub)
         }
-        return out
+        // un magasin nommé seulement d'après sa ville (« Bourg-Argental », avec le logo Carrefour) : l'enseigne devant
+        return out.map { p ->
+            val brand = (if (p.web.isBlank()) null else Logos.domainFor(p))?.split('.')?.let { it.getOrNull(it.size - 2) }
+                ?.takeIf { it.length >= 3 && Logos.domainFor(Place(it, "", p.pos)) != null }
+            if (brand != null && !norm(p.name).contains(norm(brand))) p.copy(name = brand.replaceFirstChar { it.uppercase() } + " " + p.name) else p
+        }
     }
 
     fun search(q: String) {

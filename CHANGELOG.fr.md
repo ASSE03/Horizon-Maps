@@ -109,7 +109,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
-- Résultats de recherche en double : un même magasin donné par plusieurs sources (« Carrefour » et « Carrefour Market » au même endroit, ou la même adresse deux fois) n'apparaît plus qu'une fois, avec l'adresse la plus complète.
+- Résultats de recherche en double : un même magasin donné par plusieurs sources (même enseigne ou même logo à moins de 400 m, comme « Carrefour Market Davézieux » et « Carrefour du Relais Saint-Christophe ») n'apparaît plus qu'une fois, avec l'adresse la plus complète. Un magasin nommé seulement d'après sa ville (« Bourg-Argental » avec le logo Carrefour) affiche aussi son enseigne.
 - Carte de trajet en voiture électrique : en portrait, les six chiffres (temps, arrivée, distance, batterie, à la borne, à l'arrivée) se chevauchaient ; ils passent sur deux lignes (le trajet, puis la batterie). En paysage, la carte de trajet large cachait la flèche : la flèche est maintenant placée au-dessus d'elle.
 - Survol de l'itinéraire caché par les options : pendant le survol, le panneau (zones, météo, étapes, départ, batterie, itinéraires) se replie en une petite pastille « Survol de l'itinéraire… · Arrêter », et revient à la fin.
 - Mauvais côté à l'arrivée (« votre destination est à droite » pour un lieu à gauche) : le côté est calculé d'après la position réelle du lieu par rapport à votre sens de circulation ; celui du service d'itinéraire ne sert que quand c'est trop serré pour trancher.
