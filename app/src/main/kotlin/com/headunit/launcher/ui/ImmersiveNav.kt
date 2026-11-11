@@ -1156,8 +1156,9 @@ private fun ImmResults(engine: NavEngine, q: String, onPicked: () -> Unit) {
                     }
                 }
                 Column(Modifier.padding(start = 14.dp).weight(1f)) {
-                    Text(p.name, color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(p.sub, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // fork FR : le nom et l'adresse sur deux lignes chacun, pour voir l'adresse complète (au moins la ville)
+                    Text(p.name, color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(p.sub, color = c.sub, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 if (here != null) Text(Geo.fmtDist(Geo.dist(here, p.pos), engine.imperial), color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
             }
@@ -1411,7 +1412,7 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
                             Text(label, color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (sr != null) Text(when (sr.stops.size) { 0 -> "Itinéraire enregistré"; 1 -> "Itinéraire enregistré · 1 arrêt"; else -> "Itinéraire enregistré · ${sr.stops.size} arrêts" },
                                 color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            else if (p.sub.isNotBlank()) Text(p.sub, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            else if (p.sub.isNotBlank()) Text(p.sub, color = c.sub, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                         if (here != null) Text(Geo.fmtDist(Geo.dist(here, p.pos), engine.imperial), color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
                     }

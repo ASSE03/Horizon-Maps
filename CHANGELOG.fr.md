@@ -67,6 +67,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Résultats de recherche : le nom et l'adresse s'affichent sur deux lignes chacun, pour voir l'adresse complète avec la ville au lieu d'une adresse coupée.
 - Arrêts recharge sur les longs trajets en électrique : l'appli planifie maintenant tous les arrêts nécessaires (comme ABRP), pas un seul. Elle avance de borne en borne en rechargeant à 80 % à chacune, jusqu'à pouvoir finir avec la charge à garder (Réglages › Carburant). Les options d'itinéraire montrent la liste (distance, détour, batterie à l'arrivée, puissance, temps de charge, places libres, prix) et « Ajouter les N arrêts » les ajoute d'un coup, rangés dans l'ordre du trajet avec vos autres étapes.
 - Android Auto sur petit écran et en écran partagé : l'écran de la voiture choisit sa disposition selon la place laissée à la carte au lieu de tout rétrécir. Sur un écran bas (comme 800 × 480) : barre de recherche plus petite, Domicile et Travail en pastilles fines, une rangée de raccourcis plus ⋯, boutons Signaler et Lieux en icône seule, carte de virage plus étroite avec les voies dedans, carte de trajet sur une ligne et panneau de vitesse plus petit. En écran partagé : juste le virage, une ligne de trajet et la vitesse.
 - Recherche d'une enseigne : les lieux qui la mentionnent seulement (un guichet dans un supermarché) sont écartés.
