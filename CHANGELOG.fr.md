@@ -107,6 +107,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Carte de trajet en voiture électrique : en portrait, les six chiffres (temps, arrivée, distance, batterie, à la borne, à l'arrivée) se chevauchaient ; ils passent sur deux lignes (le trajet, puis la batterie). En paysage, la carte de trajet large cachait la flèche : la flèche est maintenant placée au-dessus d'elle.
 - Survol de l'itinéraire caché par les options : pendant le survol, le panneau (zones, météo, étapes, départ, batterie, itinéraires) se replie en une petite pastille « Survol de l'itinéraire… · Arrêter », et revient à la fin.
 - Mauvais côté à l'arrivée (« votre destination est à droite » pour un lieu à gauche) : le côté est calculé d'après la position réelle du lieu par rapport à votre sens de circulation ; celui du service d'itinéraire ne sert que quand c'est trop serré pour trancher.
 - Carte de trajet visible à travers le panneau d'ajout d'étape (ou de tous les emplacements) : elle s'efface pendant que le panneau est ouvert.

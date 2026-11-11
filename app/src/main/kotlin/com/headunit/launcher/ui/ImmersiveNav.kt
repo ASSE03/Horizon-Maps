@@ -238,7 +238,11 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         val speedPos = engine.prefs.s(PreferenceKeys.SPEED_POS, "bottom").let { if (it == "top" && narrow) "middle" else it }
         val tripH = with(dens) { tripPx.toDp() }
         val screenH = maxHeight
-        LaunchedEffect(narrow, tripPx, screenH) { engine.bottomCover = if (narrow && tripPx > 0) (tripH / screenH).coerceIn(0f, 0.5f).toDouble() else 0.0 }
+        // fork FR : en paysage aussi, quand la carte de trajet est large (voiture électrique : six chiffres et la barre du trajet),
+        // la flèche est remontée au-dessus d'elle au lieu de passer dessous
+        var tripWPx by remember { mutableStateOf(0) }
+        val wideTrip = !narrow && tripPx > 0 && with(dens) { tripWPx.toDp() } > maxWidth * 0.45f
+        LaunchedEffect(narrow, tripPx, screenH, wideTrip) { engine.bottomCover = if ((narrow || wideTrip) && tripPx > 0) (tripH / screenH).coerceIn(0f, 0.5f).toDouble() else 0.0 }
         // left-hand drive: everything swaps sides (cards on the right, round buttons on the left)
         val mir = engine.mirrored
         // Settings > sizes > map buttons: scales the button column on the right
@@ -440,7 +444,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         if (!previewing && engine.arrival == null && engine.chain == null && !engine.chainBusy) {
             val tripBaseDensity = LocalDensity.current
             val tripCardScale = engine.prefs.i(PreferenceKeys.MAIN_CARD_SIZE, 100).coerceIn(70, 150) / 100f
-            Box(Modifier.align(side(Alignment.BottomStart)).then(if (narrow) Modifier.fillMaxWidth().sides(end = 16.dp) else Modifier).onSizeChanged { tripPx = it.height }
+            Box(Modifier.align(side(Alignment.BottomStart)).then(if (narrow) Modifier.fillMaxWidth().sides(end = 16.dp) else Modifier).onSizeChanged { tripPx = it.height; tripWPx = it.width }
                 .onGloballyPositioned { report(1, it.boundsInParent()) }) {
                 CompositionLocalProvider(LocalDensity provides Density(tripBaseDensity.density * tripCardScale, tripBaseDensity.fontScale)) {
                     TripArea(engine, shareEta, narrow, voice)
@@ -766,8 +770,22 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                     val nStats = (if (evPct != null) 5 else 3) + (if (evStop != null) 1 else 0)
                     val nButtons = if (evPct != null) 5 else 4
                     val oneLine = maxWidth >= (nStats * 74 + nButtons * 42 + 30).dp
+                    // fork FR : trop de chiffres pour une ligne (voiture électrique, sur un téléphone en portrait) : le trajet sur une
+                    // ligne, la batterie sur la suivante (serrés sur une seule ligne, ils se chevauchaient)
+                    val twoRows = nStats > 4 && maxWidth < (nStats * 92).dp
                     val figures: @Composable (Modifier) -> Unit = { m ->
-                        Row(m, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        if (twoRows) Column(m, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                ImmStat(Geo.fmtDur(e.secs), if (e.delayMin >= 1) "+${e.delayMin} min" else "restant", dc, compact = true)
+                                ImmStat(e.arrive, "arrivée", c.text, compact = true)
+                                ImmStat(Geo.fmtDist(e.dist, engine.imperial), "restants", c.text, compact = true)
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                if (evNow != null) ImmStat("$evNow%", "batterie", nowCol, compact = true)
+                                if (evStop != null) ImmStat("$evStop%", "à la borne", stopCol, compact = true)
+                                if (evPct != null) ImmStat("$evPct%", "à l'arrivée", evCol, compact = true)
+                            }
+                        } else Row(m, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             ImmStat(Geo.fmtDur(e.secs), if (e.delayMin >= 1) "+${e.delayMin} min" else "restant", dc, compact = true)
                             ImmStat(e.arrive, "arrivée", c.text, compact = true)
                             ImmStat(Geo.fmtDist(e.dist, engine.imperial), "restants", c.text, compact = true)
