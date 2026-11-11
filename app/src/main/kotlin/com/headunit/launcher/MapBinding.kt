@@ -238,6 +238,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         installTapSelect()
     }
 
+    /** This map is the car screen's (Android Auto): no app top bar there to keep the logo clear of. */
+    @Volatile var onCar = false
+
     /** Puts Mapbox's logo and the (i) credits button top right, inside the visible part of the screen ([inset], null = whole view). */
     fun placeBranding(inset: android.graphics.Rect?) {
         brandInset = inset

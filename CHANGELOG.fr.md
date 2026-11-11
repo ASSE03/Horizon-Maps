@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Ajouter une étape le long du trajet : en ajoutant une étape, « Voir le long de votre itinéraire » (ou la touche recherche du clavier) montre sur la carte tous les résultats le long du reste du trajet, chacun avec le temps qu'il ajoute, dans un panneau trié par Moindre détour, Le plus tôt ou Le plus proche, avec la distance devant et l'écart au tracé. Touchez-en un, puis Ajouter comme étape. Sur Android Auto, c'est une liste triée par détour.
 - Retard sur les bouchons : chaque bouchon d'une minute ou plus sur votre itinéraire porte une petite pastille « +8 min » à son début, rouge pour un trafic dense, orange pour un trafic ralenti. Pendant le choix de l'itinéraire, ceux des autres itinéraires s'affichent aussi, atténués. Chacune disparaît une fois passée.
 - Changement de limitation à votre façon : Réglages › Alertes › Vitesse › Comment : bip et voix, voix seule ou bip seul. Avec les deux, la voix attend la fin du bip pour ne pas être couverte.
 - Interrupteur « Préférer les itinéraires plus simples » (Réglages › Itinéraires › Choix de l'itinéraire) : un itinéraire à peine plus lent mais avec bien moins de virages est choisi en premier, et il est maintenant indiqué « Le plus simple » (au lieu de « Le plus court »). Désactivé : toujours le plus rapide en premier.
@@ -65,6 +66,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Android Auto sur petit écran et en écran partagé : l'écran de la voiture choisit sa disposition selon la place laissée à la carte au lieu de tout rétrécir. Sur un écran bas (comme 800 × 480) : barre de recherche plus petite, Domicile et Travail en pastilles fines, une rangée de raccourcis plus ⋯, boutons Signaler et Lieux en icône seule, carte de virage plus étroite avec les voies dedans, carte de trajet sur une ligne et panneau de vitesse plus petit. En écran partagé : juste le virage, une ligne de trajet et la vitesse.
+- Recherche d'une enseigne : les lieux qui la mentionnent seulement (un guichet dans un supermarché) sont écartés.
 - Arriver du bon côté sans faire le tour du pâté de maisons : quand arriver du côté du trottoir de la destination ajouterait une boucle de virages à la fin, l'itinéraire est aussi calculé sans, et le plus simple est pris quand il est nettement plus rapide ou plus court.
 - Lampadaires à leur vraie place : ils viennent aussi d'OpenStreetMap en ligne (pas seulement d'un pack hors ligne). Les lampadaires devinés ne comblent que les trous, et les rues indiquées non éclairées restent sombres. Lus une fois par zone, gardés un mois, jamais en mode hors ligne.
 - Virages au bout d'une bretelle : la carte de virage, la voie allumée et la voix comptent d'abord jusqu'à la bretelle (« prenez la sortie à gauche »), puis jusqu'au virage au bout de celle-ci, au lieu de compter jusqu'au bout de la bretelle.
@@ -103,6 +106,9 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Mauvais côté à l'arrivée (« votre destination est à droite » pour un lieu à gauche) : le côté est calculé d'après la position réelle du lieu par rapport à votre sens de circulation ; celui du service d'itinéraire ne sert que quand c'est trop serré pour trancher.
+- Carte de trajet visible à travers le panneau d'ajout d'étape (ou de tous les emplacements) : elle s'efface pendant que le panneau est ouvert.
+- Panneau de vitesse écrasé sur Android Auto (modèle américain et canadien), et la prochaine limitation ne le chevauche plus.
 - Lampadaires : les vrais lampadaires d'OpenStreetMap n'arrivaient jamais, car les serveurs Overpass mettent souvent 20 à 40 s à répondre et l'appli abandonnait au bout de 30 s. Elle attend maintenant jusqu'à 90 s, et essaie le serveur de mail.ru en second (deux autres serveurs ne répondent plus). Sur l'écran Android Auto, la ligne d'état dit maintenant clairement que les lampadaires n'y sont pas affichés.
 - Plantage en touchant un lieu sur la carte : un lieu sans nom dans les données de Mapbox est maintenant ignoré, et rien d'autre dans un appui sur la carte ne peut plus fermer l'appli.
 - Image des voies sous la carte de virage sur Android Auto : sur un écran de voiture bas, elle passait sous la carte de trajet. Elle rétrécit maintenant pour tenir, ou n'est pas affichée si elle ne tient pas (les voies restent dans la carte de virage).
