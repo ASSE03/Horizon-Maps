@@ -138,6 +138,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         map.flyRoute(r.pts, r.cum, r.len, 62.0, full = true) { flyingOver = false; if (previewing) map.fit(allPts) }
     }
 
+    /** Fork FR : arrête le survol et revient à la vue d'ensemble des itinéraires. */
+    fun stopFlyOver() {
+        if (!flyingOver) return
+        map.stopFly(); flyingOver = false
+        if (previewing) map.fit(routes.take(3).flatMap { x -> x.pts.filterIndexed { i, _ -> i % 8 == 0 } + x.pts.last() })
+    }
+
     /** The way back to where this trip started (home when it started near home). */
     fun routeBack() {
         val from = tripFrom ?: return
@@ -2246,7 +2253,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun selectRoute(i: Int) {
         if (i !in routes.indices) return
-        map.stopFly()
+        map.stopFly(); flyingOver = false
         active = i; lastIdx = 0
         updateRouteZones()
         drawRoutes()
@@ -2263,7 +2270,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun beginNavigation() {
         if (!previewing) return
-        map.stopFly()
+        map.stopFly(); flyingOver = false
         previewing = false
         // where this trip started, for "Itinéraire retour" when you arrive
         tripFrom = fix?.pos
@@ -2426,7 +2433,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (route != null && !previewing) try { RouteSync.ended(this) } catch (e: Exception) { }
         itineraryOpen = false
         cancelWaiting()
-        map.stopFly()
+        map.stopFly(); flyingOver = false
         faster = null; resume = null; prefs.put(PreferenceKeys.RESUME, "{}")
         incMatches = emptyList(); incidentAhead = null; incAt = 0L; incAlerted.clear()
         routeCams = emptyList(); camsRoute = null; camsAt = 0L; camsCount = -1; hazardSig = 0; policeSig = 0; map.setHazards(emptyList())

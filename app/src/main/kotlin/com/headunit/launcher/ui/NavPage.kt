@@ -155,6 +155,15 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         }
         return
     }
+    // fork FR : pendant le survol, le panneau se replie pour laisser voir la carte ; il revient à la fin (ou en arrêtant)
+    if (engine.flyingOver) {
+        Row(Modifier.align(Alignment.BottomCenter).padding(12.dp).floating(50.dp).padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Survol de l'itinéraire…", color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Pill("Arrêter", false, { engine.stopFlyOver() })
+        }
+        return
+    }
     val fmt = com.headunit.launcher.Clock.format()
     val baseMs = if (engine.departAtMs > 0) engine.departAtMs else System.currentTimeMillis()
     // fork FR : en paysage sur téléphone (peu de hauteur), le panneau défile au lieu de couper les cartes d'itinéraire et Démarrer

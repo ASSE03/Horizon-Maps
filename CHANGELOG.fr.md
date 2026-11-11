@@ -107,6 +107,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Survol de l'itinéraire caché par les options : pendant le survol, le panneau (zones, météo, étapes, départ, batterie, itinéraires) se replie en une petite pastille « Survol de l'itinéraire… · Arrêter », et revient à la fin.
 - Mauvais côté à l'arrivée (« votre destination est à droite » pour un lieu à gauche) : le côté est calculé d'après la position réelle du lieu par rapport à votre sens de circulation ; celui du service d'itinéraire ne sert que quand c'est trop serré pour trancher.
 - Carte de trajet visible à travers le panneau d'ajout d'étape (ou de tous les emplacements) : elle s'efface pendant que le panneau est ouvert.
 - Panneau de vitesse écrasé sur Android Auto (modèle américain et canadien), et la prochaine limitation ne le chevauche plus.
