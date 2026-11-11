@@ -219,6 +219,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var plannedJob: Job? = null
     /** A good place to fill up on a long trip (cheapest around the middle of the route, or the quickest detour). */
     var fuelSuggestion by mutableStateOf<Nearby?>(null)
+    /** Fork FR : tous les arrêts recharge nécessaires pour le trajet (voiture électrique), dans l'ordre ; le premier est aussi fuelSuggestion. */
+    var chargePlan by mutableStateOf<List<Nearby>>(emptyList())
     private var wrongCount = 0
     private var wrongAt = 0L
 
@@ -1313,6 +1315,20 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     var chargeVias: List<LL> = emptyList()
     fun addChargeStop(p: Place) { if (isEv) chargeVias = chargeVias + p.pos; addStop(p) }
 
+    /** Fork FR : ajoute d'un coup tous les arrêts recharge proposés, rangés avec les étapes déjà prévues dans l'ordre du trajet. */
+    fun addChargePlan(stops: List<Place>) {
+        val d = dest ?: return
+        val r = route
+        chargeVias = chargeVias + stops.map { it.pos }
+        val all = (via + stops).withIndex().sortedBy { (i, p) -> r?.let { RouteExtras.project(it, p.pos, 5000.0)?.first } ?: (i * 1.0) }.map { it.value }
+        via = all
+        chargePlan = emptyList(); fuelSuggestion = null
+        stopMode = false
+        clearNearby()
+        toast("${stops.size} arrêts recharge ajoutés", 2500)
+        startRoute(d, departMin, true, startNow = route != null && !previewing)
+    }
+
     fun addStop(p: Place) {
         val d = dest ?: return
         via = via + p
@@ -2187,7 +2203,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 loadRain(to, rs[0].time)
                 loadBison(rs[0], if (departMs > 0) departMs else System.currentTimeMillis())
                 loadRouteWeather(rs[0])
-                fuelSuggestion = null
+                fuelSuggestion = null; chargePlan = emptyList()
                 clearLiveAlts()
                 if (prefs.b(PreferenceKeys.SMARTFUEL, true)) suggestFuel(rs[0])
                 clearNearby()
@@ -2418,7 +2434,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         routes = emptyList(); active = 0; dest = null; turn = null; eta = null; lastIdx = 0; previewing = false; routeFrac = 0f; onRoad = ""
         try { refreshRoad() } catch (e: Exception) { }
         departMin = 0; departAtMs = 0L
-        fuelSuggestion = null; parkingNear = emptyList(); parkingFor = null
+        fuelSuggestion = null; chargePlan = emptyList(); parkingNear = emptyList(); parkingFor = null
         turnArrowKey = -1; map.setTurnArrow(emptyList())
         clearLiveAlts(); liveSaid.clear(); radar = emptyList(); radarSig = 0; bendsFor = null; bends = emptyList()
         flushRoads()
@@ -5637,7 +5653,53 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     /** The battery level or the charge to arrive with changed on the route options: look again for a charging stop. */
-    fun refreshEvPlan() { val r = route ?: return; fuelSuggestion = null; suggestFuel(r) }
+    fun refreshEvPlan() { val r = route ?: return; fuelSuggestion = null; chargePlan = emptyList(); suggestFuel(r) }
+
+    /** Fork FR : la meilleure borne entre a et b (m le long du trajet), en partant de pos avec pct % de batterie. */
+    private fun findCharger(r: Route, a: Double, b: Double, pos: Double, pct: Double, cons: Double, batt: Double): Nearby? {
+        val out = ArrayList<Nearby>()
+        if (hasKey && online()) {
+            val line = RouteExtras.line(r, a, b, 800.0, 140)
+            try {
+                for ((n, secs) in TomTomRest.poiAlong(apiKey, "charging", line, 600)) {
+                    val pr = RouteExtras.project(r, n.place.pos, 3000.0) ?: continue
+                    if (pr.first < a - 3000.0 || pr.first > b + 3000.0) continue
+                    out += n.copy(dist = pr.first, detourMin = if (secs >= 0) Math.round(secs / 60.0).toInt() else detour(pr.second), ahead = true)
+                }
+            } catch (e: Exception) { }
+        }
+        if (out.isEmpty() && online()) {
+            val line = RouteExtras.line(r, a, b, 1500.0, 45)
+            try {
+                for (n in Overpass.nearbyAlong("charging", line, 900)) {
+                    val pr = RouteExtras.project(r, n.place.pos, 1200.0) ?: continue
+                    if (pr.first in a..b) out += n.copy(dist = pr.first, detourMin = detour(pr.second), ahead = true)
+                }
+            } catch (e: Exception) { }
+        }
+        // la borne choisie selon sa puissance, ses places libres maintenant et sa position (plus loin = moins d'arrêts),
+        // pas seulement le plus petit détour. Les 8 plus proches du trajet sont comparées.
+        fun kwOf(n: Nearby) = Regex("(\\d+) kW").find(n.extra)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+        val cands = out.filter { it.detourMin >= 0 }.sortedBy { it.detourMin }.take(8)
+        val freeMap = if (hasKey) cands.filter { it.chargeId.isNotBlank() }.associate { it.chargeId to TomTomRest.chargingFree(apiKey, it.chargeId) } else emptyMap()
+        fun score(n: Nearby): Double {
+            val kw = kwOf(n)
+            val fr = freeMap[n.chargeId]
+            return n.detourMin +
+                (if (kw <= 0.0) 6.0 else if (kw < 50.0) 25.0 else if (kw < 100.0) 5.0 else 0.0) +
+                (if (fr == null) 3.0 else if (fr.first == 0) 30.0 else 0.0) -
+                ((n.dist - a) / max(1.0, b - a)).coerceIn(0.0, 1.0) * 6.0
+        }
+        val n = cands.minByOrNull { score(it) } ?: return null
+        val arr = Math.round(pct - (n.dist - pos) / 1000.0 * cons / batt * 100.0).toInt().coerceAtLeast(0)
+        val kw = kwOf(n)
+        // puissance moyenne réelle jusqu'à 80 % : environ 70 % de la puissance de la borne, limitée à ce que la voiture accepte
+        val rate = (if (kw > 0.0) min(kw, evMaxKw()) else 50.0) * 0.7
+        val mins = Math.round((80 - arr).coerceAtLeast(10) / 100.0 * batt / rate * 60.0).toInt()
+        val freeNow = (freeMap[n.chargeId]?.let { (f, t) -> " · $f sur $t libres maintenant" } ?: "") +
+            (if (detectedCountry.equals("FR", true)) IrvePrice.near(n.place.pos).takeIf { it.isNotBlank() }?.let { " · $it" } ?: "" else "")
+        return n.copy(extra = "arrivée vers $arr %" + (if (kw > 0.0) " · ${Math.round(kw)} kW" else "") + " · charge à 80 %, environ $mins min$freeNow")
+    }
 
     private fun suggestFuel(r: Route) {
         val fuel = prefs.s(PreferenceKeys.FUEL_TYPE, "E10")
@@ -5646,57 +5708,34 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // electric: a charger before the battery gets down to the charge you want to keep (Settings > Fuel), with the shortest
         // detour, and how much you'll have when you get there. Only when the trip needs one.
         if (fuel == "EV") {
+            // fork FR : autant d'arrêts que le trajet en demande (comme ABRP), pas un seul : on avance de borne en borne, en
+            // rechargeant à 80 % à chacune, jusqu'à pouvoir finir le trajet avec la charge à garder (Réglages › Carburant)
             val cons = evKwhPerKm(); val batt = evBatteryKwh()
             val startPct = prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80).coerceIn(1, 100); val minPct = prefs.i(PreferenceKeys.EV_MIN_ARRIVE, 20).coerceIn(0, 60)
-            val rangeM = max(0.0, (startPct - minPct) / 100.0 * batt / cons * 1000.0)
-            if (r.len <= rangeM) { fuelSuggestion = null; return }
-            a = max(5_000.0, rangeM * 0.5); b = max(a + 5_000.0, rangeM * 0.92)
+            val target = 80.0
+            fun rangeOf(pct: Double) = max(0.0, (pct - minPct) / 100.0 * batt / cons * 1000.0)
+            if (r.len <= rangeOf(startPct.toDouble())) { fuelSuggestion = null; chargePlan = emptyList(); return }
+            val planned = chargeVias.mapNotNull { RouteExtras.project(r, it, 300.0)?.first }.sorted()
             scope.launch {
-                val best = withContext(Dispatchers.IO) {
+                val plan = withContext(Dispatchers.IO) {
+                    val legs = ArrayList<Nearby>()
                     try {
-                        val out = ArrayList<Nearby>()
-                        if (hasKey && online()) {
-                            val line = RouteExtras.line(r, a, b, 800.0, 140)
-                            try {
-                                for ((n, secs) in TomTomRest.poiAlong(apiKey, "charging", line, 600)) {
-                                    val pr = RouteExtras.project(r, n.place.pos, 3000.0) ?: continue
-                                    out += n.copy(dist = pr.first, detourMin = if (secs >= 0) Math.round(secs / 60.0).toInt() else detour(pr.second), ahead = true)
-                                }
-                            } catch (e: Exception) { }
+                        var pos = 0.0; var pct = startPct.toDouble(); var guard = 0
+                        while (guard++ < 12) {
+                            val rng = rangeOf(pct)
+                            if (r.len - pos <= rng) break
+                            // un arrêt recharge déjà ajouté à portée : on y recharge
+                            val ex = planned.filter { it > pos + 1000.0 && it <= pos + rng }.maxOrNull()
+                            if (ex != null) { pos = ex; pct = target; continue }
+                            val a1 = pos + max(5_000.0, rng * 0.5); val b1 = max(a1 + 5_000.0, pos + rng * 0.92)
+                            val n = findCharger(r, a1, b1, pos, pct, cons, batt) ?: break
+                            legs += n
+                            pos = n.dist; pct = target
                         }
-                        if (out.isEmpty() && online()) {
-                            val line = RouteExtras.line(r, a, b, 1500.0, 45)
-                            for (n in Overpass.nearbyAlong("charging", line, 900)) {
-                                val pr = RouteExtras.project(r, n.place.pos, 1200.0) ?: continue
-                                if (pr.first in a..b) out += n.copy(dist = pr.first, detourMin = detour(pr.second), ahead = true)
-                            }
-                        }
-                        // fork FR : la borne choisie selon sa puissance, ses places libres maintenant et sa position (plus loin = moins
-                        // d'arrêts), pas seulement le plus petit détour. Les 8 plus proches du trajet sont comparées.
-                        fun kwOf(n: Nearby) = Regex("(\\d+) kW").find(n.extra)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
-                        val cands = out.filter { it.detourMin >= 0 }.sortedBy { it.detourMin }.take(8)
-                        val freeMap = if (hasKey) cands.filter { it.chargeId.isNotBlank() }.associate { it.chargeId to TomTomRest.chargingFree(apiKey, it.chargeId) } else emptyMap()
-                        fun score(n: Nearby): Double {
-                            val kw = kwOf(n)
-                            val fr = freeMap[n.chargeId]
-                            return n.detourMin +
-                                (if (kw <= 0.0) 6.0 else if (kw < 50.0) 25.0 else if (kw < 100.0) 5.0 else 0.0) +
-                                (if (fr == null) 3.0 else if (fr.first == 0) 30.0 else 0.0) -
-                                ((n.dist - a) / max(1.0, b - a)).coerceIn(0.0, 1.0) * 6.0
-                        }
-                        cands.minByOrNull { score(it) }?.let { n ->
-                            val arr = Math.round(startPct - n.dist / 1000.0 * cons / batt * 100.0).toInt().coerceAtLeast(0)
-                            val kw = kwOf(n)
-                            // puissance moyenne réelle jusqu'à 80 % : environ 70 % de la puissance de la borne, limitée à ce que la voiture accepte
-                            val rate = (if (kw > 0.0) min(kw, evMaxKw()) else 50.0) * 0.7
-                            val mins = Math.round((80 - arr).coerceAtLeast(10) / 100.0 * batt / rate * 60.0).toInt()
-                            val freeNow = (freeMap[n.chargeId]?.let { (f, t) -> " · $f sur $t libres maintenant" } ?: "") +
-                                (if (detectedCountry.equals("FR", true)) IrvePrice.near(n.place.pos).takeIf { it.isNotBlank() }?.let { " · $it" } ?: "" else "")
-                            n.copy(extra = "arrivée vers $arr %" + (if (kw > 0.0) " · ${Math.round(kw)} kW" else "") + " · charge à 80 %, environ $mins min$freeNow")
-                        }
-                    } catch (e: Exception) { null }
+                    } catch (e: Exception) { }
+                    legs
                 }
-                if (route === r) fuelSuggestion = best
+                if (route === r) { chargePlan = plan; fuelSuggestion = plan.firstOrNull() }
             }
             return
         }

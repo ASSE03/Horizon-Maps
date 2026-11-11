@@ -536,6 +536,26 @@ fun PlannedCard(engine: NavEngine) {
 fun FuelSuggestionRow(engine: NavEngine) {
     val n = engine.fuelSuggestion ?: return
     val c = LocalVw.current
+    // fork FR : un long trajet en électrique : tous les arrêts recharge nécessaires, ajoutés d'un coup
+    val plan = engine.chargePlan
+    if (plan.size > 1) {
+        Column(
+            Modifier.floating(26.dp).padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 8.dp).widthIn(max = 640.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text("${plan.size} arrêts recharge", color = Good, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            plan.forEachIndexed { i, s ->
+                Text(
+                    "${i + 1}. " + s.place.name + " · à " + Geo.fmtDist(s.dist, engine.imperial) + (if (s.detourMin >= 0) " · +${s.detourMin} min" else "") + (if (s.extra.startsWith("arrivée")) " · " + s.extra else ""),
+                    color = c.text, fontSize = 13.sp, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Row(Modifier.align(Alignment.End)) {
+                Pill("Ajouter les ${plan.size} arrêts", false, { engine.addChargePlan(plan.map { it.place }) })
+            }
+        }
+        return
+    }
     // fork FR : le texte sur toute la largeur, le bouton en dessous (côte à côte, le texte était coupé en portrait)
     Column(
         Modifier.floating(26.dp).padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 8.dp).widthIn(max = 640.dp),
