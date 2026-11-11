@@ -527,10 +527,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val with = prefs.s(PreferenceKeys.SEARCHWITH, "auto")
         val tomtomOk = hasKey && refusedKey != apiKey && System.currentTimeMillis() >= ttDownUntil
         if (tomtomOk && (with == "tomtom" || (with == "auto") || !hasMapbox)) {
+            // fork FR : Mapbox est interrogé en même temps que TomTom (et plus seulement après) : une seconde de gagnée quand
+            // TomTom trouve peu de résultats
+            val mbF = if (hasMapbox) java.util.concurrent.CompletableFuture.supplyAsync { try { MapboxRest.geocode(mbToken, country, q, near) } catch (e: Exception) { emptyList<Place>() } } else null
             val tt = try { TomTomRest.geocode(apiKey, country, q, near) } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; null }
             if (tt != null && (tt.size >= 4 || !hasMapbox)) return tt
             if (!hasMapbox) return tt ?: OsmSearch.geocode(country, q, near)
-            val mb = try { MapboxRest.geocode(mbToken, country, q, near) } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; emptyList() }
+            val mb = try { mbF?.get(6, java.util.concurrent.TimeUnit.SECONDS) ?: emptyList() } catch (e: Exception) { emptyList() }
             val out = ArrayList(tt ?: emptyList())
             for (p in mb) if (out.none { (it.name.equals(p.name, true) && Geo.dist(it.pos, p.pos) < 80) || Geo.dist(it.pos, p.pos) < 15 }) out += p
             return out
@@ -1873,8 +1876,22 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val localJob = async { offlineMatches(q, near) }
             val pcJob = postcodeJob(q)
             val banJob = async(Dispatchers.IO) { banSearch(q, near) }
-            val net0 = try { withContext(Dispatchers.IO) { netGeocode(countryCode(), q, near) } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
-            val net = withBan(q, net0, kotlinx.coroutines.withTimeoutOrNull(4000L) { banJob.await() } ?: emptyList())
+            val netJob = async(Dispatchers.IO) { try { netGeocode(countryCode(), q, near) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null } }
+            // fork FR : les résultats s'affichent dès qu'une source répond (BAN, TomTom/Mapbox, lieux enregistrés), puis se complètent,
+            // au lieu d'attendre la plus lente
+            val t0 = System.currentTimeMillis()
+            while (!(netJob.isCompleted && (banJob.isCompleted || System.currentTimeMillis() - t0 > 4000L))) {
+                val part = (if (netJob.isCompleted) netJob.await() else null) ?: emptyList()
+                val ban = if (banJob.isCompleted) banJob.await() else emptyList()
+                val loc = if (localJob.isCompleted) localJob.await() else emptyList()
+                if (part.isNotEmpty() || ban.isNotEmpty() || loc.isNotEmpty()) {
+                    val now = rankResults(q, near, withBan(q, part, ban) ?: emptyList(), loc)
+                    if (now.isNotEmpty() && now != results) results = now
+                }
+                delay(120)
+            }
+            val net0 = netJob.await()
+            val net = withBan(q, net0, if (banJob.isCompleted) banJob.await() else emptyList())
             // the online results are shown straight away if the downloaded lists are still being searched; those are merged in after
             var local = kotlinx.coroutines.withTimeoutOrNull(500L) { localJob.await() }
             if (local == null) {
