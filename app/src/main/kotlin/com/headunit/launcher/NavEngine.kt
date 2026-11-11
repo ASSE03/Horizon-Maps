@@ -1822,7 +1822,29 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         fun d(p: Place) = if (near != null) Geo.dist(near, p.pos) else 0.0
         val top = all.filter { strong(it.first) }.sortedBy { d(it.first) }
         val rest = all.filter { !strong(it.first) }.sortedBy { it.second }
-        return (top + rest).map { it.first }.take(15)
+        return dedupe((top + rest).map { it.first }).take(15)
+    }
+
+    /**
+     * Fork FR : un même magasin donné par plusieurs sources (« Carrefour » et « Carrefour Market » au même endroit, ou la même adresse
+     * deux fois) n'apparaît qu'une fois. On garde le mieux classé, avec l'adresse la plus complète des deux.
+     */
+    private fun dedupe(list: List<Place>): List<Place> {
+        fun norm(x: String) = java.text.Normalizer.normalize(x.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+            .replace(Regex("[^a-z0-9 ]"), " ").replace(Regex(" +"), " ").trim()
+        fun poor(sub: String) = sub.isBlank() || sub.equals("France", true)
+        val out = ArrayList<Place>()
+        for (p in list) {
+            val pn = norm(p.name); val ps = norm(p.sub)
+            val i = out.indexOfFirst { k ->
+                val kn = norm(k.name); val d = Geo.dist(k.pos, p.pos)
+                val sameName = kn == pn || pn.startsWith("$kn ") || kn.startsWith("$pn ")
+                (sameName && d < 400.0) || (ps.isNotBlank() && !poor(p.sub) && norm(k.sub) == ps && d < 150.0 && (sameName || kn.split(" ").firstOrNull() == pn.split(" ").firstOrNull()))
+            }
+            if (i < 0) out += p
+            else if (poor(out[i].sub) && !poor(p.sub)) out[i] = out[i].copy(sub = p.sub)
+        }
+        return out
     }
 
     fun search(q: String) {
