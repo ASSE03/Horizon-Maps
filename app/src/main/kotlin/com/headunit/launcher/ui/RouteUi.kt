@@ -182,7 +182,9 @@ fun RouteBar(engine: NavEngine, modifier: Modifier = Modifier, thin: Boolean = f
             if (x - lastX < 22f) continue
             lastX = x
             Box(
-                Modifier.offset(x = (w * f - dot / 2).coerceIn(0.dp, w - dot), y = 0.dp).size(dot).shadow(3.dp, CircleShape).clip(CircleShape).background(Color.White),
+                Modifier.offset(x = (w * f - dot / 2).coerceIn(0.dp, w - dot), y = 0.dp).size(dot).shadow(3.dp, CircleShape).clip(CircleShape).background(Color.White)
+                    // fork FR : une borne : la toucher donne son nom, son adresse, la batterie en y arrivant et la recharge prévue
+                    .then(if (e.kind == "charge") Modifier.clickable { engine.showChargeStop(e.off) } else Modifier),
                 contentAlignment = Alignment.Center,
             ) { Icon(barIcon(e.kind), null, tint = barColor(e.kind), modifier = Modifier.size(dot * 0.65f)) }
         }
@@ -551,7 +553,7 @@ fun FuelSuggestionRow(engine: NavEngine) {
                 )
             }
             Row(Modifier.align(Alignment.End)) {
-                Pill("Ajouter les ${plan.size} arrêts", false, { engine.addChargePlan(plan.map { it.place }) })
+                Pill("Ajouter les ${plan.size} arrêts", false, { engine.addChargePlanN(plan) })
             }
         }
         return
@@ -567,7 +569,7 @@ fun FuelSuggestionRow(engine: NavEngine) {
             color = c.text, fontSize = 13.sp, maxLines = 5, overflow = TextOverflow.Ellipsis,
         )
         Row(Modifier.align(Alignment.End)) {
-            Pill("Ajouter une étape", false, { engine.addChargeStop(n.place); engine.fuelSuggestion = null })
+            Pill("Ajouter une étape", false, { engine.addChargeStop(n); engine.fuelSuggestion = null })
         }
     }
 }

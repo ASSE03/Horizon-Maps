@@ -316,8 +316,10 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) {
                     enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180)) + androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(240)) { if (settings) it / 2 else -it / 2 },
                     exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200)),
                 ) {
+                    // fork FR : un message sur plusieurs lignes (la fiche d'une borne) : des coins arrondis plutôt qu'une pilule
+                    val msgShape = if ((lastMsg.value ?: "").contains('\n')) RoundedCornerShape(22.dp) else RoundedCornerShape(50)
                     Box(
-                        Modifier.shadow(10.dp, RoundedCornerShape(50)).clip(RoundedCornerShape(50)).background(navVw(c).surface).border(1.dp, navVw(c).line, RoundedCornerShape(50)).padding(horizontal = 22.dp, vertical = 11.dp),
+                        Modifier.shadow(10.dp, msgShape).clip(msgShape).background(navVw(c).surface).border(1.dp, navVw(c).line, msgShape).padding(horizontal = 22.dp, vertical = 11.dp),
                     ) { Text(lastMsg.value ?: "", color = navVw(c).text, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium) }
                 }
                 // alerts (camera, speed limit, incident, rain, break) get a large banner that is hard to miss

@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Fiche d'une borne sur la barre du trajet : touchez l'icône d'un arrêt recharge pour voir le nom de la station, son adresse, la distance, la batterie estimée en y arrivant et le temps de recharge prévu jusqu'à 80 % (avec sa puissance).
 - Ajouter une étape le long du trajet : en ajoutant une étape, « Voir le long de votre itinéraire » (ou la touche recherche du clavier) montre sur la carte tous les résultats le long du reste du trajet, chacun avec le temps qu'il ajoute, dans un panneau trié par Moindre détour, Le plus tôt ou Le plus proche, avec la distance devant et l'écart au tracé. Touchez-en un, puis Ajouter comme étape. Sur Android Auto, c'est une liste triée par détour.
 - Retard sur les bouchons : chaque bouchon d'une minute ou plus sur votre itinéraire porte une petite pastille « +8 min » à son début, rouge pour un trafic dense, orange pour un trafic ralenti. Pendant le choix de l'itinéraire, ceux des autres itinéraires s'affichent aussi, atténués. Chacune disparaît une fois passée.
 - Changement de limitation à votre façon : Réglages › Alertes › Vitesse › Comment : bip et voix, voix seule ou bip seul. Avec les deux, la voix attend la fin du bip pour ne pas être couverte.

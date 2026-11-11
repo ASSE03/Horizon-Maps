@@ -1321,6 +1321,40 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Fork FR : les étapes ajoutées comme arrêt recharge (proposé par l'appli), pour la carte, la barre et la batterie. */
     var chargeVias: List<LL> = emptyList()
     fun addChargeStop(p: Place) { if (isEv) chargeVias = chargeVias + p.pos; addStop(p) }
+    /** Fork FR : la borne proposée (nom, adresse, puissance) de chaque arrêt recharge ajouté, pour l'afficher en touchant son icône. */
+    private val chargeInfo = java.util.concurrent.ConcurrentHashMap<String, Nearby>()
+    private fun ckey(p: LL) = String.format(java.util.Locale.US, "%.4f,%.4f", p.lat, p.lon)
+    fun addChargeStop(n: Nearby) { chargeInfo[ckey(n.place.pos)] = n; addChargeStop(n.place) }
+    fun addChargePlanN(plan: List<Nearby>) { for (n in plan) chargeInfo[ckey(n.place.pos)] = n; addChargePlan(plan.map { it.place }) }
+
+    /** Fork FR : en touchant une borne de la barre du trajet : son nom, où elle est, la batterie en y arrivant et la recharge prévue. */
+    fun showChargeStop(off: Double) {
+        val r = route ?: return
+        val stops = chargeVias.mapNotNull { p -> RouteExtras.project(r, p, 300.0)?.let { it.first to p } }.sortedBy { it.first }
+        val hit = stops.minByOrNull { kotlin.math.abs(it.first - off) } ?: return
+        val placeOf = via.firstOrNull { Geo.dist(it.pos, hit.second) < 30.0 }
+        val info = chargeInfo[ckey(hit.second)]
+        val name = info?.place?.name ?: placeOf?.name ?: "Borne"
+        val where = (info?.place?.sub ?: placeOf?.sub ?: "").takeIf { it.isNotBlank() }
+        val cons = evKwhPerKm(); val batt = evBatteryKwh()
+        // la batterie en y arrivant : depuis maintenant, avec une recharge à 80 % à chaque borne d'avant
+        var pct = (evNowPct() ?: prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80)).toDouble(); var pos = curProg
+        for ((o, _) in stops) {
+            if (o <= curProg + 50.0) continue
+            pct -= (o - pos) / 1000.0 * cons / batt * 100.0; pos = o
+            if (o == hit.first) break
+            pct = 80.0
+        }
+        val arr = Math.round(pct).toInt()
+        val kw = info?.let { Regex("(\\d+) kW").find(it.extra)?.groupValues?.get(1)?.toDoubleOrNull() } ?: 0.0
+        val rate = (if (kw > 0.0) min(kw, evMaxKw()) else 50.0) * 0.7
+        val mins = Math.round((80 - arr).coerceAtLeast(5) / 100.0 * batt / rate * 60.0).toInt()
+        val ahead = hit.first - curProg
+        val txt = "⚡ $name" + (if (where != null) "\n$where" else "") +
+            "\n" + (if (ahead > 50.0) "Dans ${Geo.fmtDist(ahead, imperial)} · " else "") + "arrivée vers $arr %" +
+            "\nRecharge à 80 % : environ $mins min" + (if (kw > 0.0) " (${Math.round(kw)} kW)" else "")
+        toast(txt, 8000)
+    }
 
     /** Fork FR : ajoute d'un coup tous les arrêts recharge proposés, rangés avec les étapes déjà prévues dans l'ordre du trajet. */
     fun addChargePlan(stops: List<Place>) {
