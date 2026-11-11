@@ -3,7 +3,7 @@ name: Build Horizon Nav FR
 # Builds the French version straight from the sources in this repository (the original workflow built from HorizonNav.zip).
 # Every push to main that touches the app builds the APK and publishes it on the "app" release (the in-app updater finds it). Run it by hand with
 # "publish" ticked to put it on the "app" release, where the app's built-in updater looks for new versions.
-# (fork FR : relancé si GitHub refuse la création de la release)
+# (fork FR : relancé si GitHub refuse la création de la release, ou si la compilation reste en attente)
 on:
   push:
     branches: [main]
