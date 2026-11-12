@@ -4,8 +4,4 @@ jobs:
   t:
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          set +e
-          Q='[out:json][timeout:25];(node["highway"="street_lamp"](45.24,4.56,45.32,4.68);way["highway"]["lit"~"^(yes|no)$"](45.24,4.56,45.32,4.68););out count;'
-          curl -s -m 90 -A "HorizonNav/1.0 (Android navigation app)" -o o.json --data-urlencode "data=$Q" https://maps.mail.ru/osm/tools/overpass/api/interpreter
-          python3 -c "import json;print('COMPTE', json.load(open('o.json'))['elements'][0]['tags'])"
+      - run: echo bonjour
