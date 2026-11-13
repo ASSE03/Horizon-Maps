@@ -46,6 +46,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Park
 import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.DirectionsWalk
@@ -335,7 +337,14 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
             railItems.add(@Composable { ImmIcon(Icons.Rounded.Layers, { sheet = !sheet }, active = sheet, desc = "Options de la carte") })
             // navigating: other ways to go, any time (as in Google Maps): shown in grey on the map with how they compare, tap one to switch
             if (routing) railItems.add(@Composable { ImmIcon(Icons.Rounded.AltRoute, { engine.findAlternatives() }, desc = "Autres itinéraires") })
-            if (!simple && (engine.prefs.b(PreferenceKeys.DEMO, false) || engine.simMode != 0)) railItems.add(@Composable { ImmIcon(Icons.Rounded.PlayArrow, { engine.cycleSim() }, active = engine.simMode != 0, desc = "Trajet de démo") })
+            // the demo drive: play to start it; while it plays, its speed (tap for 1x / 2x / 4x), skip to the next turn, and stop
+            if (engine.simMode != 0) {
+                railItems.add(@Composable {
+                    ImmCircle({ engine.cycleSimSpeed() }, 52.dp, true) { Text("${engine.simMode}×", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+                })
+                railItems.add(@Composable { ImmIcon(Icons.Rounded.SkipNext, { engine.skipTurn() }, desc = "Passer au prochain virage") })
+                railItems.add(@Composable { ImmIcon(Icons.Rounded.Stop, { engine.stopSim() }, desc = "Arrêter la démo") })
+            } else if (!simple && engine.prefs.b(PreferenceKeys.DEMO, false)) railItems.add(@Composable { ImmIcon(Icons.Rounded.PlayArrow, { engine.cycleSim() }, desc = "Trajet de démo") })
             // zoom: hidden while the map is following you on the move (it zooms itself); back as soon as you touch or zoom the map, or
             // whenever you're stopped. (A little hysteresis on the speed, so it doesn't flicker at walking pace.)
             var stopped by remember { mutableStateOf(true) }

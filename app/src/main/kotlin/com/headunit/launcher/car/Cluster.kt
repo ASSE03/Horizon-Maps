@@ -79,7 +79,7 @@ class ClusterSurface(private val carContext: CarContext) : SurfaceCallback {
     private val owner = CarComposeOwner()
     @Volatile private var closing = false
 
-    private val prefs: Prefs get() = Prefs(carContext.applicationContext)
+    private val prefs: Prefs by lazy { Prefs(carContext.applicationContext) }
 
     override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
         // switched off in the car's settings: nothing is drawn (Android Auto shows its own plain screen)
@@ -112,10 +112,24 @@ class ClusterSurface(private val carContext: CarContext) : SurfaceCallback {
             m.lampsEnabled(false)
             m.setExtras(false, false, false, false, false, false, false)
             m.setTheme("immersive")
+            arrowSet = -1
             val root = FrameLayout(p.context)
             root.addView(m.mapView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             root.addView(m.roadView, FrameLayout.LayoutParams(1, 1))
             root.addView(m.locatorView, FrameLayout.LayoutParams(1, 1))
+            // the trip bar at the bottom centre (time left · distance · arrival, as Google Maps has), only with a route
+            val tv = android.widget.TextView(p.context).apply {
+                setTextColor(android.graphics.Color.WHITE)
+                setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 13f)
+                typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                val padH = (12 * dens).toInt(); val padV = (4 * dens).toInt()
+                setPadding(padH, padV, padH, padV)
+                maxLines = 1
+                background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 100f * dens; setColor(0xD910151D.toInt()) }
+                visibility = android.view.View.GONE
+            }
+            root.addView(tv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL).apply { bottomMargin = (8 * dens).toInt() })
+            tripBar = tv; barDens = dens
             owner.start()
             root.setViewTreeLifecycleOwner(owner)
             root.setViewTreeSavedStateRegistryOwner(owner)
@@ -141,7 +155,21 @@ class ClusterSurface(private val carContext: CarContext) : SurfaceCallback {
         if (visibleArea.width() <= width * 0.3 || visibleArea.height() <= height * 0.3) return
         m.viewInset = Rect(visibleArea.left.coerceAtLeast(0), visibleArea.top.coerceAtLeast(0),
             (width - visibleArea.right).coerceAtLeast(0), (height - visibleArea.bottom).coerceAtLeast(0))
+        // the trip bar stays inside the part of the display the driver can see, centred on it
+        tripBar?.let { tv ->
+            try {
+                val lp = tv.layoutParams as FrameLayout.LayoutParams
+                lp.bottomMargin = (height - visibleArea.bottom).coerceAtLeast(0) + (8 * barDens).toInt()
+                val shift = (visibleArea.left.coerceAtLeast(0) - (width - visibleArea.right).coerceAtLeast(0)) / 2
+                lp.leftMargin = shift.coerceAtLeast(0); lp.rightMargin = (-shift).coerceAtLeast(0)
+                tv.layoutParams = lp
+            } catch (e: Exception) { }
+        }
     }
+    private var tripBar: android.widget.TextView? = null
+    private var barDens = 1f
+    private var barText = ""
+    private var barAt = 0L
 
     override fun onStableAreaChanged(stableArea: Rect) {}
 
@@ -174,10 +202,38 @@ class ClusterSurface(private val carContext: CarContext) : SurfaceCallback {
             routeShown = route
             try { m.setRoute(route, emptyList()) } catch (x: Exception) { }
         }
+        // the arrow follows the car screen's Arrow size (it used to stay at the map's own, much bigger, size on the driver's display)
+        val arrowPct = prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(30, 180)
+        if (arrowPct != arrowSet) { arrowSet = arrowPct; try { m.setArrowScale(1.2f * arrowPct / 100f) } catch (x: Exception) { } }
         m.setMe(pos, bearing, 0)
-        // a little closer when there's a route (the next turn matters more on a small screen), further out when just driving
-        m.cameraSet(pos, bearing, 40.0, if (route.isNotEmpty()) 16.2 else 15.6, 0.35, 0.0)
+        // further out than before (it was too close to be much use, GitHub), a little closer with a route for the next turn, easing out
+        // at speed so there's more road ahead, and Closer / Further from the car's settings
+        val kmh = (e?.fix?.speed ?: 0.0) * 3.6
+        val speedOut = ((kmh - 50.0) / 70.0).coerceIn(0.0, 1.0) * 0.8
+        val user = prefs.i(PreferenceKeys.CLUSTER_ZOOM, 0).coerceIn(-2, 1) * 0.7
+        val target = (if (route.isNotEmpty()) 15.1 else 14.7) - speedOut + user
+        // eased, so the speed part doesn't make the map breathe in and out
+        zoomNow = if (zoomNow < 0) target else zoomNow + (target - zoomNow) * 0.05
+        m.cameraSet(pos, bearing, 40.0, zoomNow, 0.35, 0.0)
+        updateTripBar(e, route.isNotEmpty())
     }
+
+    /** Time left · distance · arrival, refreshed once a second (the text only changes when the numbers do). */
+    private fun updateTripBar(e: NavEngine?, routing: Boolean) {
+        val tv = tripBar ?: return
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - barAt < 1000L) return
+        barAt = now
+        val eta = if (routing) e?.eta else null
+        val t = if (eta == null) "" else try {
+            listOf(com.headunit.launcher.Geo.fmtDur(eta.secs), com.headunit.launcher.Geo.fmtDist(eta.dist, e?.imperial == true), eta.arrive).joinToString(" · ")
+        } catch (x: Exception) { "" }
+        if (t == barText) return
+        barText = t
+        if (t.isEmpty()) tv.visibility = android.view.View.GONE else { tv.text = t; tv.visibility = android.view.View.VISIBLE }
+    }
+    private var arrowSet = -1
+    private var zoomNow = -1.0
 
     /** Where you were last, from the phone's saved start position (for when the main car screen isn't running). */
     private fun lastKnown(): LL? = try {
@@ -194,6 +250,6 @@ class ClusterSurface(private val carContext: CarContext) : SurfaceCallback {
         try { presentation?.dismiss() } catch (e: Throwable) { }
         try { display?.release() } catch (e: Throwable) { }
         try { owner.stop() } catch (e: Throwable) { }
-        map = null; presentation = null; display = null
+        map = null; presentation = null; display = null; tripBar = null
     }
 }

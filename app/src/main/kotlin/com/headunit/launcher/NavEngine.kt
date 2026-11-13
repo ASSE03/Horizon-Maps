@@ -1001,7 +1001,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // Headlights (and the car screen following the car): only the lights decide, so a tunnel at midday goes properly dark and
         // coming out goes straight back to day. The sun's dawn and dusk light is left out, as it would tint the map whatever the
         // lights say. (Until the head unit has been seen switching with the lights, sun times stand in, so dark already follows them.)
-        if (theme == "lights" || (isCar && prefs.s(PreferenceKeys.CARTHEME, "car") == "car")) return if (dark) "night" else "day"
+        if (theme == "lights" || (isCar && prefs.s(PreferenceKeys.CARTHEME, "sun").let { it == "car" || it == "phone" })) return if (dark) "night" else "day"
         val pos = fix?.pos ?: prefs.s(PreferenceKeys.LASTLAT, "").toDoubleOrNull()?.let { la -> prefs.s(PreferenceKeys.LASTLON, "").toDoubleOrNull()?.let { lo -> LL(la, lo) } }
         val ph = pos?.let { Sun.phase(it.lat, it.lon, System.currentTimeMillis()) } ?: ""
         return when {
@@ -1184,7 +1184,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             scope.launch { tempHere = withContext(Dispatchers.IO) { Weather.fetch(cur) } ?: tempHere }
         }
         // current weather is only used for the rain effect on the map, so it is only fetched when that is switched on
-        if (prefs.b(PreferenceKeys.RAIN_EFFECTS, false) && now - weatherAt > 20 * 60 * 1000L) {
+        // (every 10 minutes: showers come and go quicker than the 20 it used to be)
+        if (prefs.b(PreferenceKeys.RAIN_EFFECTS, false) && now - weatherAt > 10 * 60 * 1000L) {
             weatherAt = now
             scope.launch { weather = withContext(Dispatchers.IO) { Weather.fetch(cur) } ?: weather }
         }
@@ -1232,6 +1233,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    /** A sample beep, at the chime volume just set (Settings). */
+    fun testChime() { if (soundMode != 2) guidanceBeep(false) }
+
     // one tone generator, kept and reused: making a new one for every beep leaked audio resources and caused hiccups over time
     private var toneGen: android.media.ToneGenerator? = null
     private fun chime(tone: Int = android.media.ToneGenerator.TONE_PROP_ACK) {
@@ -1239,11 +1243,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // on Android Auto the phone's media sound only reaches the car's speakers while Android Auto is the car's sound source
         // (with the radio or the car's own music on, the speeding beep was never heard): there it goes out on the navigation
         // channel instead, like the spoken directions, which plays over whatever is on
-        if (isCar) { guidanceBeep(tone == android.media.ToneGenerator.TONE_PROP_BEEP2); return }
-        try {
-            val g = toneGen ?: android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 100).also { toneGen = it }
-            g.startTone(tone, 250)
-        } catch (e: Exception) { toneGen = null }
+        // The head unit too now (Reddit): its chimes went out on the music channel at full strength, so the head unit's volume knob
+        // only reached them while music was the thing playing, and they were too short to catch. They now go on the same channel as
+        // the spoken directions (Settings > Sound & voice > Voice channel), so turning the voice down turns them down too, and at
+        // the strength set by "Chime volume"
+        guidanceBeep(tone == android.media.ToneGenerator.TONE_PROP_BEEP2)
     }
 
     // the beep's sound, made once: a short 1 kHz tone (twice for a warning), faded in and out so it doesn't click
@@ -1265,7 +1269,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private val beepDouble by lazy { beepPcm(true) }
     @Volatile private var beepBusy = false
 
-    /** A beep on the navigation channel (Android Auto), with the music lowered for it. */
+    /** A beep on the voice's channel (navigation, or media if chosen), with the music lowered for it. */
     private fun guidanceBeep(double: Boolean) {
         if (beepBusy) return
         beepBusy = true
@@ -1285,6 +1289,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     .setTransferMode(android.media.AudioTrack.MODE_STATIC).setBufferSizeInBytes(pcm.size * 2).build()
                 tr = t
                 t.write(pcm, 0, pcm.size)
+                // Settings > Sound & voice > Chime volume: compared with the spoken directions on the same channel
+                try { t.setVolume((prefs.i(PreferenceKeys.CHIME_VOL, 70).coerceIn(5, 100) / 100f)) } catch (e: Exception) { }
                 t.play()
                 delay(pcm.size * 1000L / 22050 + 250)
             } catch (e: Exception) {
@@ -2375,11 +2381,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val f = if (demoFrom != null && prefs.b(PreferenceKeys.DEMO, false) && r0 != null && r0.pts.size >= 2)
             Fix(r0.pts[0], Geo.bearing(r0.pts[0], r0.pts[1]), 0.0, 0.0) else fix
         if (f != null) onPosition(f, true)
-        else { updateGuidance(0.0); toast("Pas encore de position GPS. Utilisez le bouton lecture pour une démo.", 5000) }
+        else { updateGuidance(0.0); if (!demoNext) toast("Pas encore de position GPS. Utilisez le bouton lecture pour une démo.", 5000) }
         cardsForStartAlts()
         // fork FR : guidage lancé par « Démarrer » avec un départ de démo choisi : la vraie position est ignorée, la flèche restait
         // donc au départ sans bouger. La démo démarre d'elle-même
-        if (!isCar && demoFrom != null && prefs.b(PreferenceKeys.DEMO, false) && simMode == 0 && route != null) cycleSim()
+        // démo choisie sur l'écran des itinéraires (bouton Démo) : elle part tout de suite
+        if (demoNext) { demoNext = false; route?.let { r -> simMode = demoSpeed; startSim(r) } }
+        else if (!isCar && demoFrom != null && prefs.b(PreferenceKeys.DEMO, false) && simMode == 0 && route != null) cycleSim()
     }
 
     // ---- delay labels on the queues ("+8 min") ----
@@ -2510,6 +2518,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         shortRoute = false
         // fork FR : le départ de démo ne sert qu'à ce trajet (le suivant repart de votre position)
         demoFrom = null; pickDemoStart = false
+        demoNext = false
         // (only a trip under way: cancelling a route choice leaves the other screen's trip alone)
         if (route != null && !previewing) try { RouteSync.ended(this) } catch (e: Exception) { }
         itineraryOpen = false
@@ -3392,6 +3401,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var tZoom = 16.0
     private var tPad = 0.0
     private var tLeft = 0.0
+    /** The last sideways shift the cards called for on a wide screen (kept for "Keep the arrow to the side"). */
+    private var sideShiftSeen: Double? = null
     private var camTargetAt = 0L
     private var camReady = false
     private var camCatchUp = false
@@ -4051,6 +4062,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // (Android Auto too: there the outlines are measured within the part of the screen its own buttons leave clear)
         tLeft = if (!navigating && !previewing) idleShift(bottomCover > 0.0)
                 else if (bottomCover <= 0.0) arrowShift((1.0 + pad) / 2.0) else 0.0
+        // "Keep the arrow to the side" (GitHub): on a wide screen the arrow stays where the cards put it when they fold away, rather
+        // than gliding back to the middle (the side the cards were last on; at first the usual side for this screen)
+        if (bottomCover <= 0.0 && !stoppedOverview) {
+            if (abs(tLeft) > 0.06) sideShiftSeen = tLeft
+            else if (prefs.b(PreferenceKeys.ARROW_SIDE, false))
+                tLeft = sideShiftSeen ?: (if (mirrored && !isCar) -0.3 else 0.3)
+        }
         map.cardsMirrored = mirrored && !isCar // (Android Auto always has its cards on the left)
         camTargetAt = android.os.SystemClock.elapsedRealtime()
     }
@@ -5183,7 +5201,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val realSec = if (d < (if (fastRoad) 1900 else 1000) && !arriving) r.lanes.filter {
                 // a section has to run up to this junction: one ending well before it belongs to a junction on the way (an
                 // earlier slip road), and lit its exit lane as if that were the turn to take
-                progress < it.end + 5 && it.end > cur.off - 60 && it.end < cur.off + 200
+                progress < it.end + 5 && it.end > cur.off - 60 && it.end < cur.off + 200 &&
+                    // nor one that belongs to the turn after this (two roundabouts close together: the second one's lanes were shown
+                    // on the way into the first, Reddit)
+                    (nxt == null || nxt.off - cur.off < 15.0 || it.end < nxt.off - 10.0 || abs(it.end - cur.off) < abs(it.end - nxt.off))
             }.sortedWith(compareByDescending<LaneSec> { it.lanes.size }.thenBy { abs(it.end - cur.off) }).firstOrNull() else null
             // for the feedback report: the lane list in use, as the route data gives it (so a junction with the wrong arrows can be
             // traced to the data or the app)
@@ -5870,7 +5891,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     // ---- wrong way ----
     private fun checkWrongWay(p: Fix) {
-        if (simMode != 0 || !prefs.b(PreferenceKeys.WRONGWAY, true) || p.speed < 4.0 || (p.acc > 0 && p.acc > 20.0)) { wrongCount = 0; return }
+        // only with a sharp GPS fix, and not while the arrow is on your route (a route never sends you the wrong way down a road)
+        if (simMode != 0 || !prefs.b(PreferenceKeys.WRONGWAY, true) || p.speed < 4.0 || (p.acc > 0 && p.acc > 12.0) || (route != null && glideOnRoute)) { wrongCount = 0; return }
         // the check runs through every nearby road, so it's done in the background (it used to stall the screen once a second)
         if (wrongBusy) return
         wrongBusy = true
@@ -5885,7 +5907,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     private fun wrongResult() {
         val now = System.currentTimeMillis()
-        if (wrongCount >= 3 && now - wrongAt > 60_000L) {
+        if (wrongCount >= 4 && now - wrongAt > 60_000L) {
             wrongAt = now
             chime(android.media.ToneGenerator.TONE_PROP_BEEP2)
             raiseAlert("wrongway", "Contresens ! Cette route est à sens unique", 7000)
@@ -6321,6 +6343,28 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             4 -> chooseDemoSpeed(8)
             else -> stopSim()
         }
+    }
+
+    /** The demo's speed: 1x, 2x, 4x and back to 1x, without restarting it. */
+    fun cycleSimSpeed() { if (simMode != 0) chooseDemoSpeed(when (simMode) { 1 -> 2; 2 -> 4; 4 -> 8; else -> 1 }) }
+
+    /** "Demo" on the route choice: the countdown (or Start) then begins the trip as a demo drive. */
+    var demoNext by mutableStateOf(false)
+    fun toggleDemoNext() { demoNext = !demoNext }
+
+    /** Demo drive: jumps to about 250 m before the next turn (the one after, when you're already that close). */
+    fun skipTurn() {
+        val r = route ?: return
+        if (simMode == 0 || previewing) return
+        val next = r.steps.firstOrNull { it.off > simDist + 260.0 } ?: return
+        simDist = max(simDist, next.off - 250.0)
+        // a jump along the route on purpose: not mistaken for having left it (a far-off point on the route reads as a different
+        // road), and the arrow is put there straight away rather than gliding the whole way
+        trustProg = -1.0; offCount = 0
+        lastIdx = r.cum.indexOfFirst { it > simDist }.let { if (it <= 0) 0 else it - 1 }.coerceAtMost(max(0, r.pts.size - 2))
+        gPos = null
+        val (pt, hd) = pointAt(r, simDist)
+        onPosition(Fix(pt, hd, 13.0 * simMode, 0.0), false)
     }
 
     /** Fork FR : l'écran Android Auto a son propre moteur : la démo lancée sur le téléphone y tourne aussi, à la même vitesse. */

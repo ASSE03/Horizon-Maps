@@ -1448,5 +1448,18 @@ object I18nD {
         "{0} ahead" to listOf("след {0}"),
         "See them along your route" to listOf("Вижте ги по маршрута"),
         "On the map, with the time each adds" to listOf("На картата, с времето, което добавя всяко"),
+        "Same as your phone" to listOf("Като телефона ви"),
+        "Driver's display zoom" to listOf("Мащаб на дисплея на водача"),
+        "Furthest out" to listOf("Най-отдалечено"),
+        "Lights signal is reversed" to listOf("Сигналът за светлините е обърнат"),
+        "Turn on if it says on with your lights off" to listOf("Включете, ако показва „вкл.“ при изключени светлини"),
+        "Keep the arrow to the side" to listOf("Стрелката остава встрани"),
+        "When the cards fold away, instead of moving to the middle" to listOf("Когато картите се свият, вместо да се връща в средата"),
+        "Chime volume" to listOf("Сила на звуковите сигнали"),
+        "The beeps for speeding, limit changes and cameras, compared with the voice. Your head unit's volume, turned while it speaks, changes both" to listOf("Сигналите за превишена скорост, смяна на ограничението и камери, спрямо гласа. Силата на звука на уреда, променена докато говори, променя и двете"),
+        "Start demo drive" to listOf("Започни демо"),
+        "Skip to the next turn" to listOf("Към следващия завой"),
+        "Skip turn" to listOf("Следващ завой"),
+        "End demo" to listOf("Край на демото"),
     )
 }

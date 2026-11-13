@@ -5,13 +5,13 @@ import androidx.compose.runtime.setValue
 import java.util.Locale
 
 /**
- * The app's language: English, Dutch, German, French, Spanish, Italian, Portuguese, Polish, Thai, Japanese, Indonesian or Bulgarian. "auto" follows the phone (English when the phone's language
+ * The app's language: English, Dutch, German, French, Spanish, Italian, Portuguese, Polish, Thai, Japanese, Indonesian, Bulgarian or Slovenian. "auto" follows the phone (English when the phone's language
  * isn't one of these). Text is looked up by its English wording: [t] gives the phrase in the chosen language, with {0}, {1}…
  * filled in from the arguments; a phrase with no translation yet stays in English.
  */
 object L {
     val supported = listOf("en" to "English", "nl" to "Nederlands", "de" to "Deutsch", "fr" to "Français", "es" to "Español",
-        "it" to "Italiano", "pt" to "Português", "pl" to "Polski", "th" to "ไทย", "ja" to "日本語", "id" to "Bahasa Indonesia", "bg" to "Български")
+        "it" to "Italiano", "pt" to "Português", "pl" to "Polski", "th" to "ไทย", "ja" to "日本語", "id" to "Bahasa Indonesia", "bg" to "Български", "sl" to "Slovenščina")
 
     // (a Compose state: screens showing text redraw in the new language as soon as it's changed)
     var lang: String by androidx.compose.runtime.mutableStateOf(pick("auto"))
@@ -22,7 +22,7 @@ object L {
         "nl" -> Locale("nl", "NL"); "de" -> Locale.GERMANY; "fr" -> Locale.FRANCE; "es" -> Locale("es", "ES")
         "it" -> Locale.ITALY; "pl" -> Locale("pl", "PL")
         "th" -> Locale("th", "TH"); "ja" -> Locale.JAPAN; "id" -> Locale("id", "ID")
-        "bg" -> Locale("bg", "BG")
+        "bg" -> Locale("bg", "BG"); "sl" -> Locale("sl", "SI")
         // (Brazilian Portuguese on a Brazilian phone, Portugal's otherwise)
         "pt" -> Locale.getDefault().takeIf { it.language == "pt" } ?: Locale("pt", "PT")
         else -> Locale.getDefault().takeIf { it.language == "en" } ?: Locale.UK
@@ -207,6 +207,19 @@ object L {
                 "приближи|увеличи" to "zoom in", "отдалечи|намали" to "zoom out", "север горе" to "north up", "колко е часът|кой час е" to "what time",
                 "^\\s*(отиди до|закарай ме до|навигирай до|води ме до|към|до)\\s" to "go to",
             ),
+            "sl" to r(
+                "\\s(domov|pelji me domov|gremo domov)\\s" to "go home", "\\s(v službo|na delo|v pisarno)\\s" to "go to work",
+                "^\\s*(prijavi|sporoči)\\s" to "report", "nesreča|nesrečo" to "accident", "policija|policijo" to "police", "okvara|okvaro" to "breakdown", "radar|kamera|kamero" to "camera",
+                "bencinska črpalka|bencinsko črpalko|črpalka|črpalko|gorivo|bencin|natakanje" to "fuel", "polnilnica|polnilnico|polnjenje" to "charging", "stranišče|wc" to "toilet", "kava|kavo|kavarna|kavarno" to "coffee",
+                "hrana|hrano|restavracija|restavracijo|jesti" to "food", "počivališče|počivališča" to "services", "parkirišče|parkiranje|parkirati" to "parking",
+                "\\s(poišči|išči|najbližja|najbližji|najbližje|kje je|potrebujem)\\s" to "find", "najcenejš[aie]|poceni" to "cheap",
+                "izogni se cestnini|brez cestnine|brez vinjete" to "avoid toll", "izogni se avtocesti|izogni se avtocestam|brez avtocest" to "avoid motorway",
+                "izogni se tej cesti" to "avoid this road", "kdaj bom tam|kdaj prispem|koliko še|kako daleč" to "eta", "deli" to "share",
+                "vklopi glas|glas vklop" to "voice on", "samo opozorila" to "alerts only", "utišaj|tiho|izklopi glas" to "mute",
+                "(končaj|ustavi|prekliči) (pot|navigacijo)" to "end route", "pregled|celotna pot" to "overview",
+                "povečaj|približaj" to "zoom in", "pomanjšaj|oddalji" to "zoom out", "sever zgoraj" to "north up", "koliko je ura" to "what time",
+                "^\\s*(pelji me do|pelji me v|pelji me na|navigiraj do|pojdi do|gremo do|do)\\s" to "go to",
+            ),
             "id" to r(
                 "\\s(pulang|ke rumah|pulang ke rumah|antar saya pulang)\\s" to "go home", "\\s(pergi |antar saya )?ke (kantor|tempat kerja)\\s" to "go to work",
                 "^\\s*laporkan\\s" to "report", "kecelakaan" to "accident", "polisi|razia" to "police", "mogok" to "breakdown", "kamera tilang|kamera" to "camera",
@@ -226,7 +239,7 @@ object L {
     /** "2nd" on the turn card ("2e", "2.", "2ª"…). */
     fun ordShort(n: Int): String = when (lang) {
         "nl", "fr" -> "${n}e"
-        "de", "pl" -> "$n."
+        "de", "pl", "sl" -> "$n."
         "es", "pt" -> "$n.ª"
         "it" -> "${n}ª"
         "th" -> "ที่ $n"
@@ -255,6 +268,7 @@ object L {
             "it" -> listOf("prima", "seconda", "terza", "quarta", "quinta", "sesta", "settima", "ottava", "nona", "decima")
             "pt" -> listOf("primeira", "segunda", "terceira", "quarta", "quinta", "sexta", "sétima", "oitava", "nona", "décima")
             "pl" -> listOf("pierwszy", "drugi", "trzeci", "czwarty", "piąty", "szósty", "siódmy", "ósmy", "dziewiąty", "dziesiąty")
+            "sl" -> listOf("prvi", "drugi", "tretji", "četrti", "peti", "šesti", "sedmi", "osmi", "deveti", "deseti")
             "bg" -> listOf("първия", "втория", "третия", "четвъртия", "петия", "шестия", "седмия", "осмия", "деветия", "десетия")
             "id" -> listOf("pertama", "kedua", "ketiga", "keempat", "kelima", "keenam", "ketujuh", "kedelapan", "kesembilan", "kesepuluh")
             // (Thai and Japanese voices read "ที่ 2" and "2番目" well)
@@ -271,11 +285,13 @@ object L {
         val keys2 = listOf("it", "pt", "pl")
         val keys3 = listOf("th", "ja", "id")
         val keys4 = listOf("bg")
-        val m = (keys + keys2 + keys3 + keys4).associateWith { HashMap<String, String>() }
+        val keys5 = listOf("sl")
+        val m = (keys + keys2 + keys3 + keys4 + keys5).associateWith { HashMap<String, String>() }
         for ((en, tr) in rows) for ((i, k) in keys.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows2) for ((i, k) in keys2.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows3) for ((i, k) in keys3.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in I18nD.rows()) for ((i, k) in keys4.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
+        for ((en, tr) in I18nE.rows()) for ((i, k) in keys5.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         m
     }
 
@@ -1737,6 +1753,19 @@ object L {
         "{0} ahead" to listOf("over {0}", "in {0}", "dans {0}", "a {0}"),
         "See them along your route" to listOf("Bekijk ze langs je route", "Entlang der Route anzeigen", "Les voir sur votre itinéraire", "Verlos en tu ruta"),
         "On the map, with the time each adds" to listOf("Op de kaart, met de extra tijd per plek", "Auf der Karte, mit der Zusatzzeit für jede", "Sur la carte, avec le temps ajouté par chacun", "En el mapa, con el tiempo que añade cada una"),
+        "Same as your phone" to listOf("Zelfde als je telefoon", "Wie Ihr Handy", "Comme votre téléphone", "Igual que tu móvil"),
+        "Driver's display zoom" to listOf("Zoom bestuurdersscherm", "Zoom Fahrerdisplay", "Zoom de l'écran conducteur", "Zoom de la pantalla del conductor"),
+        "Furthest out" to listOf("Verst uit", "Am weitesten heraus", "Le plus éloigné", "Lo más lejos"),
+        "Lights signal is reversed" to listOf("Lichtsignaal is omgekeerd", "Lichtsignal ist umgekehrt", "Le signal des feux est inversé", "La señal de luces está invertida"),
+        "Turn on if it says on with your lights off" to listOf("Zet dit aan als er 'aan' staat terwijl je lichten uit zijn", "Einschalten, wenn „an“ angezeigt wird, obwohl das Licht aus ist", "Activez si « allumés » s'affiche feux éteints", "Actívalo si dice encendidas con las luces apagadas"),
+        "Keep the arrow to the side" to listOf("Houd de pijl aan de zijkant", "Pfeil seitlich lassen", "Garder la flèche sur le côté", "Mantener la flecha a un lado"),
+        "When the cards fold away, instead of moving to the middle" to listOf("Als de kaarten inklappen, in plaats van naar het midden te gaan", "Wenn die Karten einklappen, statt in die Mitte zu wandern", "Quand les cartes se replient, au lieu de revenir au centre", "Cuando las tarjetas se pliegan, en vez de volver al centro"),
+        "Chime volume" to listOf("Volume van de piepjes", "Lautstärke der Signaltöne", "Volume des bips", "Volumen de los avisos sonoros"),
+        "The beeps for speeding, limit changes and cameras, compared with the voice. Your head unit's volume, turned while it speaks, changes both" to listOf("De piepjes bij te hard rijden, nieuwe limieten en flitsers, vergeleken met de stem. Het volume van je radio, gedraaid terwijl hij praat, verandert beide", "Die Töne bei zu schnellem Fahren, neuen Limits und Blitzern, im Verhältnis zur Stimme. Die Lautstärke des Radios, während der Ansage gedreht, ändert beides", "Les bips d'excès de vitesse, de changement de limite et de radars, par rapport à la voix. Le volume de l'autoradio, réglé pendant qu'il parle, change les deux", "Los pitidos por exceso de velocidad, cambios de límite y radares, en relación con la voz. El volumen de la radio, ajustado mientras habla, cambia ambos"),
+        "Start demo drive" to listOf("Demorit starten", "Demofahrt starten", "Démarrer la démo", "Iniciar demostración"),
+        "Skip to the next turn" to listOf("Naar de volgende afslag", "Zur nächsten Abbiegung springen", "Passer au prochain virage", "Saltar al siguiente giro"),
+        "Skip turn" to listOf("Volgende afslag", "Abbiegung überspringen", "Virage suivant", "Saltar giro"),
+        "End demo" to listOf("Demo stoppen", "Demo beenden", "Arrêter la démo", "Terminar demo"),
     )
 
     private fun rowsB0(): List<Pair<String, List<String>>> = listOf(
@@ -3186,5 +3215,18 @@ object L {
         "{0} ahead" to listOf("tra {0}", "daqui a {0}", "za {0}"),
         "See them along your route" to listOf("Vedili lungo il percorso", "Ver ao longo do percurso", "Pokaż na trasie"),
         "On the map, with the time each adds" to listOf("Sulla mappa, con il tempo che aggiunge ciascuna", "No mapa, com o tempo que cada uma acrescenta", "Na mapie, z czasem, który dodaje każde"),
+        "Same as your phone" to listOf("Come il telefono", "Igual ao telemóvel", "Jak w telefonie"),
+        "Driver's display zoom" to listOf("Zoom del display del conducente", "Zoom do ecrã do condutor", "Powiększenie ekranu kierowcy"),
+        "Furthest out" to listOf("Il più lontano", "O mais afastado", "Najdalej"),
+        "Lights signal is reversed" to listOf("Il segnale delle luci è invertito", "O sinal das luzes está invertido", "Sygnał świateł jest odwrócony"),
+        "Turn on if it says on with your lights off" to listOf("Attivalo se indica accese con le luci spente", "Ative se indicar ligadas com as luzes desligadas", "Włącz, jeśli pokazuje „włączone” przy wyłączonych światłach"),
+        "Keep the arrow to the side" to listOf("Tieni la freccia di lato", "Manter a seta de lado", "Trzymaj strzałkę z boku"),
+        "When the cards fold away, instead of moving to the middle" to listOf("Quando le schede si chiudono, invece di tornare al centro", "Quando os cartões recolhem, em vez de voltar ao centro", "Gdy karty się zwiną, zamiast wracać na środek"),
+        "Chime volume" to listOf("Volume dei segnali acustici", "Volume dos sinais sonoros", "Głośność sygnałów"),
+        "The beeps for speeding, limit changes and cameras, compared with the voice. Your head unit's volume, turned while it speaks, changes both" to listOf("I bip per eccesso di velocità, cambi di limite e autovelox, rispetto alla voce. Il volume dell'autoradio, regolato mentre parla, cambia entrambi", "Os bips de excesso de velocidade, mudança de limite e radares, em relação à voz. O volume do rádio, ajustado enquanto fala, muda ambos", "Sygnały przekroczenia prędkości, zmiany limitu i fotoradarów, w porównaniu z głosem. Głośność radia, zmieniona podczas komunikatu, zmienia oba"),
+        "Start demo drive" to listOf("Avvia la demo", "Iniciar demonstração", "Rozpocznij demo"),
+        "Skip to the next turn" to listOf("Salta alla prossima svolta", "Saltar para a próxima viragem", "Przejdź do następnego skrętu"),
+        "Skip turn" to listOf("Salta svolta", "Próxima viragem", "Pomiń skręt"),
+        "End demo" to listOf("Termina demo", "Terminar demo", "Zakończ demo"),
     )
 }

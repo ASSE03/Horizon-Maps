@@ -5,6 +5,12 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Démo : pendant la démo, la vitesse se change d'une touche sans recommencer, et « Virage suivant » saute à environ 250 m du prochain carrefour. Sur l'écran des itinéraires, un bouton Démo à côté de Démarrer lance le trajet en démo. Aussi sur Android Auto (Arrêter la démo, vitesse, Virage suivant).
+- Garder la flèche sur le côté : nouvel interrupteur (réglages Android Auto, et Réglages › Écran › En conduite) pour que la flèche reste sur le côté d'un écran large quand les cartes se replient, au lieu de revenir au centre.
+- Barre de trajet sur l'écran conducteur : avec un itinéraire, la carte derrière le volant montre temps restant · distance · arrivée dans une petite barre en bas, comme Google Maps. Elle est aussi plus dézoomée (encore plus en roulant), et un réglage « Zoom de l'écran conducteur » s'ajoute aux réglages de la voiture.
+- Android Auto comme le téléphone : Jour et nuit sur la voiture propose « Comme le téléphone », pour que l'écran de la voiture passe en clair ou en sombre avec le téléphone.
+- Volume des bips : sur l'autoradio, les bips de survitesse, de changement de limitation et de radar passent par le même canal que la voix, donc le volume réglé pendant une annonce les baisse aussi. Réglages › Son et voix › Volume des bips les règle par rapport à la voix, avec un bip d'essai.
+- Pluie et neige sur Android Auto : les effets météo s'affichent aussi sur l'écran de la voiture, avec la brume au loin.
 - Fiche d'une borne sur la barre du trajet : touchez l'icône d'un arrêt recharge pour voir le nom de la station, son adresse, la distance, la batterie estimée en y arrivant et le temps de recharge prévu jusqu'à 80 % (avec sa puissance).
 - Ajouter une étape le long du trajet : en ajoutant une étape, « Voir le long de votre itinéraire » (ou la touche recherche du clavier) montre sur la carte tous les résultats le long du reste du trajet, chacun avec le temps qu'il ajoute, dans un panneau trié par Moindre détour, Le plus tôt ou Le plus proche, avec la distance devant et l'écart au tracé. Touchez-en un, puis Ajouter comme étape. Sur Android Auto, c'est une liste triée par détour.
 - Retard sur les bouchons : chaque bouchon d'une minute ou plus sur votre itinéraire porte une petite pastille « +8 min » à son début, rouge pour un trafic dense, orange pour un trafic ralenti. Pendant le choix de l'itinéraire, ceux des autres itinéraires s'affichent aussi, atténués. Chacune disparaît une fois passée.
@@ -110,6 +116,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Effet de pluie absent sous la pluie : il se fiait au résumé de l'heure (souvent « nuageux » pendant les averses). Il regarde maintenant la pluie et la neige qui tombent dans le quart d'heure, toutes les 10 minutes au lieu de 20.
+- Flèches des voies entre deux ronds-points rapprochés : en entrant dans le premier, l'image des voies montrait celles du second. Chaque virage n'affiche plus que ses propres voies.
+- Mode Phares sur les autoradios Teyes et FYT : ils signalent les feux par leur propre réglage au lieu du mode nuit d'Android, donc le mode Phares ne passait jamais en sombre. Il le lit maintenant aussi, avec un interrupteur « Signal des feux inversé » pour les quelques modèles qui l'ont à l'envers.
+- Fausses alertes de contresens sur les routes à chaussées séparées : un GPS qui dérive vers le milieu ne met plus la flèche sur l'autre chaussée. L'alerte demande maintenant une position précise et aucune route dans votre sens à proximité, et n'est jamais donnée en suivant votre itinéraire.
 - Résultats de recherche en double : un même magasin donné par plusieurs sources (même enseigne ou même logo à moins de 400 m, comme « Carrefour Market Davézieux » et « Carrefour du Relais Saint-Christophe ») n'apparaît plus qu'une fois, avec l'adresse la plus complète. Un magasin nommé seulement d'après sa ville (« Bourg-Argental » avec le logo Carrefour) affiche aussi son enseigne.
 - Carte de trajet en voiture électrique : en portrait, les six chiffres (temps, arrivée, distance, batterie, à la borne, à l'arrivée) se chevauchaient ; ils passent sur deux lignes (le trajet, puis la batterie). En paysage, la carte de trajet large cachait la flèche : la flèche est maintenant placée au-dessus d'elle.
 - Survol de l'itinéraire caché par les options : pendant le survol, le panneau (zones, météo, étapes, départ, batterie, itinéraires) se replie en une petite pastille « Survol de l'itinéraire… · Arrêter », et revient à la fin.

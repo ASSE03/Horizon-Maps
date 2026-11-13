@@ -266,12 +266,16 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
         // Headlights: whether this head unit has been seen switching with the lights yet (until then sun times stand in), and what the
         // lights signal says right now, so it's easy to check it works (lights on: it should say on within a couple of seconds)
         if (prefs.s(PreferenceKeys.THEME, "auto") == "lights") {
-            val lightsOn = rememberSystemNight()
+            val lightsOn = rememberSystemNight(useLamps = true)
             val seen = prefs.b(PreferenceKeys.SYSDARKSEEN, false) || lightsOn
             SNote(
                 if (seen) "Seuls vos phares décident, même dans les tunnels. Signal des phares : ${if (lightsOn) L.t("on") else L.t("off")}"
                 else "Votre autoradio n'a pas encore basculé avec les phares, donc le lever et le coucher du soleil servent en attendant. Activez son option de mode nuit liée aux phares ou à l'éclairage, puis allumez vos phares pour vérifier"
             )
+            // units that pass the lights on in their own setting (Teyes, FYT-type): a few have it the other way round
+            val ctxL = androidx.compose.ui.platform.LocalContext.current
+            val hasLamps = androidx.compose.runtime.remember { readLampsNight(ctxL) != null }
+            if (hasLamps) SToggle(prefs, "Le signal des feux est inversé", PreferenceKeys.LAMPS_INVERT, false, "Activez si « allumés » s'affiche feux éteints")
         }
         if (prefs.s(PreferenceKeys.THEME, "auto") == "times") {
             SFieldItem("La nuit commence à", prefs.s(PreferenceKeys.NIGHT_FROM, "19:00"), "Format 24 h, par exemple 19:30", placeholder = "19:00") { prefs.put(PreferenceKeys.NIGHT_FROM, it.trim()) }
@@ -694,6 +698,9 @@ private fun SoundSection(prefs: Prefs, engine: NavEngine) {
             "Si vous entendez les bips mais pas la voix, choisissez Média : certains autoradios ne jouent pas le canal navigation") { prefs.put(PreferenceKeys.VOICE_CHANNEL, it) }
         SItem("Voix et langue", "Utilise la synthèse vocale du système (installez la voix française)") { SButton("Ouvrir") { openSystemSettings(ctx, "com.android.settings.TTS_SETTINGS") } }
         SItem("Volume") { SButton("Ouvrir") { openSystemSettings(ctx, Settings.ACTION_SOUND_SETTINGS) } }
+        SSlider("Volume des bips", prefs.i(PreferenceKeys.CHIME_VOL, 70).coerceIn(5, 100).toFloat(), 5f..100f, "%",
+            sub = "Les bips d'excès de vitesse, de changement de limite et de radars, par rapport à la voix. Le volume de l'autoradio, réglé pendant qu'il parle, change les deux",
+            reset = 70f) { prefs.put(PreferenceKeys.CHIME_VOL, it.toInt()); engine.testChime() }
     }
 }
 
@@ -1043,6 +1050,7 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Garder la flèche sur la route sans itinéraire", "snaproad", true)
         SChoice("Avance de la flèche", listOf("0" to "Aucune", "0.5" to "0,5 s", "1.0" to "1 s", "1.5" to "1,5 s", "2.0" to "2 s"), prefs.s("arrowlead", "1.0"),
             "Compense le retard du GPS : la flèche est placée là où vous serez dans ce délai. Augmentez si elle arrive aux croisements après la voiture, baissez si elle les dépasse avant") { prefs.put("arrowlead", it) }
+        SToggle(prefs, "Garder la flèche sur le côté", PreferenceKeys.ARROW_SIDE, false, "Quand les cartes se replient, au lieu de revenir au centre")
         SToggle(prefs, "Assombrir la carte dans les tunnels", "tunneldim", true)
         SToggle(prefs, "Moins de boutons en conduite", "drivesimple", true)
         SToggle(prefs, "Bloquer la saisie en conduite", "drivelock", true, "La recherche vocale reste possible")
@@ -1085,8 +1093,8 @@ private fun AndroidAutoSection(prefs: Prefs) {
     }
     CarTripButtonsGroup(prefs)
     SGroup("Jour et nuit sur l'écran de la voiture") {
-        SChoice("Jour et nuit", listOf("sun" to "Soleil", "car" to "Voiture", "day" to "Jour", "night" to "Nuit"), prefs.s(PreferenceKeys.CARTHEME, "sun"),
-            when (prefs.s(PreferenceKeys.CARTHEME, "sun")) { "sun" -> "Passe en mode nuit au coucher du soleil et en mode jour à son lever, là où vous êtes"; "car" -> "Suit le réglage de la voiture (ses phares ou son propre mode)"; else -> null }) { prefs.put(PreferenceKeys.CARTHEME, it) }
+        SChoice("Jour et nuit", listOf("sun" to "Soleil", "car" to "Voiture", "phone" to "Téléphone", "day" to "Jour", "night" to "Nuit"), prefs.s(PreferenceKeys.CARTHEME, "sun"),
+            when (prefs.s(PreferenceKeys.CARTHEME, "sun")) { "sun" -> "Passe en mode nuit au coucher du soleil et en mode jour à son lever, là où vous êtes"; "car" -> "Suit le réglage de la voiture (ses phares ou son propre mode)"; "phone" -> "Clair ou sombre comme le téléphone"; else -> null }) { prefs.put(PreferenceKeys.CARTHEME, it) }
     }
     SGroup("Tailles sur l'écran de la voiture") {
         SSlider("Taille globale sur l'écran de la voiture", prefs.i(PreferenceKeys.CARSCALE, 100).toFloat(), 40f..300f, "%", sub = "Échelle de base de tout l'affichage", steps = 25, reset = 100f) { prefs.put(PreferenceKeys.CARSCALE, it) }

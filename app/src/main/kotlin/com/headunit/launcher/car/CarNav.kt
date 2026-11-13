@@ -155,6 +155,7 @@ class CarNavSession : Session() {
         return when (prefs.s(PreferenceKeys.CARTHEME, "sun")) {
             "day" -> false
             "night" -> true
+            "phone" -> phoneDark()
             "sun" -> {
                 val p = holder.engine?.fix?.pos ?: prefs.s(PreferenceKeys.LASTLAT, "").toDoubleOrNull()?.let { la -> prefs.s(PreferenceKeys.LASTLON, "").toDoubleOrNull()?.let { lo -> com.headunit.launcher.LL(la, lo) } }
                 if (p != null) !com.headunit.launcher.Sun.isDay(p.lat, p.lon, System.currentTimeMillis()) else carContext.isDarkMode
@@ -177,6 +178,20 @@ class CarNavSession : Session() {
             } catch (e: Exception) { }
             themeHandler.postDelayed(this, 5_000L)
         }
+    }
+
+    /** The phone's own light / dark mode (the system setting, not the car's), GitHub #69. */
+    private fun phoneDark(): Boolean = try {
+        (android.content.res.Resources.getSystem().configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    } catch (e: Exception) { carContext.isDarkMode }
+
+    /** The phone switching light / dark (by hand or on its schedule) while the car screen is set to match it. */
+    private val phoneThemeWatch = object : android.content.ComponentCallbacks {
+        override fun onConfigurationChanged(newConfig: Configuration) {
+            try { if (Prefs(carContext.applicationContext).s(PreferenceKeys.CARTHEME, "sun") == "phone") android.os.Handler(android.os.Looper.getMainLooper()).post { try { applyTheme() } catch (e: Exception) { } } } catch (e: Exception) { }
+        }
+        @Deprecated("Deprecated in Java")
+        override fun onLowMemory() {}
     }
 
     private fun applyTheme() {
@@ -203,6 +218,7 @@ class CarNavSession : Session() {
             override fun onDestroy(owner: LifecycleOwner) {
                 screen.stop()
                 themeHandler.removeCallbacks(themeTick)
+                try { carContext.applicationContext.unregisterComponentCallbacks(phoneThemeWatch) } catch (e: Exception) { }
                 pendingNavWaitToken++
                 pendingNavWait?.interrupt()
                 pendingNavWait = null
@@ -215,6 +231,7 @@ class CarNavSession : Session() {
                 holder.engine = null; holder.map = null
             }
         })
+        try { carContext.applicationContext.registerComponentCallbacks(phoneThemeWatch) } catch (e: Exception) { }
         pendingNav = intent
         return screen
     }
@@ -261,7 +278,18 @@ class CarNavSession : Session() {
         com.headunit.launcher.ParkedNotice.cancel(carContext)
         holder.map = map; holder.engine = engine
         surface.engine = engine
-        CarTicks.tick = { surface.tick(); try { holder.map?.setWeatherCode(holder.engine?.weather?.code) } catch (e: Exception) { } }
+        // the weather's light, and (Reddit) the rain and snow falling and the haze to the horizon, which were only ever put on the
+        // phone's map: each call does nothing unless the weather has changed
+        CarTicks.tick = {
+            surface.tick()
+            try {
+                val code = holder.engine?.weather?.code
+                val p = Prefs(carContext.applicationContext)
+                holder.map?.setWeatherCode(code)
+                holder.map?.setWeather(if (p.b(PreferenceKeys.RAIN_EFFECTS, false)) code else null)
+                holder.map?.setSky(if (p.b(PreferenceKeys.SKYWEATHER, true)) code else null)
+            } catch (e: Exception) { }
+        }
         applyTheme()
         themeHandler.removeCallbacks(themeTick)
         themeHandler.postDelayed(themeTick, 5_000L)
@@ -562,7 +590,7 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
         val t = e.turn; val eta = e.eta
         // Android Auto's buttons only change with the state (rebuilding them every second while the distance counts down made the
         // host redo its layout for nothing); the turn and distance go to the car's displays through updateTrip
-        val sig = "${guiding}|${e.previewing}|${e.active}|${e.routes.size}|${e.busy}|${e.simMode}|${e.faster?.savedMin}|${e.soundMode}"
+        val sig = "${guiding}|${e.previewing}|${e.active}|${e.routes.size}|${e.busy}|${e.simMode}|${e.faster?.savedMin}|${e.soundMode}|${e.demoNext}"
         if (sig != lastSig) { lastSig = sig; invalidate() }
         val tsig = "${t?.maneuver}|${t?.street}|${t?.exit}|${t?.dist?.let { Math.round(it / 10) }}|${eta?.secs?.let { Math.round(it / 30) }}|${eta?.dist?.let { Math.round(it / 100) }}|${System.identityHashCode(t?.lanes)}"
         if (guiding && t != null && eta != null && tsig != lastTrip) {
@@ -586,8 +614,11 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
         val previewing = e != null && e.route != null && e.previewing
         if (previewing) {
             // the route choice (drawn by the app on the map): start, try the next route, or cancel
-            strip.addAction(Action.Builder().setTitle("Démarrer").setOnClickListener { e?.beginNavigation(); invalidate() }.build())
-            if ((e?.routes?.size ?: 0) > 1) strip.addAction(Action.Builder().setTitle("Autre itinéraire").setOnClickListener {
+            strip.addAction(Action.Builder().setTitle(L.t(if (e?.demoNext == true) "Start demo drive" else "Start")).setOnClickListener { e?.beginNavigation(); invalidate() }.build())
+            // Demo (with the demo drive switched on): Start, or the countdown, then begins the trip as a demo drive
+            if (e != null && e.prefs.b(PreferenceKeys.DEMO, false)) strip.addAction(Action.Builder().setTitle(if (e.demoNext) "\u2713 " + "Démo" else "Démo")
+                .setOnClickListener { e.toggleDemoNext(); invalidate() }.build())
+            if ((e?.routes?.size ?: 0) > 1) strip.addAction(Action.Builder().setTitle("Itinéraire suivant").setOnClickListener {
                 e?.let { en -> en.selectRoute((en.active + 1) % en.routes.size.coerceAtMost(3)) }; invalidate()
             }.build())
             strip.addAction(Action.Builder().setTitle("Annuler").setOnClickListener { e?.endRoute(); invalidate() }.build())
@@ -607,13 +638,20 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             strip.addAction(sound)
         } else if (guiding) {
             // only four fit: Settings stays while navigating (2D / 3D is the first row in it)
-            strip.addAction(Action.Builder().setTitle("Arrêter").setOnClickListener { e?.endRoute(); invalidate() }.build())
             // the demo drive (for trying it out parked; only with Demo switched on in Settings, as in the app): starts it, speeds it
             // up, stops it. It has Report's place while it's on
-            if (demoOn) strip.addAction(Action.Builder().setTitle(when (e?.simMode ?: 0) { 0 -> "Démo"; 1 -> "×2"; 2 -> "×4"; 4 -> "×8"; else -> "Fin de la démo" })
-                .setOnClickListener { e?.cycleSim(); invalidate() }.build())
-            strip.addAction(sound)
-            if (!demoOn) strip.addAction(reportAction())
+            // While the demo plays (four buttons only): End demo in Stop's place, its speed (1x / 2x / 4x, tap to change) and
+            // Skip turn in sound's and Report's, and Settings
+            if (e != null && e.simMode != 0) {
+                strip.addAction(Action.Builder().setTitle("Arrêter la démo").setOnClickListener { e.stopSim(); invalidate() }.build())
+                strip.addAction(Action.Builder().setTitle("${e.simMode}\u00D7").setOnClickListener { e.cycleSimSpeed(); invalidate() }.build())
+                strip.addAction(Action.Builder().setTitle("Virage suivant").setOnClickListener { e.skipTurn(); invalidate() }.build())
+            } else {
+                strip.addAction(Action.Builder().setTitle("Arrêter").setOnClickListener { e?.endRoute(); invalidate() }.build())
+                if (demoOn) strip.addAction(Action.Builder().setTitle("Démo").setOnClickListener { e?.cycleSim(); invalidate() }.build())
+                strip.addAction(sound)
+                if (!demoOn) strip.addAction(reportAction())
+            }
             strip.addAction(Action.Builder().setIcon(icon(R.drawable.ic_car_settings)).setOnClickListener { openSettings() }.build())
         } else {
             // Report has the Search button's place, and Search is the first row in Places. Every car gets Places: a rotary knob or
@@ -1219,9 +1257,9 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
             .setOnClickListener { if (e != null) e.toggleNorthUp() else prefs.put(PreferenceKeys.NORTH_UP_CAR, !nu); invalidate() }.build()
         val th = prefs.s(PreferenceKeys.CARTHEME, "sun")
         rows += Row.Builder().setTitle("Jour et nuit")
-            .addText(when (th) { "day" -> "Toujours jour"; "night" -> "Toujours nuit"; "car" -> "Suit la voiture"; else -> "Lever et coucher du soleil" })
+            .addText(when (th) { "day" -> "Toujours jour"; "night" -> "Toujours nuit"; "car" -> "Suit la voiture"; "phone" -> "Comme le téléphone"; else -> "Lever et coucher du soleil" })
             .setOnClickListener {
-                prefs.put(PreferenceKeys.CARTHEME, when (th) { "sun" -> "car"; "car" -> "day"; "day" -> "night"; else -> "sun" })
+                prefs.put(PreferenceKeys.CARTHEME, when (th) { "sun" -> "car"; "car" -> "phone"; "phone" -> "day"; "day" -> "night"; else -> "sun" })
                 onTheme(); invalidate()
             }.build()
         val satOn = prefs.b(PreferenceKeys.SATELLITE, false)
@@ -1265,6 +1303,8 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
         rows += Row.Builder().setTitle("Position du panneau de vitesse")
             .addText(when (spPos) { "middle" -> "Milieu"; "top" -> "Haut"; else -> "Bas" } + " · touchez pour changer")
             .setOnClickListener { prefs.put(PreferenceKeys.SPEED_POS_CAR, when (spPos) { "bottom" -> "middle"; "middle" -> "top"; else -> "bottom" }); invalidate() }.build()
+        // the arrow stays to the side when the cards on the left fold away (GitHub), rather than moving back to the middle
+        rows += toggleRow("Keep the arrow to the side", PreferenceKeys.ARROW_SIDE, false, "When the cards fold away, instead of moving to the middle")
         // 12 or 24-hour times (the same setting as the app's Settings > Units)
         val clock = prefs.s(PreferenceKeys.CLOCK, "auto")
         rows += Row.Builder().setTitle("Horloge")
@@ -1297,6 +1337,12 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
                     if (e.route != null) { if (e.previewing) e.beginNavigation(); if (e.simMode == 0) e.cycleSim(); screenManager.pop() }
                     else try { androidx.car.app.CarToast.makeText(carContext, "Choisissez d'abord une destination", androidx.car.app.CarToast.LENGTH_SHORT).show() } catch (x: Exception) { }
                 }.build()
+        }
+        if (cluster) {
+            val cz = prefs.i(PreferenceKeys.CLUSTER_ZOOM, 0).coerceIn(-2, 1)
+            rows += Row.Builder().setTitle("Zoom de l'écran conducteur")
+                .addText(L.t(when (cz) { 1 -> "Closer"; -1 -> "Further out"; -2 -> "Furthest out"; else -> "Normal" }) + " · touchez pour changer")
+                .setOnClickListener { prefs.put(PreferenceKeys.CLUSTER_ZOOM, when (cz) { 0 -> -1; -1 -> -2; -2 -> 1; else -> 0 }); invalidate() }.build()
         }
         val max = limit.coerceIn(2, 12)
         val list = ItemList.Builder()

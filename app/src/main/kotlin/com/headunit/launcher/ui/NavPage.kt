@@ -321,8 +321,8 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         ) {
             Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(progress.value).background(c.accent))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Démarrer", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                Text(if (hold) "Prévu pour plus tard" else if (autoStart) "Départ dans ${kotlin.math.ceil((1f - progress.value) * (countdownMs / 1000f)).toInt()} s" else "Touchez pour partir", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                Text(L.t(if (engine.demoNext) "Start demo drive" else "Start navigation"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(if (hold) "Prévu pour plus tard" else if (autoStart) "Départ dans ${kotlin.math.ceil((1f - progress.value) * (countdownMs / 1000f)).toInt()} s" else "Touchez pour démarrer", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
             }
         }
     }
@@ -333,6 +333,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         destPart(Modifier.width(150.dp))
         routeCards()
         if (engine.prefs.b(PreferenceKeys.FLYOVER, true)) FlyOverBtn(engine)
+        if (engine.prefs.b(PreferenceKeys.DEMO, false)) DemoChoiceBtn(engine)
         startBtn(Modifier.width(210.dp))
         RoundBtn(Icons.Rounded.Close, { engine.endRoute() }, size = 46.dp)
     } else Column(Modifier.fillMaxWidth().floating(28.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -343,6 +344,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { routeCards() }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (engine.prefs.b(PreferenceKeys.FLYOVER, true)) FlyOverBtn(engine)
+            if (engine.prefs.b(PreferenceKeys.DEMO, false)) DemoChoiceBtn(engine)
             startBtn(Modifier.weight(1f))
         }
     }
@@ -711,5 +713,25 @@ internal object JunctionPics {
             synchronized(cache) { cache[url] = b }
             b
         } catch (e: Exception) { null }
+    }
+}
+
+
+/**
+ * "Demo" on the route choice (with Settings > Performance > Demo drive button on): lit, the countdown or Start begins this trip as
+ * a demo drive, played along the route, instead of following the GPS.
+ */
+@Composable
+internal fun DemoChoiceBtn(engine: NavEngine) {
+    val c = LocalVw.current
+    val on = engine.demoNext
+    // (styled like Fly over route beside it; filled once chosen)
+    Row(
+        Modifier.height(72.dp).clip(RoundedCornerShape(36.dp)).background(if (on) c.accent else c.accent.copy(alpha = 0.14f))
+            .clickable { engine.toggleDemoNext() }.padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.DirectionsCar, null, tint = if (on) Color.White else c.accent, modifier = Modifier.size(24.dp))
+        Text("Démo", color = if (on) Color.White else c.accent, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
     }
 }

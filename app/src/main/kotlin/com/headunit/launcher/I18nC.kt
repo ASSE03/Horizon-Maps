@@ -1457,5 +1457,18 @@ object I18nC {
         "{0} ahead" to listOf("อีก {0}", "{0}先", "{0} lagi"),
         "See them along your route" to listOf("ดูตามเส้นทาง", "ルート沿いで見る", "Lihat di sepanjang rute"),
         "On the map, with the time each adds" to listOf("บนแผนที่ พร้อมเวลาที่แต่ละแห่งเพิ่ม", "地図上に、それぞれの追加時間付きで", "Di peta, dengan tambahan waktu masing-masing"),
+        "Same as your phone" to listOf("เหมือนโทรศัพท์ของคุณ", "スマホと同じ", "Sama seperti ponsel Anda"),
+        "Driver's display zoom" to listOf("การซูมจอแสดงผลผู้ขับ", "運転席ディスプレイのズーム", "Zoom layar pengemudi"),
+        "Furthest out" to listOf("ไกลที่สุด", "最も遠く", "Paling jauh"),
+        "Lights signal is reversed" to listOf("สัญญาณไฟกลับด้าน", "ライト信号が逆", "Sinyal lampu terbalik"),
+        "Turn on if it says on with your lights off" to listOf("เปิดหากแสดงว่าเปิดขณะที่ไฟปิดอยู่", "ライトが消えているのにオンと表示される場合はオンに", "Aktifkan jika tertulis menyala saat lampu mati"),
+        "Keep the arrow to the side" to listOf("ให้ลูกศรอยู่ด้านข้าง", "矢印を横に寄せたままにする", "Tetap letakkan panah di samping"),
+        "When the cards fold away, instead of moving to the middle" to listOf("เมื่อการ์ดพับเก็บ แทนที่จะเลื่อนไปตรงกลาง", "カードが閉じても中央に戻らない", "Saat kartu dilipat, alih-alih pindah ke tengah"),
+        "Chime volume" to listOf("ระดับเสียงสัญญาณเตือน", "チャイムの音量", "Volume bunyi peringatan"),
+        "The beeps for speeding, limit changes and cameras, compared with the voice. Your head unit's volume, turned while it speaks, changes both" to listOf("เสียงบี๊บเมื่อขับเร็วเกิน เปลี่ยนขีดจำกัด และกล้องจับความเร็ว เทียบกับเสียงพูด การปรับระดับเสียงของเครื่องเสียงขณะที่กำลังพูดจะเปลี่ยนทั้งสองอย่าง", "速度超過、制限速度の変化、取締機のビープ音(音声との比較)。案内中にカーナビの音量を変えると両方が変わります", "Bunyi bip untuk ngebut, perubahan batas, dan kamera, dibandingkan dengan suara. Volume head unit yang diubah saat berbicara mengubah keduanya"),
+        "Start demo drive" to listOf("เริ่มการขับสาธิต", "デモ走行を開始", "Mulai demo"),
+        "Skip to the next turn" to listOf("ข้ามไปทางเลี้ยวถัดไป", "次の曲がり角へスキップ", "Lewati ke belokan berikutnya"),
+        "Skip turn" to listOf("ข้ามทางเลี้ยว", "次の曲がり角", "Lewati belokan"),
+        "End demo" to listOf("จบการสาธิต", "デモ終了", "Akhiri demo"),
     )
 }
