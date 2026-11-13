@@ -321,7 +321,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         ) {
             Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(progress.value).background(c.accent))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(L.t(if (engine.demoNext) "Start demo drive" else "Start navigation"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(if (engine.demoNext) "Démarrer la démo" else "Démarrer", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 Text(if (hold) "Prévu pour plus tard" else if (autoStart) "Départ dans ${kotlin.math.ceil((1f - progress.value) * (countdownMs / 1000f)).toInt()} s" else "Touchez pour démarrer", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
             }
         }
@@ -333,7 +333,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         destPart(Modifier.width(150.dp))
         routeCards()
         if (engine.prefs.b(PreferenceKeys.FLYOVER, true)) FlyOverBtn(engine)
-        if (engine.prefs.b(PreferenceKeys.DEMO, false)) DemoChoiceBtn(engine)
+        // fork FR : pas de bouton Démo ici, la ligne « Lancer la démo » au-dessus fait déjà ce travail (et il écrasait Démarrer)
         startBtn(Modifier.width(210.dp))
         RoundBtn(Icons.Rounded.Close, { engine.endRoute() }, size = 46.dp)
     } else Column(Modifier.fillMaxWidth().floating(28.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -344,7 +344,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { routeCards() }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (engine.prefs.b(PreferenceKeys.FLYOVER, true)) FlyOverBtn(engine)
-            if (engine.prefs.b(PreferenceKeys.DEMO, false)) DemoChoiceBtn(engine)
+            // fork FR : pas de bouton Démo ici, la ligne « Lancer la démo » au-dessus fait déjà ce travail (et il écrasait Démarrer)
             startBtn(Modifier.weight(1f))
         }
     }

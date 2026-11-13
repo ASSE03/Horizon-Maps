@@ -116,6 +116,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Boutons du bas de l'écran des itinéraires : le bouton Démo de l'original (en double avec la ligne « Lancer la démo ») écrasait « Démarrer », qui débordait sur plusieurs lignes. Il est retiré, et le bouton dit simplement « Démarrer ».
 - Effet de pluie absent sous la pluie : il se fiait au résumé de l'heure (souvent « nuageux » pendant les averses). Il regarde maintenant la pluie et la neige qui tombent dans le quart d'heure, toutes les 10 minutes au lieu de 20.
 - Flèches des voies entre deux ronds-points rapprochés : en entrant dans le premier, l'image des voies montrait celles du second. Chaque virage n'affiche plus que ses propres voies.
 - Mode Phares sur les autoradios Teyes et FYT : ils signalent les feux par leur propre réglage au lieu du mode nuit d'Android, donc le mode Phares ne passait jamais en sombre. Il le lit maintenant aussi, avec un interrupteur « Signal des feux inversé » pour les quelques modèles qui l'ont à l'envers.
