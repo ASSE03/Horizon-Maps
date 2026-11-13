@@ -155,6 +155,9 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         }
         return
     }
+    // fork FR : pendant l'ajout d'une étape (liste des bornes, stations… sur le trajet), le panneau des options se retire : la liste
+    // passait dessous et se lisait mal. Il revient en fermant la liste (×) ou en choisissant une étape
+    if (engine.nearbyKind != null && engine.stopMode) return
     // fork FR : pendant le survol, le panneau se replie pour laisser voir la carte ; il revient à la fin (ou en arrêtant)
     if (engine.flyingOver) {
         Row(Modifier.align(Alignment.BottomCenter).padding(12.dp).floating(50.dp).padding(horizontal = 14.dp, vertical = 8.dp),
