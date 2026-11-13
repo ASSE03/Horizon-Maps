@@ -340,7 +340,8 @@ fun StopsDialog(engine: NavEngine, onClose: () -> Unit) {
         busy = false
     }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.padding(horizontal = 16.dp).widthIn(max = 620.dp).fillMaxWidth().heightIn(max = 560.dp).clip(RoundedCornerShape(26.dp)).background(c.surface).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp).widthIn(max = 620.dp).fillMaxWidth().heightIn(max = 560.dp).clip(RoundedCornerShape(26.dp)).background(c.surface.copy(alpha = 1f)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // (fork FR : fond opaque : en thème sombre il était transparent et l'écran des itinéraires se voyait à travers)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Étapes du trajet", color = c.text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Icon(Icons.Rounded.Close, "Fermer", tint = c.sub, modifier = Modifier.size(28.dp).clickable { onClose() })
@@ -424,7 +425,7 @@ fun StopsDialog(engine: NavEngine, onClose: () -> Unit) {
             }
             if (stops.isEmpty()) Text("Aucune étape. Cherchez ci-dessus pour en ajouter ; l'itinéraire les suit dans cet ordre.", color = c.sub, fontSize = 13.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
-                Pill("Mettre à jour l'itinéraire", true, { engine.setStops(stops); onClose() })
+                Pill("Mettre à jour", true, { engine.setStops(stops); onClose() })
                 Pill("Annuler", false, onClose)
             }
         }

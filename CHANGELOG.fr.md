@@ -116,6 +116,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Fenêtre « Étapes du trajet » : son fond était transparent en thème sombre, et l'écran des itinéraires se voyait à travers. Il est maintenant opaque, et « Annuler » ne se coupe plus en deux (le bouton principal dit « Mettre à jour »).
 - Ajout d'une étape depuis l'écran des itinéraires (+ Carburant, + Borne…) : la liste passait sous les options (météo, étapes, démo, départ, batterie) et se lisait mal. Les options se retirent pendant que la liste est ouverte, et reviennent en la fermant ou en choisissant une étape.
 - Boutons du bas de l'écran des itinéraires : le bouton Démo de l'original (en double avec la ligne « Lancer la démo ») écrasait « Démarrer », qui débordait sur plusieurs lignes. Il est retiré, et le bouton dit simplement « Démarrer ».
 - Effet de pluie absent sous la pluie : il se fiait au résumé de l'heure (souvent « nuageux » pendant les averses). Il regarde maintenant la pluie et la neige qui tombent dans le quart d'heure, toutes les 10 minutes au lieu de 20.
