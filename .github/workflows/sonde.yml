@@ -7,7 +7,10 @@ jobs:
       - run: |
           set +e
           Q='[out:json][timeout:60];(node["place"](45.18,4.77,45.23,4.82);)->.p;.p out body;way["highway"~"^(primary|secondary|tertiary|trunk)$"](45.185,4.785,45.225,4.815);out tags center;node["traffic_sign"](45.185,4.785,45.225,4.815);out body;'
-          curl -s -m 90 -A "HorizonNav/1.0 (Android navigation app)" -o o.json --data-urlencode "data=$Q" https://overpass-api.de/api/interpreter || curl -s -m 90 -A "HorizonNav/1.0 (Android navigation app)" -o o.json --data-urlencode "data=$Q" https://maps.mail.ru/osm/tools/overpass/api/interpreter
+          for ep in https://maps.mail.ru/osm/tools/overpass/api/interpreter https://overpass-api.de/api/interpreter; do
+            curl -s -m 90 -A "HorizonNav/1.0 (Android navigation app)" -o o.json --data-urlencode "data=$Q" $ep
+            python3 -c "import json;json.load(open('o.json'))" && break
+          done
           python3 - <<'PY'
           import json
           d=json.load(open('o.json'))
