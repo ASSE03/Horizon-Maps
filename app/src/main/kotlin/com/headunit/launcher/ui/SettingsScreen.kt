@@ -317,6 +317,8 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
         }
         DefaultZoomRow(prefs)
         SToggle(prefs, "Chemins et sentiers", "paths", true, "Désactivez pour une carte de conduite plus épurée")
+        SChoice("Routes HD", listOf("auto" to "Automatique", "on" to "Activé", "off" to "Désactivé"), prefs.s(PreferenceKeys.HD_ROADS, "auto"),
+            sub = "Marquages au sol, flèches de direction et ponts en 3D là où Mapbox les a (3D complète). Automatique : activé seulement au Royaume-Uni, car dans certains pays ils masquent les rues ordinaires") { prefs.put(PreferenceKeys.HD_ROADS, it) }
     }
 }
 
@@ -448,6 +450,7 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
             "#FF6FB5" to "Rose", "#A56BFF" to "Violet",
         ), prefs.s(PreferenceKeys.ARROW_COLOUR, "#F2F2F6")) { prefs.put(PreferenceKeys.ARROW_COLOUR, it) }
         SSlider(if (shapeCar) "Taille de la voiture" else if (loc == "custom") "Taille de l'image" else "Taille de la flèche", prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toFloatOrNull() ?: 240f, 100f..500f, "%", reset = 240f) { prefs.put(PreferenceKeys.ARROW_PERCENT, it.toString()) }
+        SToggle(prefs, "Faisceau des phares la nuit", PreferenceKeys.BEAM, true, "Un doux cône de lumière sur la route devant vous la nuit, en roulant")
     }
     SGroup("Tracé de l'itinéraire") {
         SToggle(prefs, "Drapeaux 3D", PreferenceKeys.FLAGS_3D, true, "Un grand drapeau rouge à destination et des drapeaux orange plus petits aux étapes, au-dessus des bâtiments, visibles de loin")
@@ -615,6 +618,7 @@ private fun GuidanceSection(prefs: Prefs, engine: NavEngine) {
     }
     SGroup("Arrivée") {
         SToggle(prefs, "Moment d'arrivée", "arrivalfx", true, "La caméra plonge vers votre destination et montre le parking le plus proche")
+        SToggle(prefs, "Mettre en lumière votre destination", PreferenceKeys.ARRIVAL_PLACE, true, "À l'arrivée, le bâtiment s'illumine, son entrée est indiquée et une ligne pointillée montre le trajet à pied depuis le parking")
         SToggle(prefs, "Parking près de la destination", "parkprompt", true, (if (mi) "Environ un mile" else "Environ 1,5 km") + " avant l'arrivée, les parkings proches avec le temps de marche depuis chacun")
         SToggle(prefs, "Itinéraire retour", "routeback", true, "Sur la carte d'arrivée : un seul appui pour revenir à votre point de départ")
         SToggle(prefs, "Notification « Voiture garée »", "parkednotice", true, "Quand Android Auto se déconnecte à l'arrêt : une notification avec l'heure et un bouton « À pied » pour revenir à la voiture")
@@ -668,6 +672,7 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Travaux et incidents", "incidents", true)
         SToggle(prefs, "Alerte contresens", "wrongway", true, "Si vous vous engagez à contresens dans une rue à sens unique")
         SToggle(prefs, "Ralentisseurs", "bumps", true)
+        SToggle(prefs, "Virages dangereux", PreferenceKeys.BEND_WARN, true, "Les virages où il faut ralentir sont rayés de jaune sur l'itinéraire, avec une alerte et une vitesse confortable avant chacun")
         SToggle(prefs, "Écoles aux heures d'entrée et de sortie", "schools", true)
         SToggle(prefs, "Passages à niveau et gués", "railford", true, "Un panneau et une alerte vocale pour les passages à niveau et les gués de votre itinéraire")
     }
@@ -1045,6 +1050,12 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
             listOf("bottom" to "En bas", "middle" to "Au milieu", "top" to "En haut"), prefs.s(PreferenceKeys.SPEED_POS, "bottom"), { id, c -> speedPicture(id, c) },
         ) { prefs.put(PreferenceKeys.SPEED_POS, it) }
     }
+    SGroup("Position des cartes", "Où se placent la carte de direction, la carte du trajet et le compteur sur un écran large (en portrait, les cartes restent en haut et en bas)") {
+        CardPositionsPreview(prefs, car = false)
+        SChoice("Carte de direction", listOf("auto" to "Selon le volant", "left" to "En haut à gauche", "right" to "En haut à droite"), prefs.s(PreferenceKeys.CARDS_SIDE, "auto")) { prefs.put(PreferenceKeys.CARDS_SIDE, it) }
+        SChoice("Carte de trajet", listOf("auto" to "Sous la carte de direction", "left" to "En bas à gauche", "centre" to "En bas au centre", "right" to "En bas à droite"), prefs.s(PreferenceKeys.TRIP_POS, "auto")) { prefs.put(PreferenceKeys.TRIP_POS, it) }
+        SChoice("Compteur", listOf("auto" to "À l'opposé des cartes", "left" to "En bas à gauche", "right" to "En bas à droite"), prefs.s(PreferenceKeys.SPEED_SIDE, "auto")) { prefs.put(PreferenceKeys.SPEED_SIDE, it) }
+    }
     SGroup("En conduite") {
         SToggle(prefs, "Route et cap en conduite sans itinéraire", "cruise", true)
         SToggle(prefs, "Garder la flèche sur la route sans itinéraire", "snaproad", true)
@@ -1092,6 +1103,11 @@ private fun AndroidAutoSection(prefs: Prefs) {
         } catch (e: Exception) { "Inconnu" }
     }
     CarTripButtonsGroup(prefs)
+    SGroup("Position des cartes sur l'écran de la voiture", "La carte de direction reste en haut à gauche dans Android Auto, là où ses propres boutons laissent de la place") {
+        CardPositionsPreview(prefs, car = true)
+        SChoice("Carte de trajet", listOf("auto" to "Sous la carte de direction", "centre" to "En bas au centre", "right" to "En bas à droite"), prefs.s(PreferenceKeys.CAR_TRIP_POS, "auto")) { prefs.put(PreferenceKeys.CAR_TRIP_POS, it) }
+        SChoice("Compteur", listOf("auto" to "À l'opposé des cartes", "left" to "En bas à gauche", "right" to "En bas à droite"), prefs.s(PreferenceKeys.CAR_SPEED_SIDE, "auto")) { prefs.put(PreferenceKeys.CAR_SPEED_SIDE, it) }
+    }
     SGroup("Jour et nuit sur l'écran de la voiture") {
         SChoice("Jour et nuit", listOf("sun" to "Soleil", "car" to "Voiture", "phone" to "Téléphone", "day" to "Jour", "night" to "Nuit"), prefs.s(PreferenceKeys.CARTHEME, "sun"),
             when (prefs.s(PreferenceKeys.CARTHEME, "sun")) { "sun" -> "Passe en mode nuit au coucher du soleil et en mode jour à son lever, là où vous êtes"; "car" -> "Suit le réglage de la voiture (ses phares ou son propre mode)"; "phone" -> "Clair ou sombre comme le téléphone"; else -> null }) { prefs.put(PreferenceKeys.CARTHEME, it) }
@@ -1556,5 +1572,50 @@ private fun SettingsMapPreview(engine: NavEngine, heightDp: Int) {
                 }
             }
         }
+    }
+}
+
+
+/**
+ * Card positions: a little picture of a wide screen showing where the turn card, trip card and speedometer will sit, redrawn as the
+ * choices change (resolved the same way the map screens do it).
+ */
+@Composable
+private fun CardPositionsPreview(prefs: com.headunit.launcher.Prefs, car: Boolean) {
+    val vw = LocalVw.current
+    val engineMir = prefs.s(PreferenceKeys.DRIVE, "") == "lhd" ||
+        (prefs.s(PreferenceKeys.DRIVE, "") == "" && prefs.s(PreferenceKeys.COUNTRYDETECTED, "").let { it.isNotBlank() && it.uppercase() !in com.headunit.launcher.KEEP_LEFT })
+    val mir = if (car) false else when (prefs.s(PreferenceKeys.CARDS_SIDE, "auto")) { "left" -> false; "right" -> true; else -> engineMir }
+    val trip = if (car) prefs.s(PreferenceKeys.CAR_TRIP_POS, "auto") else prefs.s(PreferenceKeys.TRIP_POS, "auto")
+    val tripAt = if (trip == "auto") (if (mir) "right" else "left") else trip
+    val sp = if (car) prefs.s(PreferenceKeys.CAR_SPEED_SIDE, "auto") else prefs.s(PreferenceKeys.SPEED_SIDE, "auto")
+    val speedAt = if (sp == "auto") (if (car && trip == "right") "left" else if (mir) "left" else "right") else sp
+    val green = Color(0xFF1F7A57)
+    val dark = Color(0xFF1B2029)
+    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(130.dp).clip(RoundedCornerShape(12.dp))) {
+        val w = size.width; val h = size.height
+        drawRect(Color(0xFF2A3242))
+        drawLine(Color(0xFF3A4558), androidx.compose.ui.geometry.Offset(0f, h * 0.7f), androidx.compose.ui.geometry.Offset(w, h * 0.45f), strokeWidth = h * 0.06f)
+        val pad = w * 0.03f
+        // the turn card
+        val tw = w * 0.32f; val th = h * 0.26f
+        val tx = if (mir) w - pad - tw else pad
+        drawRoundRect(green, androidx.compose.ui.geometry.Offset(tx, pad), androidx.compose.ui.geometry.Size(tw, th), androidx.compose.ui.geometry.CornerRadius(10f))
+        // the speedometer
+        val r = h * 0.12f
+        val sx = if (speedAt == "left") pad + r else w - pad - r
+        // the trip strip
+        val sw = w * 0.36f; val sh = h * 0.13f
+        val sharing = speedAt == tripAt
+        val sy = h - pad - r - (if (sharing) sh + pad else 0f)
+        drawCircle(dark, r, androidx.compose.ui.geometry.Offset(sx, sy))
+        drawCircle(Color(0xFF5A9BFF), r, androidx.compose.ui.geometry.Offset(sx, sy), style = androidx.compose.ui.graphics.drawscope.Stroke(r * 0.18f))
+        val stx = when (tripAt) { "centre" -> (w - sw) / 2; "right" -> w - pad - sw; else -> pad }
+        drawRoundRect(dark, androidx.compose.ui.geometry.Offset(stx, h - pad - sh), androidx.compose.ui.geometry.Size(sw, sh), androidx.compose.ui.geometry.CornerRadius(sh / 2))
+        drawRoundRect(vw.accent, androidx.compose.ui.geometry.Offset(stx + sw * 0.08f, h - pad - sh * 0.62f), androidx.compose.ui.geometry.Size(sw * 0.3f, sh * 0.24f), androidx.compose.ui.geometry.CornerRadius(4f))
+        // your arrow
+        val ax = w * 0.5f; val ay = h * 0.55f
+        val path = androidx.compose.ui.graphics.Path().apply { moveTo(ax, ay - h * 0.07f); lineTo(ax + h * 0.05f, ay + h * 0.05f); lineTo(ax, ay + h * 0.025f); lineTo(ax - h * 0.05f, ay + h * 0.05f); close() }
+        drawPath(path, Color(0xFF9CC7FF))
     }
 }

@@ -267,6 +267,7 @@ class CarNavSession : Session() {
             false, prefs.b(PreferenceKeys.FURNITURE3D, true), prefs.b(PreferenceKeys.CLEARVIEW, true))
         // fork FR : la vue satellite choisie dans les réglages vaut aussi pour l'écran de la voiture
         map.setView(prefs.b(PreferenceKeys.SATELLITE, false), prefs.b(PreferenceKeys.BUILDINGS_3D, true))
+        map.setHdRoads(com.headunit.launcher.hdRoadsWanted(prefs, prefs.s(PreferenceKeys.COUNTRYDETECTED, "")))
         val engine = NavEngine(app, prefs, map)
         // the car screen does the talking while it's connected, and shares the trip with the phone
         engine.isCar = true

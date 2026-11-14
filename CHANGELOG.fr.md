@@ -5,6 +5,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Virages dangereux : les virages où il faut ralentir sont rayés de jaune avec des chevrons noirs sur l'itinéraire, et environ 9 secondes avant chacun un panneau jaune dit « Virage dangereux · à prendre à 40 km/h » avec un bip (seulement si vous roulez plus vite). Calculé d'après la forme de la route ; les virages aux carrefours ne comptent pas. Réglages › Alertes › Virages dangereux.
+- Faisceau des phares : la nuit, un cône de lumière douce éclaire la route devant la flèche quand vous roulez, plus long à vive allure. Réglages › Votre flèche.
+- Destination en lumière à l'arrivée : le bâtiment reste éclairé tant que la carte d'arrivée est affichée, son entrée (le côté le plus proche de là où vous vous êtes arrêté) est marquée, et une ligne pointillée montre le trajet à pied depuis le parking conseillé. Réglages › Arrivée.
+- Position des cartes : Réglages › Écran et tailles › Position des cartes place la carte de direction en haut à gauche ou à droite, la carte de trajet dessous ou en bas à gauche, au centre ou à droite, et le compteur en bas à gauche ou à droite, avec un aperçu. Sur Android Auto : la carte de trajet et le compteur.
+- Partir d'ici : appui long sur la carte, puis « Partir d'ici », et les itinéraires partent de cet endroit au lieu de votre position GPS (une pastille l'indique jusqu'à ce que vous la touchiez, ou que vous partiez en roulant).
 - Démo : pendant la démo, la vitesse se change d'une touche sans recommencer, et « Virage suivant » saute à environ 250 m du prochain carrefour. Sur l'écran des itinéraires, un bouton Démo à côté de Démarrer lance le trajet en démo. Aussi sur Android Auto (Arrêter la démo, vitesse, Virage suivant).
 - Garder la flèche sur le côté : nouvel interrupteur (réglages Android Auto, et Réglages › Écran › En conduite) pour que la flèche reste sur le côté d'un écran large quand les cartes se replient, au lieu de revenir au centre.
 - Barre de trajet sur l'écran conducteur : avec un itinéraire, la carte derrière le volant montre temps restant · distance · arrivée dans une petite barre en bas, comme Google Maps. Elle est aussi plus dézoomée (encore plus en roulant), et un réglage « Zoom de l'écran conducteur » s'ajoute aux réglages de la voiture.
@@ -116,6 +121,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Rues absentes de la carte : dans certains pays, les routes HD de Mapbox masquaient les rues ordinaires, ne laissant que les grands axes. Les routes HD (marquages au sol, flèches, ponts en 3D) deviennent un réglage dans Réglages › Style de carte, activé d'office seulement au Royaume-Uni.
+- Recherche avec une clé TomTom récente : si la recherche classique de TomTom refuse la clé (les nouvelles clés n'ont parfois que les services « Orbis »), la même recherche est essayée sur Orbis, et l'appli dit une fois pourquoi si TomTom refuse les deux.
+- Compteur sur les écrans Android Auto bas : il reste dans le coin en bas à gauche, avec la carte de trajet sur une ligne à côté pendant le guidage, au lieu de glisser avec les boutons de zoom et de cacher le logo Mapbox.
+- Flèche revenant au milieu cartes repliées : sur un écran large, avec Domicile, Travail et les lieux repliés (seule la barre de recherche), la flèche revient au milieu, comme dans Waze.
 - Alertes « Stop devant » pour des stops qui n'étaient pas pour vous : les stops des routes qui arrivent de droite ou de gauche, juste au bord de l'itinéraire, déclenchaient l'alerte. Seuls les stops sur la route que vous suivez (dans votre sens quand OpenStreetMap l'indique) sont gardés ; un stop au carrefour même ne compte que si c'est votre route qui s'y arrête.
 - Fenêtre « Étapes du trajet » : son fond était transparent en thème sombre, et l'écran des itinéraires se voyait à travers. Il est maintenant opaque, et « Annuler » ne se coupe plus en deux (le bouton principal dit « Mettre à jour »).
 - Ajout d'une étape depuis l'écran des itinéraires (+ Carburant, + Borne…) : la liste passait sous les options (météo, étapes, démo, départ, batterie) et se lisait mal. Les options se retirent pendant que la liste est ouverte, et reviennent en la fermant ou en choisissant une étape.
