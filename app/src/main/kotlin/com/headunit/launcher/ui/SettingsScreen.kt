@@ -647,13 +647,19 @@ private fun ZonesItem() {
 
 @Composable
 private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
+    // fork FR : pour chaque type d'alerte, l'affichage à l'écran, le bip et l'annonce vocale se choisissent séparément
+    SGroup("Comment être prévenu", "Pour chaque alerte : Écran (la bannière), Bip et Voix (l'annonce). Touchez pour activer ou couper") {
+        for ((g, label) in listOf(
+            "camera" to "Radars (fixes et tronçons)", "limit" to "Changement de limitation", "bend" to "Virages dangereux",
+            "stop" to "Stops", "bump" to "Ralentisseurs", "school" to "Écoles", "rail" to "Passages à niveau et gués",
+            "incident" to "Incidents et routes fermées", "zone" to "Zones à faibles émissions", "wrongway" to "Contresens",
+            "rain" to "Pluie et neige sur le trajet", "break" to "Pause conseillée", "plan" to "Trajets planifiés",
+        )) AlertWaysRow(prefs, engine, g, label)
+    }
     SGroup("Vitesse") {
         SToggle(prefs, "Avertir en cas d'excès de vitesse", "speedwarn", true)
         if (prefs.b(PreferenceKeys.SPEEDWARN, true)) SChoice("Avertir au-delà de", listOf("0", "5", "10").map { it to it + if (engine.imperial) " mph" else " km/h" }, prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5")) { prefs.put(PreferenceKeys.TRAFFIC_WARNING, it) }
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
-        if (prefs.b(PreferenceKeys.LIMITCHANGE, true)) SChoice("Comment", listOf("both" to "Bip et voix", "voice" to "Voix seule", "chime" to "Bip seul"),
-            prefs.s(PreferenceKeys.LIMITCHANGE_HOW, "both")) { prefs.put(PreferenceKeys.LIMITCHANGE_HOW, it) }
-        if (prefs.b("limitchange", true)) SToggle(prefs, "Afficher aussi le changement à l'écran", "limitbanner", false, "Désactivé : seulement l'annonce vocale (et le panneau qui clignote), sans la grande bannière")
         SToggle(prefs, "Prochaine limitation", PreferenceKeys.NEXT_LIMIT, true, "Un petit panneau au-dessus de la limitation avec la suivante sur votre itinéraire et sa distance, à partir d'environ 800 m")
         SChoice("Source des limitations", listOf("mg4" to "Comme MG4Dash", "mix" to "MG4Dash + TomTom", "auto" to "TomTom et Mapbox"), prefs.s("limitsrc", "mg4"),
             when (prefs.s("limitsrc", "mg4")) {
@@ -1617,5 +1623,20 @@ private fun CardPositionsPreview(prefs: com.headunit.launcher.Prefs, car: Boolea
         val ax = w * 0.5f; val ay = h * 0.55f
         val path = androidx.compose.ui.graphics.Path().apply { moveTo(ax, ay - h * 0.07f); lineTo(ax + h * 0.05f, ay + h * 0.05f); lineTo(ax, ay + h * 0.025f); lineTo(ax - h * 0.05f, ay + h * 0.05f); close() }
         drawPath(path, Color(0xFF9CC7FF))
+    }
+}
+
+/** Fork FR : une ligne « type d'alerte » avec ses trois choix Écran, Bip, Voix. */
+@Composable
+private fun AlertWaysRow(prefs: Prefs, engine: NavEngine, g: String, label: String) {
+    val c = LocalVw.current
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(label, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((ch, name) in listOf("screen" to "Écran", "beep" to "Bip", "voice" to "Voix")) {
+                val on = engine.alertOn(g, ch)
+                Pill(name, on, { prefs.put("alert_${g}_$ch", !on) })
+            }
+        }
     }
 }

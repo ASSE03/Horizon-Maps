@@ -757,10 +757,30 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Puts an alert on screen as a prominent banner. */
     fun raiseAlert(kind: String, text: String, ms: Long = 5000) {
+        if (!alertOn(kind, "screen")) return
         alert = AlertInfo(kind, text, ms)
         val t = ++alertToken
         scope.launch { delay(ms); if (t == alertToken) alert = null }
     }
+
+    /**
+     * Fork FR : pour chaque type d'alerte, l'affichage à l'écran, le bip et l'annonce vocale se choisissent séparément
+     * (Réglages › Alertes › Comment être prévenu). ch : "screen", "beep" ou "voice".
+     */
+    fun alertOn(kind: String, ch: String): Boolean {
+        val g = alertGroup(kind)
+        return prefs.b("alert_${g}_$ch", alertDefault(g, ch))
+    }
+    fun alertGroup(kind: String) = when (kind) { "avg" -> "camera"; "ford" -> "rail"; "bend-l" -> "bend"; else -> kind }
+    fun alertDefault(g: String, ch: String): Boolean = when (g) {
+        // la limitation reprend les anciens réglages (bannière coupée par défaut, « Comment » : bip et voix, voix seule, bip seul)
+        "limit" -> when (ch) { "screen" -> prefs.b("limitbanner", false); "beep" -> prefs.s(PreferenceKeys.LIMITCHANGE_HOW, "both") != "voice"; else -> prefs.s(PreferenceKeys.LIMITCHANGE_HOW, "both") != "chime" }
+        "stop", "bump", "bend" -> ch != "voice"
+        "school", "rail", "incident", "zone", "rain", "break" -> ch != "beep"
+        else -> true
+    }
+    private fun achime(kind: String, tone: Int = android.media.ToneGenerator.TONE_PROP_ACK) { if (alertOn(kind, "beep")) chime(tone) }
+    private fun aspeak(kind: String, text: String, alert: Boolean = true) { if (alertOn(kind, "voice")) speak(text, alert) }
 
     /** Plays a sample alert (chime, banner and voice) so the sound can be checked. */
     fun testAlert() {
@@ -1328,12 +1348,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             announcedLimit = n; candidateHits = 0; limitCandidate = -1
             LimitLog.add(ctx, "annonce : limitation $n @ ${LimitLog.pos(fix?.pos)}")
             // Réglages › Alertes › Comment : bip et voix, voix seule ou bip seul ; fork FR : la bannière peut être coupée
-            val how = prefs.s(PreferenceKeys.LIMITCHANGE_HOW, "both")
-            if (prefs.b("limitbanner", false)) raiseAlert("limit", "Limitation $n")
-            if (how != "voice") chime()
-            if (how != "chime") {
+            val beep = alertOn("limit", "beep"); val voice = alertOn("limit", "voice")
+            raiseAlert("limit", "Limitation $n")
+            if (beep) chime()
+            if (voice) {
                 // après le bip, pour que les deux ne se couvrent pas (sur certains autoradios la voix se perdait dessous)
-                if (how == "voice") speak("Limitation à $n", true)
+                if (!beep) speak("Limitation à $n", true)
                 else scope.launch { delay(450); speak("Limitation à $n", true) }
             }
             limitPulse = true
@@ -2387,7 +2407,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         routeWx.firstOrNull { it.code in 51..67 || it.code in 80..82 || it.code in 95..99 || it.code in 71..77 || it.code in 85..86 || it.rain >= 70 }?.let {
             val snow = it.code in 71..77 || it.code in 85..86
             raiseAlert("rain", (if (snow) "Neige" else "Pluie") + " prévue dans environ ${it.minutes} min sur votre trajet", 6000)
-            speak((if (snow) "Neige" else "Pluie") + " prévue dans environ ${it.minutes} minutes sur votre trajet", true)
+            aspeak("rain", (if (snow) "Neige" else "Pluie") + " prévue dans environ ${it.minutes} minutes sur votre trajet", true)
         }
         // fork FR : avec un départ de démo choisi, la flèche part du début de l'itinéraire (la vraie position, loin de là, faisait
         // recalculer l'itinéraire depuis chez vous juste avant la démo)
@@ -2483,8 +2503,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (simMode == 0 && spd < b.mps + 1.5) continue
             sharpWarned += i
             val sp = if (imperial) "${(Math.round(b.mps * 2.23694 / 5.0) * 5).coerceAtLeast(10)} mph" else "${(Math.round(b.mps * 3.6 / 10.0) * 10).coerceAtLeast(20)} km/h"
-            chime(android.media.ToneGenerator.TONE_PROP_PROMPT)
+            achime("bend", android.media.ToneGenerator.TONE_PROP_PROMPT)
             raiseAlert(if (b.right) "bend" else "bend-l", "À prendre à $sp", 7000)
+            aspeak("bend", "Virage dangereux, à prendre à $sp")
             break
         }
     }
@@ -2995,11 +3016,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (bestD <= 300.0 && camAlerted.add(best)) {
                 camStep[best] = 2
                 val say = if (bestD < 60.0) "$radar tout de suite" else "$radar dans ${Geo.spoken(bestD, imperial)}"
-                chime(android.media.ToneGenerator.TONE_PROP_PROMPT); raiseAlert("camera", say); speak(say, true)
+                achime("camera", android.media.ToneGenerator.TONE_PROP_PROMPT); raiseAlert("camera", say); aspeak("camera", say, true)
             } else if (bestD <= 160.0 && bestD >= 60.0 && (camStep[best] ?: 0) == 2) {
                 camStep[best] = 1
                 val say = "$radar dans ${if (imperial) Geo.spoken(bestD, true) else "150 mètres"}"
-                raiseAlert("camera", say); speak(say, true)
+                raiseAlert("camera", say); aspeak("camera", say, true)
             }
         }
     }
@@ -3026,7 +3047,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val hrs = breakNext / 3600
                 breakNext += 7200
                 raiseAlert("break", "Vous roulez depuis $hrs heures. Une pause ?", 8000)
-                speak("Vous roulez depuis $hrs heures. Pensez à faire une pause.", true)
+                aspeak("break", "Vous roulez depuis $hrs heures. Pensez à faire une pause.", true)
                 if (route == null) loadNearby("fuel", false)
             }
         } else if (p.speed > 3.0) {
@@ -4733,7 +4754,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         if (hit == null) return
         raiseAlert("incident", "Route fermée devant. Recherche d'un détour", 6000)
-        speak("Route fermée devant. Recherche d'un détour.", true)
+        aspeak("incident", "Route fermée devant. Recherche d'un détour.", true)
         reroute()
     }
 
@@ -4841,7 +4862,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val mins = next.first.delaySec / 60
             val extra = if (mins >= 2) ", environ $mins minutes de retard" else ""
             raiseAlert("incident", "${next.third} devant, ${Geo.fmtDist(d, imperial)}$extra", 7000)
-            speak("${next.third} dans ${Geo.spoken(d, imperial)}$extra", true)
+            aspeak("incident", "${next.third} dans ${Geo.spoken(d, imperial)}$extra", true)
         }
     }
 
@@ -5779,13 +5800,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (!busyDriving && !warned10 && now >= cur.leaveBy - 10 * 60_000L && now < cur.leaveBy) {
                     warned10 = true
                     raiseAlert("plan", "Départ dans 10 minutes pour ${cur.dest.name}", 7000)
-                    speak("Départ dans environ 10 minutes pour ${cur.dest.name}", true)
+                    aspeak("plan", "Départ dans environ 10 minutes pour ${cur.dest.name}", true)
                 }
                 if (!busyDriving && !warned0 && now >= cur.leaveBy) {
                     warned0 = true
-                    chime(android.media.ToneGenerator.TONE_PROP_PROMPT)
+                    achime("plan", android.media.ToneGenerator.TONE_PROP_PROMPT)
                     raiseAlert("plan", "C'est l'heure de partir pour ${cur.dest.name}", 8000)
-                    speak("C'est l'heure de partir pour ${cur.dest.name}", true)
+                    aspeak("plan", "C'est l'heure de partir pour ${cur.dest.name}", true)
                 }
                 delay(30_000)
             }
@@ -6011,9 +6032,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val now = System.currentTimeMillis()
         if (wrongCount >= 4 && now - wrongAt > 60_000L) {
             wrongAt = now
-            chime(android.media.ToneGenerator.TONE_PROP_BEEP2)
+            achime("wrongway", android.media.ToneGenerator.TONE_PROP_BEEP2)
             raiseAlert("wrongway", "Contresens ! Cette route est à sens unique", 7000)
-            speak("Attention. Vous roulez peut-être à contresens sur une route à sens unique.", true)
+            aspeak("wrongway", "Attention. Vous roulez peut-être à contresens sur une route à sens unique.", true)
         }
     }
 
@@ -6199,9 +6220,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (avgIn !== cur) {
                     avgIn = cur; avgEnterAt = now; avgEnterProg = progress; avgOverWarned = false
                     if (avgAlerted.add(cur.def.id)) {
-                        chime(android.media.ToneGenerator.TONE_PROP_PROMPT)
+                        achime("camera", android.media.ToneGenerator.TONE_PROP_PROMPT)
                         raiseAlert("avg", "Radar tronçon sur ${Geo.fmtDist(cur.end - progress, imperial)}", 6000)
-                        speak("Radar tronçon sur ${Geo.spoken(cur.end - progress, imperial)}", true)
+                        aspeak("camera", "Radar tronçon sur ${Geo.spoken(cur.end - progress, imperial)}", true)
                     }
                 }
                 val secs = (now - avgEnterAt) / 1000.0
@@ -6226,9 +6247,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val next = pl.avg.filter { it.start > progress && it.start - progress < 1200.0 }.minByOrNull { it.start }
                 avgInfo = next?.let { AvgInfo(0.0, it.def.limit ?: speedLimit, it.end - it.start, false, true, it.start - progress) }
                 if (next != null && next.start - progress < 500.0 && avgAlerted.add(next.def.id)) {
-                    chime(android.media.ToneGenerator.TONE_PROP_PROMPT)
+                    achime("camera", android.media.ToneGenerator.TONE_PROP_PROMPT)
                     raiseAlert("avg", "Radar tronçon devant, sur ${Geo.fmtDist(next.end - next.start, imperial)}", 6000)
-                    speak("Radar tronçon devant", true)
+                    aspeak("camera", "Radar tronçon devant", true)
                 }
             }
         } else if (avgInfo != null) avgInfo = null
@@ -6263,7 +6284,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (ahead < 0.0 || ahead > max(80.0, sp * 6.0)) continue
             val key = "stop${Math.round(h.poi.pos.lat * 1e5)},${Math.round(h.poi.pos.lon * 1e5)}"
             if (!hzAlerted.add(key)) continue
-            chime(android.media.ToneGenerator.TONE_PROP_ACK)
+            achime("stop", android.media.ToneGenerator.TONE_PROP_ACK)
             raiseAlert("stop", "Stop devant", 4000)
         }
 
@@ -6274,8 +6295,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (ahead < 0.0 || ahead > max(220.0, sp * 9.0)) continue
             val key = "${h.poi.kind}${Math.round(h.poi.pos.lat * 1e5)},${Math.round(h.poi.pos.lon * 1e5)}"
             if (!hzAlerted.add(key)) continue
-            if (h.poi.kind == "rail") { raiseAlert("rail", "Passage à niveau devant", 6000); speak("Passage à niveau devant", true) }
-            else { raiseAlert("ford", "Gué devant : la route peut être inondée", 7000); speak("Gué devant. La route peut être inondée", true) }
+            if (h.poi.kind == "rail") { raiseAlert("rail", "Passage à niveau devant", 6000); aspeak("rail", "Passage à niveau devant", true) }
+            else { raiseAlert("ford", "Gué devant : la route peut être inondée", 7000); aspeak("rail", "Gué devant. La route peut être inondée", true) }
         }
 
         // speed bumps and schools just ahead
@@ -6286,12 +6307,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (h.poi.kind == "bump") {
                 if (prefs.b(PreferenceKeys.BUMPS, true) && sp > 6.7 && ahead < max(70.0, sp * 6.0) && now - lastBumpAt > 25_000L && hzAlerted.add(key)) {
                     lastBumpAt = now
-                    chime(android.media.ToneGenerator.TONE_PROP_ACK)
+                    achime("bump", android.media.ToneGenerator.TONE_PROP_ACK)
                     raiseAlert("bump", "Ralentisseur devant", 3500)
                 }
             } else if (prefs.b(PreferenceKeys.SCHOOLS, true) && ahead < 300.0 && RouteExtras.schoolTime(now) && hzAlerted.add(key)) {
                 raiseAlert("school", "École devant : ${h.poi.name}", 5000)
-                speak("École devant", true)
+                aspeak("school", "École devant", true)
             }
         }
 
@@ -6302,7 +6323,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 raiseAlert("zone", if (ahead <= 0) "Vous êtes dans : $name" else "Entrée dans $name dans ${Geo.fmtDist(ahead, imperial)}", 7000)
                 // (fork FR : les ZFE françaises ne sont pas payantes, la redevance n'est annoncée qu'au Royaume-Uni)
                 val fee = if (detectedCountry.equals("GB", true)) " Une redevance peut s'appliquer." else ""
-                speak(if (ahead <= 0) "Vous êtes dans $name.$fee" else "Vous allez entrer dans $name.$fee", true)
+                aspeak("zone", if (ahead <= 0) "Vous êtes dans $name.$fee" else "Vous allez entrer dans $name.$fee", true)
             }
         }
 
