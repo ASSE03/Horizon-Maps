@@ -92,7 +92,79 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     var pendingSave by mutableStateOf<String?>(null)
     var departMin by mutableIntStateOf(0)
     var departAtMs by mutableLongStateOf(0L)
-    var speedLimit by mutableStateOf<Double?>(null)     // m/s
+    private var speedLimitRaw by mutableStateOf<Double?>(null)
+    /** m/s. Fork FR : plafonnée à 50 dans une agglomération (entre ses panneaux d'entrée et de sortie, d'après OpenStreetMap). */
+    var speedLimit: Double?
+        get() = speedLimitRaw?.let { townCap(it) }
+        set(v) { speedLimitRaw = v }
+    /** Fork FR : vrai entre le panneau d'entrée d'une agglomération et son panneau de sortie. */
+    var inTown by mutableStateOf(false)
+        private set
+    private var townName = ""
+    private var townAt = 0L
+    private var townPos: LL? = null
+    /** 90 ou 80 entre les panneaux d'agglomération : presque toujours une erreur de la carte, la limite y est 50. (70 peut être vrai.) */
+    private fun townCap(ms: Double): Double = if (inTown && ms > 75.0 / 3.6) 50.0 / 3.6 else ms
+    private class TownSign(val pos: LL, val name: String)
+    private class TownPlace(val pos: LL, val name: String)
+    @Volatile private var townSigns: List<TownSign> = emptyList()
+    @Volatile private var townPlaces: List<TownPlace> = emptyList()
+    private var townQueryPos: LL? = null
+    private var townQueryAt = 0L
+    private var townBusy = false
+    private val townUsed = HashMap<String, Long>()
+
+    /**
+     * Fork FR : les panneaux d'entrée et de sortie d'agglomération (traffic_sign=city_limit d'OpenStreetMap). En passant un panneau,
+     * l'agglomération qu'il nomme est devant vous (entrée) ou derrière (sortie) ; entre les deux, une limite à 90 ou 80 lue sur la
+     * carte (un tronçon mal renseigné, comme à Silon) est ramenée à 50.
+     */
+    private fun townCheck(p: Fix) {
+        val now = System.currentTimeMillis()
+        val qp = townQueryPos
+        if (!townBusy && (qp == null || Geo.dist(qp, p.pos) > 1500.0) && now - townQueryAt > 60_000L) {
+            townBusy = true; townQueryAt = now; townQueryPos = p.pos
+            val c = p.pos
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val pt = String.format(java.util.Locale.US, "%.5f,%.5f", c.lat, c.lon)
+                    val els = Overpass.query("[out:json][timeout:25];(node(around:2500,$pt)[\"traffic_sign\"~\"city_limit\"];" +
+                        "node(around:6000,$pt)[\"place\"~\"^(city|town|village|hamlet|suburb|neighbourhood)$\"][\"name\"];);out body;", 10000, 30000, 2)
+                    val signs = ArrayList<TownSign>(); val places = ArrayList<TownPlace>()
+                    for (i in 0 until els.length()) {
+                        val e = els.getJSONObject(i); val t = e.optJSONObject("tags") ?: continue
+                        val pos = LL(e.optDouble("lat"), e.optDouble("lon")); val n = t.optString("name")
+                        if (n.isBlank()) continue
+                        if (t.optString("traffic_sign").contains("city_limit")) signs += TownSign(pos, n) else places += TownPlace(pos, n)
+                    }
+                    townSigns = signs; townPlaces = places
+                } catch (e: Exception) { townQueryPos = null }
+                townBusy = false
+            }
+        }
+        // en agglomération depuis trop longtemps ou trop loin (panneau de sortie manqué) : on n'y croit plus
+        if (inTown && (now - townAt > 15 * 60_000L || (townPos?.let { Geo.dist(it, p.pos) > 5000.0 } ?: false))) setTown(false, "")
+        if (p.speed < 1.0) return
+        fun norm(x: String) = java.text.Normalizer.normalize(x.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").replace(Regex("[^a-z0-9]"), "")
+        for (sgn in townSigns) {
+            if (Geo.dist(sgn.pos, p.pos) > 25.0) continue
+            val key = "${norm(sgn.name)}@${Math.round(sgn.pos.lat * 1e4)},${Math.round(sgn.pos.lon * 1e4)}"
+            if ((townUsed[key] ?: 0L) > now - 120_000L) continue
+            townUsed[key] = now
+            val pl = townPlaces.filter { norm(it.name) == norm(sgn.name) }.minByOrNull { Geo.dist(it.pos, sgn.pos) } ?: continue
+            val ahead = abs(angDiff(Geo.bearing(sgn.pos, pl.pos), p.heading)) < 90.0
+            setTown(ahead, sgn.name)
+            break
+        }
+    }
+
+    private fun setTown(on: Boolean, name: String) {
+        if ((inTown == on && townName == name) || (!on && !inTown)) return
+        inTown = on; townName = if (on) name else ""
+        townAt = System.currentTimeMillis(); townPos = fix?.pos
+        LimitLog.add(ctx, (if (on) "entrée en agglomération : $name" else "sortie d'agglomération") + " @ ${LimitLog.pos(fix?.pos)}")
+        speedLimitRaw?.let { if (it > 75.0 / 3.6) checkLimitChange(townCap(it), false) }
+    }
     /** The next speed limit on the route ahead (m/s) and how far to it (m), when it changes within about half a mile. */
     var nextLimit by mutableStateOf<Pair<Double, Double>?>(null)
     var limitEstimated by mutableStateOf(false)
@@ -1337,7 +1409,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
-    private fun checkLimitChange(newMs: Double, estimated: Boolean) {
+    private fun checkLimitChange(newMs0: Double, estimated: Boolean) {
+        val newMs = townCap(newMs0)
         if (!prefs.b(PreferenceKeys.LIMITCHANGE, true) || estimated) return
         val k = if (imperial) 2.23694 else 3.6
         val n = (Math.round(newMs * k / 5.0) * 5).toInt()
@@ -1488,6 +1561,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             appendLine("Fichier des radars de France : ${RadarsFr.status}")
             appendLine("Gyroscope (flèche dans les virages) : ${if (Gyro.alive()) "actif" else "absent ou arrêté"}, accords avec le GPS $gyroOk, désaccords $gyroBad")
             appendLine("Lampadaires : ${map.lampInfo()}")
+            appendLine("Agglomération (panneaux OSM) : ${if (inTown) "dans $townName" else "hors agglomération"}, ${townSigns.size} panneaux connus autour")
             appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · dernière recherche : ${Overpass.camNote.ifBlank { "aucune" }.take(160)} · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)}" + " · Nominatim : ${NominatimPoi.lastNote.ifBlank { "-" }} · zones : ${Zones.status.take(120)}")
             appendLine("Carte : ${try { map.styleNote } catch (e: Exception) { "?" }} · satellite : ${if (map.isSatellite) "oui" else "non"}")
             if (BisonFute.status.isNotBlank()) appendLine(BisonFute.status)
@@ -2893,6 +2967,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             lastSpd = p.speed; lastSpdAt = now
         }
         // fork FR : à pied, ni limitation ni alerte de vitesse
+        if (!walking && prefs.b("towncap", true)) try { townCheck(p) } catch (e: Exception) { }
         if (walking) { if (speedLimit != null) speedLimit = null; overLimit = false }
         else if (mgLimits()) try { applyMgLimit(p) } catch (e: Exception) { }
         if (!walking) run {

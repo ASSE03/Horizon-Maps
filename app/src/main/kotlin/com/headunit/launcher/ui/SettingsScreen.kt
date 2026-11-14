@@ -660,6 +660,7 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Avertir en cas d'excès de vitesse", "speedwarn", true)
         if (prefs.b(PreferenceKeys.SPEEDWARN, true)) SChoice("Avertir au-delà de", listOf("0", "5", "10").map { it to it + if (engine.imperial) " mph" else " km/h" }, prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5")) { prefs.put(PreferenceKeys.TRAFFIC_WARNING, it) }
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
+        SToggle(prefs, "50 en agglomération", "towncap", true, "Entre les panneaux d'entrée et de sortie d'une agglomération (d'après OpenStreetMap), une limite à 80 ou 90 lue sur la carte est ramenée à 50 : c'est presque toujours une erreur de la carte")
         SToggle(prefs, "Prochaine limitation", PreferenceKeys.NEXT_LIMIT, true, "Un petit panneau au-dessus de la limitation avec la suivante sur votre itinéraire et sa distance, à partir d'environ 800 m")
         SChoice("Source des limitations", listOf("mg4" to "Comme MG4Dash", "mix" to "MG4Dash + TomTom", "auto" to "TomTom et Mapbox"), prefs.s("limitsrc", "mg4"),
             when (prefs.s("limitsrc", "mg4")) {
