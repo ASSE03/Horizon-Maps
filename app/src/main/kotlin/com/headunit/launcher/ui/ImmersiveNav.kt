@@ -490,6 +490,18 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
 
         // "Start from here" (#88): where routes are being planned from, until ✕ (or you set off with a GPS fix). Same spot as the
         // traffic pill (never shown together)
+        // (la place de la pastille « Partir d'ici », reprise de celle du trafic à l'arrêt)
+        var trafficPillWPx by remember { mutableStateOf(0) }
+        val trafficPillW = with(dens) { trafficPillWPx.toDp() }
+        val topLeftEdge = 16.dp + 380.dp + 12.dp
+        val topRightEdge = with(dens) { buttonsWPx.toDp() } + 16.dp + 12.dp + (if (speedPos == "top") 110.dp else 0.dp)
+        val topGap = maxWidth - topLeftEdge - topRightEdge
+        val trafficOnTop = !narrow && trafficPillWPx > 0 && trafficPillW <= topGap
+        val trafficMod = when {
+            trafficOnTop -> Modifier.align(side(Alignment.TopStart)).sides(start = topLeftEdge + (topGap - trafficPillW) / 2, top = 16.dp)
+            tripPx > 0 && !narrow -> Modifier.align(side(Alignment.BottomStart)).sides(start = 16.dp, bottom = tripH + 10.dp)
+            else -> Modifier.align(Alignment.BottomCenter).padding(bottom = if (tripPx > 0) tripH + 10.dp else 18.dp)
+        }
         val sf = engine.startFrom
         AnimatedVisibility(sf != null && !engine.stoppedOverview, modifier = trafficMod, enter = fadeIn(tween(300)), exit = fadeOut(tween(250))) {
             Row(Modifier.onSizeChanged { if (it.width > 0) trafficPillWPx = it.width }.panel(6.dp, RoundedCornerShape(20.dp), c.surface).pressClick { engine.clearStartFrom() }.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
