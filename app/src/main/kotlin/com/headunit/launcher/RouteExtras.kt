@@ -88,6 +88,44 @@ object RouteExtras {
         return out
     }
 
+    /**
+     * Fork FR : ce stop est-il pour vous ? Avec son sens (direction=forward/backward) il doit être dans votre sens ; sans, il doit être
+     * sur une route qui suit votre itinéraire : un stop sur une route qui arrive de côté, ou au carrefour même alors que votre route
+     * continue tout droit (il est pour la route qui s'y arrête), est ignoré.
+     */
+    private fun stopForUs(id: Long, t: JSONObject, pos: LL, line: List<LL>, ways: List<JSONObject>): Boolean {
+        // le cap de l'itinéraire au droit du stop
+        var best = -1; var bd = Double.MAX_VALUE
+        for (i in 0 until line.size - 1) { val d = Geo.dist(line[i], pos) + Geo.dist(line[i + 1], pos) - Geo.dist(line[i], line[i + 1]); if (d < bd) { bd = d; best = i } }
+        if (best < 0) return true
+        val rb = Geo.bearing(line[best], line[best + 1])
+        fun diff(a: Double, b: Double) = Math.abs(((a - b) % 360.0 + 540.0) % 360.0 - 180.0)
+        // les routes qui passent par ce stop, et leur cap à cet endroit
+        class W(val bear: Double, val end: Boolean)
+        val ws = ArrayList<W>()
+        for (w in ways) {
+            val ids = w.optJSONArray("nodes") ?: continue; val g = w.optJSONArray("geometry") ?: continue
+            if (ids.length() != g.length() || ids.length() < 2) continue
+            var k = -1
+            for (i in 0 until ids.length()) if (ids.optLong(i) == id) { k = i; break }
+            if (k < 0) continue
+            fun at(i: Int) = g.getJSONObject(i).let { LL(it.getDouble("lat"), it.getDouble("lon")) }
+            val a = at(maxOf(0, k - 1)); val b = at(minOf(ids.length() - 1, k + 1))
+            ws += W(Geo.bearing(a, b), k == 0 || k == ids.length() - 1)
+        }
+        if (ws.isEmpty()) return true
+        val dir = t.optString("direction")
+        if ((dir == "forward" || dir == "backward") && ws.size == 1) {
+            val travel = ws[0].bear + if (dir == "backward") 180.0 else 0.0
+            return diff(travel, rb) < 60.0
+        }
+        val aligned = ws.filter { diff(it.bear, rb) < 35.0 || diff(it.bear, rb) > 145.0 }
+        if (aligned.isEmpty()) return false
+        // au carrefour même : seulement si votre route s'y arrête (vous êtes sur la route qui a le stop)
+        if (ws.size > 1 && aligned.any { !it.end }) return false
+        return true
+    }
+
     /** Speed bumps and schools right next to the route, and average speed checks around it (blocking). */
     fun hazards(line: List<LL>): Pair<List<RoutePoi>, List<AvgDef>> {
         if (line.size < 2) return emptyList<RoutePoi>() to emptyList()
@@ -99,7 +137,7 @@ object RouteExtras {
             "(node(around:14,$pl)[\"traffic_calming\"~\"^(bump|hump|table|cushion)$\"];" +
             "node(around:90,$pl)[\"amenity\"=\"school\"];way(around:90,$pl)[\"amenity\"=\"school\"];)->.a;.a out center tags 300;" +
             "node(around:10,$pl)[\"highway\"=\"crossing\"][\"crossing\"~\"^(zebra|marked|traffic_signals|uncontrolled|pelican|toucan|puffin|pegasus)$\"]->.c;.c out body 400;" +
-            "node(around:12,$pl)[\"highway\"=\"stop\"]->.s;.s out body 300;" +
+            "node(around:12,$pl)[\"highway\"=\"stop\"]->.s;.s out body 300;way(bn.s)[\"highway\"]->.sw;.sw out body geom 600;" +
             "(node(around:12,$pl)[\"railway\"=\"level_crossing\"];node(around:12,$pl)[\"ford\"=\"yes\"];way(around:12,$pl)[\"ford\"=\"yes\"];)->.f;.f out center tags 200;" +
             "rel($bbox)[\"enforcement\"=\"average_speed\"]->.r;.r out body;node(r.r);out skel qt;"
         val els = Overpass.query(q, 12000, 40000, 3)
@@ -107,16 +145,22 @@ object RouteExtras {
         // (crossings come from their own set, so they never crowd out the bumps and schools)
         val nodes = HashMap<Long, LL>()
         val rels = ArrayList<JSONObject>()
+        // fork FR : les routes qui passent par un stop, pour ne garder que les stops qui sont pour vous (pas ceux des routes qui
+        // arrivent de droite ou de gauche, juste au bord de votre itinéraire)
+        val stopWays = ArrayList<JSONObject>()
+        val stopTags = HashMap<Long, JSONObject>()
+        val stopPos = HashMap<Long, LL>()
         for (i in 0 until els.length()) {
             val e = els.getJSONObject(i)
             when (e.optString("type")) {
                 "relation" -> rels += e
                 else -> {
+                    if (e.optString("type") == "way" && e.has("geometry") && e.optJSONObject("tags")?.has("highway") == true) { stopWays += e; continue }
                     val pos = if (e.has("lat")) LL(e.getDouble("lat"), e.getDouble("lon")) else e.optJSONObject("center")?.let { LL(it.getDouble("lat"), it.getDouble("lon")) }
                     if (pos != null && e.optString("type") == "node") nodes[e.optLong("id")] = pos
                     val t = e.optJSONObject("tags") ?: continue
                     if (pos == null) continue
-                    if (t.optString("highway") == "stop") pois += RoutePoi("stop", "Stop", pos)
+                    if (t.optString("highway") == "stop") { stopTags[e.optLong("id")] = t; stopPos[e.optLong("id")] = pos }
                     else if (t.optString("railway") == "level_crossing") pois += RoutePoi("rail", "Passage à niveau", pos)
                     else if (t.optString("ford") == "yes") pois += RoutePoi("ford", "Gué", pos)
                     else if (t.optString("highway") == "crossing") pois += RoutePoi("crossing", t.optString("crossing"), pos)
@@ -125,6 +169,8 @@ object RouteExtras {
                 }
             }
         }
+        // (les routes arrivent après les stops dans la réponse : le tri se fait une fois tout lu)
+        for ((id, pos) in stopPos) if (stopForUs(id, stopTags[id]!!, pos, line, stopWays)) pois += RoutePoi("stop", "Stop", pos)
         val avgs = ArrayList<AvgDef>()
         for (rel in rels) {
             val ms = rel.optJSONArray("members") ?: continue

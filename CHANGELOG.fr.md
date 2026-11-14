@@ -116,6 +116,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Alertes « Stop devant » pour des stops qui n'étaient pas pour vous : les stops des routes qui arrivent de droite ou de gauche, juste au bord de l'itinéraire, déclenchaient l'alerte. Seuls les stops sur la route que vous suivez (dans votre sens quand OpenStreetMap l'indique) sont gardés ; un stop au carrefour même ne compte que si c'est votre route qui s'y arrête.
 - Fenêtre « Étapes du trajet » : son fond était transparent en thème sombre, et l'écran des itinéraires se voyait à travers. Il est maintenant opaque, et « Annuler » ne se coupe plus en deux (le bouton principal dit « Mettre à jour »).
 - Ajout d'une étape depuis l'écran des itinéraires (+ Carburant, + Borne…) : la liste passait sous les options (météo, étapes, démo, départ, batterie) et se lisait mal. Les options se retirent pendant que la liste est ouverte, et reviennent en la fermant ou en choisissant une étape.
 - Boutons du bas de l'écran des itinéraires : le bouton Démo de l'original (en double avec la ligne « Lancer la démo ») écrasait « Démarrer », qui débordait sur plusieurs lignes. Il est retiré, et le bouton dit simplement « Démarrer ».
