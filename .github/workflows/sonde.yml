@@ -4,4 +4,14 @@ jobs:
   t:
     runs-on: ubuntu-latest
     steps:
-      - run: echo bonjour
+      - run: |
+          set +e
+          Q='[out:json][timeout:60];(node["place"](45.18,4.77,45.23,4.82);)->.p;.p out body;way["highway"~"^(primary|secondary|tertiary|trunk)$"](45.185,4.785,45.225,4.815);out tags center;node["traffic_sign"](45.185,4.785,45.225,4.815);out body;'
+          curl -s -m 90 -A "HorizonNav/1.0 (Android navigation app)" -o o.json --data-urlencode "data=$Q" https://overpass-api.de/api/interpreter || curl -s -m 90 -A "HorizonNav/1.0 (Android navigation app)" -o o.json --data-urlencode "data=$Q" https://maps.mail.ru/osm/tools/overpass/api/interpreter
+          python3 - <<'PY'
+          import json
+          d=json.load(open('o.json'))
+          for e in d['elements']:
+              t=e.get('tags',{}); c=e.get('center',e)
+              print('SONDE', e['type'], e['id'], round(c.get('lat',0),5), round(c.get('lon',0),5), {k:v for k,v in t.items() if k in ('name','ref','highway','maxspeed','maxspeed:type','zone:maxspeed','source:maxspeed','place','traffic_sign','direction')})
+          PY
