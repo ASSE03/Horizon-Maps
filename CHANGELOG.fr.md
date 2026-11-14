@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Excès de vitesse au choix : dans Comment être prévenu, la ligne « Excès de vitesse » a aussi ses choix Écran (le compteur passe au rouge), Bip et Voix (« Attention, limitation à 90 », au dépassement puis toutes les 30 s tant qu'il dure).
 - Comment être prévenu, alerte par alerte : dans Réglages › Alertes, chaque type d'alerte (radars, changement de limitation, virages dangereux, stops, ralentisseurs, écoles, passages à niveau et gués, incidents, zones à faibles émissions, contresens, pluie, pause, trajets planifiés) a ses trois choix Écran, Bip et Voix, à activer ou couper séparément. Les anciens réglages de la limitation (bannière, « Comment ») sont repris.
 - Virages dangereux : les virages où il faut ralentir sont rayés de jaune avec des chevrons noirs sur l'itinéraire, et environ 9 secondes avant chacun un panneau jaune dit « Virage dangereux · à prendre à 40 km/h » avec un bip (seulement si vous roulez plus vite). Calculé d'après la forme de la route ; les virages aux carrefours ne comptent pas. Réglages › Alertes › Virages dangereux.
 - Faisceau des phares : la nuit, un cône de lumière douce éclaire la route devant la flèche quand vous roulez, plus long à vive allure. Réglages › Votre flèche.

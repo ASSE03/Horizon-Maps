@@ -650,7 +650,7 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
     // fork FR : pour chaque type d'alerte, l'affichage à l'écran, le bip et l'annonce vocale se choisissent séparément
     SGroup("Comment être prévenu", "Pour chaque alerte : Écran (la bannière), Bip et Voix (l'annonce). Touchez pour activer ou couper") {
         for ((g, label) in listOf(
-            "camera" to "Radars (fixes et tronçons)", "limit" to "Changement de limitation", "bend" to "Virages dangereux",
+            "camera" to "Radars (fixes et tronçons)", "speed" to "Excès de vitesse (Écran : le compteur passe au rouge)", "limit" to "Changement de limitation", "bend" to "Virages dangereux",
             "stop" to "Stops", "bump" to "Ralentisseurs", "school" to "Écoles", "rail" to "Passages à niveau et gués",
             "incident" to "Incidents et routes fermées", "zone" to "Zones à faibles émissions", "wrongway" to "Contresens",
             "rain" to "Pluie et neige sur le trajet", "break" to "Pause conseillée", "plan" to "Trajets planifiés",

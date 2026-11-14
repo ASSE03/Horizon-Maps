@@ -775,7 +775,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     fun alertDefault(g: String, ch: String): Boolean = when (g) {
         // la limitation reprend les anciens réglages (bannière coupée par défaut, « Comment » : bip et voix, voix seule, bip seul)
         "limit" -> when (ch) { "screen" -> prefs.b("limitbanner", false); "beep" -> prefs.s(PreferenceKeys.LIMITCHANGE_HOW, "both") != "voice"; else -> prefs.s(PreferenceKeys.LIMITCHANGE_HOW, "both") != "chime" }
-        "stop", "bump", "bend" -> ch != "voice"
+        "stop", "bump", "bend", "speed" -> ch != "voice"
         "school", "rail", "incident", "zone", "rain", "break" -> ch != "beep"
         else -> true
     }
@@ -2902,11 +2902,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // (fork FR : en démo accélérée, la vitesse « normale », sans le ×2 à ×8)
             val ps = p.speed / maxOf(1, simMode)
             val over = prefs.b(PreferenceKeys.SPEEDWARN, true) && lim != null && !limitEstimated && ps > lim + tol && ps > 4.0
-            overLimit = over
+            // fork FR : écran (compteur rouge), bip et voix au choix (Réglages › Alertes › Comment être prévenu › Excès de vitesse)
+            overLimit = over && alertOn("speed", "screen")
             if (over && soundMode != 2 && now - lastBeep > 9000) {
                 lastBeep = now
-                chime(android.media.ToneGenerator.TONE_PROP_BEEP2)
+                if (alertOn("speed", "beep")) chime(android.media.ToneGenerator.TONE_PROP_BEEP2)
             }
+            if (over && alertOn("speed", "voice") && (!wasOver || now - overSaidAt > 30000L)) {
+                overSaidAt = now
+                val n = Math.round(lim!! * (if (imperial) 2.23694 else 3.6) / 5.0) * 5
+                speak("Attention, limitation à $n", true)
+            }
+            wasOver = over
         }
         try { refreshRoad() } catch (e: Exception) { }
         val lp = limitPos
@@ -3610,6 +3617,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var yawAt = 0L
     /** Fork FR : l'angle total du gyroscope au dernier point GPS (ce que la voiture a tourné depuis = Gyro.total - gyroAtFix). */
     private var gyroAtFix = 0.0
+    private var wasOver = false
+    private var overSaidAt = 0L
     private var gyroOk = 0
     private var gyroBad = 0
 
