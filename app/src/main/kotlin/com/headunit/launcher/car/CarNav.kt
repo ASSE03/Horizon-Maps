@@ -93,7 +93,10 @@ object CarLayout {
      * secondes sans toucher l'écran, sans le dire à l'appli : on suit donc les appuis, et le compteur et le logo Mapbox se rangent
      * dans le coin quand ils sont cachés.
      */
-    var controlsShown by androidx.compose.runtime.mutableStateOf(true)
+    private val shownState = androidx.compose.runtime.mutableStateOf(true)
+    var controlsShown: Boolean
+        get() = shownState.value
+        set(v) { shownState.value = v }
     @Volatile var touchAt = System.currentTimeMillis()
     private val h = android.os.Handler(android.os.Looper.getMainLooper())
     private val hide = Runnable { controlsShown = false; onChange?.invoke() }
