@@ -1475,20 +1475,21 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val cons = evKwhPerKm(); val batt = evBatteryKwh()
         // la batterie en y arrivant : depuis maintenant, avec une recharge à 80 % à chaque borne d'avant
         var pct = (evNowPct() ?: prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80)).toDouble(); var pos = curProg
-        for ((o, _) in stops) {
+        fun targetOf(p: LL) = chargeInfo[ckey(p)]?.extra?.let { Regex("charge à (\\d+) %").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 80
+        for ((o, sp) in stops) {
             if (o <= curProg + 50.0) continue
             pct -= (o - pos) / 1000.0 * cons / batt * 100.0; pos = o
             if (o == hit.first) break
-            pct = 80.0
+            pct = targetOf(sp).toDouble()
         }
         val arr = Math.round(pct).toInt()
         val kw = info?.let { Regex("(\\d+) kW").find(it.extra)?.groupValues?.get(1)?.toDoubleOrNull() } ?: 0.0
-        val rate = (if (kw > 0.0) min(kw, evMaxKw()) else 50.0) * 0.7
-        val mins = Math.round((80 - arr).coerceAtLeast(5) / 100.0 * batt / rate * 60.0).toInt()
+        val to = targetOf(hit.second).coerceAtLeast(arr + 5)
+        val mins = chargeMins(arr, to, kw)
         val ahead = hit.first - curProg
         val txt = "⚡ $name" + (if (where != null) "\n$where" else "") +
             "\n" + (if (ahead > 50.0) "Dans ${Geo.fmtDist(ahead, imperial)} · " else "") + "arrivée vers $arr %" +
-            "\nRecharge à 80 % : environ $mins min" + (if (kw > 0.0) " (${Math.round(kw)} kW)" else "")
+            "\nRecharge à $to % : environ $mins min" + (if (kw > 0.0) " (${Math.round(kw)} kW)" else "")
         toast(txt, 8000)
     }
 
@@ -3017,6 +3018,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             lastSpd = p.speed; lastSpdAt = now
         }
         // fork FR : à pied, ni limitation ni alerte de vitesse
+        if (isEv && route != null && !previewing) try { evWatch() } catch (e: Exception) { }
         odoPrev?.let { val d = Geo.dist(it, p.pos); if (d < 300.0) odoM += d }
         odoPrev = p.pos
         if (!walking && prefs.b("towncap", true)) try { townCheck(p) } catch (e: Exception) { }
@@ -5989,6 +5991,60 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         return Math.round(start - driven / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(0, 100)
     }
 
+    private var evWatchAt = 0L
+    private var evWarnAt = 0L
+    private var busyWarned = HashSet<String>()
+
+    /**
+     * Fork FR : pendant le guidage en électrique, toutes les 3 minutes :
+     * - avec la batterie réelle (Home Assistant), si vous allez arriver à la prochaine borne (ou à destination) sous la charge à garder,
+     *   l'appli le dit et propose un arrêt ;
+     * - quand la prochaine borne est à moins de 40 km, ses places libres sont vérifiées (TomTom) : plus aucune (occupée ou en panne),
+     *   l'appli le dit et donne une autre borne proche.
+     */
+    private fun evWatch() {
+        val now = System.currentTimeMillis()
+        if (now - evWatchAt < 180_000L) return
+        evWatchAt = now
+        val r = route ?: return
+        val minPct = prefs.i(PreferenceKeys.EV_MIN_ARRIVE, 20).coerceIn(0, 60)
+        val live = haLivePct >= 0 && now - haLiveAt < 20 * 60_000L
+        val stops = chargeVias.mapNotNull { p -> RouteExtras.project(r, p, 300.0)?.let { it.first to p } }.filter { it.first > curProg + 500.0 }.sortedBy { it.first }
+        if (live && now - evWarnAt > 15 * 60_000L) {
+            val atStop = if (stops.isNotEmpty()) evChargerPct() else null
+            val atEnd = evArrivalPct()
+            if (atStop != null && atStop < max(5, minPct - 5)) {
+                evWarnAt = now
+                val say = "Batterie plus basse que prévu : arrivée à la borne vers $atStop %"
+                raiseAlert("plan", say, 8000); speak(say, true)
+            } else if (stops.isEmpty() && atEnd != null && atEnd < max(3, minPct - 5)) {
+                evWarnAt = now
+                speak("Batterie insuffisante pour arriver avec $minPct %. Je cherche un arrêt recharge.", true)
+                suggestFuel(r)
+                scope.launch {
+                    delay(15_000)
+                    chargePlan.firstOrNull()?.let { n -> toast("⚡ Arrêt conseillé : ${n.place.name}, dans ${Geo.fmtDist(n.dist - curProg, imperial)}\nTouchez + pour l'ajouter comme étape", 9000) }
+                }
+            }
+        }
+        // la prochaine borne a-t-elle encore une place ?
+        val next = stops.firstOrNull() ?: return
+        if (next.first - curProg > 40_000.0 || !hasKey) return
+        val info = chargeInfo[ckey(next.second)] ?: return
+        if (info.chargeId.isBlank() || ckey(next.second) in busyWarned) return
+        scope.launch {
+            val fr = withContext(Dispatchers.IO) { try { TomTomRest.chargingFree(apiKey, info.chargeId) } catch (e: Exception) { null } } ?: return@launch
+            if (fr.first > 0 || route !== r) return@launch
+            busyWarned += ckey(next.second)
+            val alt = withContext(Dispatchers.IO) {
+                try { findCharger(r, max(curProg + 2000.0, next.first - 15_000.0), next.first + 15_000.0, curProg, (evNowPct() ?: 50).toDouble(), evKwhPerKm(), evBatteryKwh()) } catch (e: Exception) { null }
+            }?.takeIf { Geo.dist(it.place.pos, next.second) > 150.0 }
+            val say = "La borne ${info.place.name} n'a plus de place libre" + (if (alt != null) ". Autre borne : ${alt.place.name}" else "")
+            raiseAlert("plan", say, 9000); speak(say, true)
+            if (alt != null) { chargeInfo[ckey(alt.place.pos)] = alt; toast("⚡ ${alt.place.name}\n${alt.place.sub}\n${alt.extra}", 9000) }
+        }
+    }
+
     /** Fork FR : la batterie estimée en arrivant au prochain arrêt recharge du trajet (null s'il n'y en a pas devant). */
     fun evChargerPct(): Int? {
         val now = evNowPct() ?: return null
@@ -6058,16 +6114,33 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 (if (fr == null) 3.0 else if (fr.first == 0) 30.0 else 0.0) -
                 ((n.dist - a) / max(1.0, b - a)).coerceIn(0.0, 1.0) * 6.0
         }
-        val n = cands.minByOrNull { score(it) } ?: return null
+        // fork FR : une borne sans aucune place libre (occupée ou en panne, d'après TomTom) est écartée s'il y en a d'autres
+        val usable = cands.filter { freeMap[it.chargeId]?.first != 0 }.ifEmpty { cands }
+        val n = usable.minByOrNull { score(it) } ?: return null
         val arr = Math.round(pct - (n.dist - pos) / 1000.0 * cons / batt * 100.0).toInt().coerceAtLeast(0)
         val kw = kwOf(n)
-        // puissance moyenne réelle jusqu'à 80 % : environ 70 % de la puissance de la borne, limitée à ce que la voiture accepte
-        val rate = (if (kw > 0.0) min(kw, evMaxKw()) else 50.0) * 0.7
-        val mins = Math.round((80 - arr).coerceAtLeast(10) / 100.0 * batt / rate * 60.0).toInt()
         val freeNow = (freeMap[n.chargeId]?.let { (f, t) -> " · $f sur $t libres maintenant" } ?: "") +
             (if (detectedCountry.equals("FR", true)) IrvePrice.near(n.place.pos).takeIf { it.isNotBlank() }?.let { " · $it" } ?: "" else "")
-        return n.copy(extra = "arrivée vers $arr %" + (if (kw > 0.0) " · ${Math.round(kw)} kW" else "") + " · charge à 80 %, environ $mins min$freeNow")
+        return n.copy(extra = "arrivée vers $arr %" + (if (kw > 0.0) " · ${Math.round(kw)} kW" else "") + freeNow)
     }
+
+    /**
+     * Fork FR : le temps de charge (min) de from à to %, avec la courbe de charge de la voiture (MG4 : pleine puissance jusqu'à 50 %,
+     * puis elle baisse jusqu'à 80 %, et beaucoup au-delà), limitée par la puissance de la borne.
+     */
+    fun chargeMins(from: Int, to: Int, stationKw: Double): Int {
+        val batt = evBatteryKwh(); val peak = evMaxKw()
+        var mins = 0.0
+        for (soc in from.coerceIn(0, 100) until to.coerceIn(0, 100)) {
+            val car = peak * when { soc < 50 -> 1.0; soc < 60 -> 0.82; soc < 70 -> 0.67; soc < 80 -> 0.52; soc < 90 -> 0.3; else -> 0.18 }
+            val kw = min(car, if (stationKw > 0.0) stationKw * 0.95 else 50.0)
+            mins += batt / 100.0 / kw * 60.0
+        }
+        return Math.round(mins + 2.0).toInt()   // + le temps de brancher et de démarrer la charge
+    }
+
+    private fun kwIn(extra: String) = Regex("(\\d+) kW").find(extra)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+    private fun arrIn(extra: String) = Regex("arrivée vers (\\d+) %").find(extra)?.groupValues?.get(1)?.toIntOrNull() ?: 20
 
     private fun suggestFuel(r: Route) {
         val fuel = prefs.s(PreferenceKeys.FUEL_TYPE, "E10")
@@ -6097,8 +6170,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                             if (ex != null) { pos = ex; pct = target; continue }
                             val a1 = pos + max(5_000.0, rng * 0.5); val b1 = max(a1 + 5_000.0, pos + rng * 0.92)
                             val n = findCharger(r, a1, b1, pos, pct, cons, batt) ?: break
-                            legs += n
-                            pos = n.dist; pct = target
+                            // fork FR : juste ce qu'il faut (comme ABRP) : si la fin du trajet est à portée, charger seulement pour
+                            // l'atteindre avec la marge, sinon jusqu'à 80 % (au-delà, la charge devient lente)
+                            val arr = arrIn(n.extra)
+                            val need = Math.ceil((r.len - n.dist) / 1000.0 * cons / batt * 100.0 + minPct + 3).toInt()
+                            val to = if (need <= 80) need.coerceAtLeast(arr + 10).coerceAtMost(80) else 80
+                            legs += n.copy(extra = n.extra.replaceFirst(Regex("(arrivée vers \\d+ %( · \\d+ kW)?)"), "$1 · charge à $to %, environ ${chargeMins(arr, to, kwIn(n.extra))} min"))
+                            pos = n.dist; pct = to.toDouble()
                         }
                     } catch (e: Exception) { }
                     legs
