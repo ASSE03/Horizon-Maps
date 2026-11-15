@@ -2524,6 +2524,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         dest?.let { d -> try { RouteSync.started(this, d, via) } catch (e: Exception) { } }
         said.clear(); lastIdx = 0; zoomOffset = 0.0
         navStartMs = System.currentTimeMillis(); navStartDist = tripDist
+        // fork FR : les lampadaires du trajet téléchargés à l'avance (gardés un mois)
+        route?.let { r -> if (prefs.b(PreferenceKeys.LAMPS, true)) try { OsmLamps.prefetchRoute(ctx, r.pts) } catch (e: Exception) { } }
         lastFasterCheck = System.currentTimeMillis(); faster = null; lastTrafficAt = 0L
         dest?.let { d -> prefs.put(PreferenceKeys.RESUME, org.json.JSONObject().put("n", d.name).put("s", d.sub).put("la", d.pos.lat).put("lo", d.pos.lon).put("t", System.currentTimeMillis()).toString()) }
         following = true

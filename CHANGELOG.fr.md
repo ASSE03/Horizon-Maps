@@ -81,6 +81,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Radars de chantier partout en France : la tâche de nuit garde un cache des zones Lufop et redemande chaque nuit les plus anciennes ; en quelques nuits tout le pays est couvert, puis rafraîchi en continu, dans le quota gratuit.
+- Lampadaires du trajet à l'avance : au départ d'un guidage, ceux des 100 premiers kilomètres environ sont téléchargés tranquillement et gardés un mois, pour ne plus dépendre des serveurs Overpass, souvent lents, une fois la nuit tombée.
 - Plan de recharge plus fin : au dernier arrêt, l'appli ne charge que ce qu'il faut pour arriver avec la charge à garder (au lieu de 80 % partout), et les temps de charge suivent la courbe de la voiture (pleine puissance jusqu'à 50 %, puis plus lente) et la puissance de la borne.
 - Batterie réelle en route : avec la batterie lue dans Home Assistant, l'appli vérifie toutes les 3 minutes l'arrivée à la prochaine borne ; si elle passe sous la charge à garder, elle le dit (« Batterie plus basse que prévu : arrivée à la borne vers 12 % »), et sans borne prévue elle cherche un arrêt recharge.
 - Bornes occupées ou en panne : une borne sans aucune place libre (d'après TomTom) n'est plus proposée s'il y en a une autre ; en route, à moins de 40 km de la prochaine borne, l'appli vérifie ses places et, s'il n'y en a plus, le dit et donne une autre borne proche.

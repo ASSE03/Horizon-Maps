@@ -72,21 +72,50 @@ def lufop(refs):
                 print(f"Lufop : {ex}"); time.sleep(10)
         return None
 
+    cur = {}
+
     def cover(lat, lon, km, depth):
         rs = ask(lat, lon, km)
-        if rs is None: return
+        if rs is None: cur["fail"] = True; return
         for x in rs:
             try:
-                k = (round(float(x["lat"]), 5), round(float(x["lng"]), 5)); seen[k] = x
+                k = (round(float(x["lat"]), 5), round(float(x["lng"]), 5)); seen[k] = x; cur.setdefault("r", {})[f"{k[0]},{k[1]}"] = x
             except (KeyError, ValueError, TypeError): pass
         if len(rs) >= 195 and depth < 2:
             h = km / 2.0; dl = h / 111.0; dn = h / (111.0 * math.cos(math.radians(lat)))
             for a, b in ((dl, dn), (dl, -dn), (-dl, dn), (-dl, -dn)): cover(lat + a, lon + b, h * 1.15, depth + 1)
 
     # un cercle seulement là où la liste officielle a des radars (pas en mer)
-    cells = sorted({(int((p[0] - 41.0) // 1.0), int((p[1] + 5.5) // 1.3)) for p in refs})
+    # fork FR : cache tournant. Le quota du jour ne suffit pas pour toute la France : chaque nuit, les zones les plus anciennes sont
+    # redemandées en premier, et les autres viennent du cache (lufop_cache.json, publié avec le fichier des radars). En quelques
+    # nuits tout le pays est couvert, et rafraîchi en continu.
+    cache = {}
+    try:
+        cache = json.loads(get("https://github.com/ASSE03/Horizon-Maps/releases/download/radars/lufop_cache.json", timeout=60) or "{}").get("cells", {})
+    except Exception as ex:
+        print(f"Lufop : pas de cache ({ex})")
+    cells = sorted({(int((p[0] - 41.0) // 1.0), int((p[1] + 5.5) // 1.3)) for p in refs}, key=lambda c: cache.get(f"{c[0]},{c[1]}", {}).get("t", 0))
+    fresh = 0
     for cy, cx in cells:
+        if calls[0] >= 180: break
+        cur.clear()
         cover(41.0 + cy + 0.5, -5.5 + cx * 1.3 + 0.65, 80.0, 0)
+        if cur.get("fail") and not cur.get("r"): continue
+        cache[f"{cy},{cx}"] = {"t": int(time.time()), "r": list(cur.get("r", {}).values())}
+        fresh += 1
+    # le reste vient du cache (gardé 45 jours au plus)
+    old = 0
+    for key2, c in cache.items():
+        if time.time() - c.get("t", 0) > 45 * 86400: continue
+        for x in c.get("r", []):
+            try:
+                k = (round(float(x["lat"]), 5), round(float(x["lng"]), 5))
+                if k not in seen: seen[k] = x; old += 1
+            except (KeyError, ValueError, TypeError): pass
+    with open("lufop_cache.json", "w") as f:
+        json.dump({"date": time.strftime("%Y-%m-%d"), "cells": cache}, f, separators=(",", ":"))
+    covered = sum(1 for c in cells if f"{c[0]},{c[1]}" in cache)
+    print(f"Lufop : {fresh} zones redemandées, {covered}/{len(cells)} zones couvertes, {old} radars repris du cache")
     out = list(seen.values())
     print(f"Lufop : {len(out)} radars en {calls[0]} requêtes ; exemple : {out[:1]}")
     return out, f"{len(out)} radars"

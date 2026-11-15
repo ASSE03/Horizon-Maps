@@ -64,6 +64,34 @@ object OsmLamps {
         } catch (e: Throwable) { busy = false }
     }
 
+    /**
+     * Fork FR : au départ d'un guidage, les lampadaires des carrés le long du trajet (les 60 premiers, soit environ 100 km) sont
+     * téléchargés à l'avance, un par un et sans se presser, puis gardés un mois : la nuit, ils sont là même quand les serveurs
+     * Overpass sont lents ou que le réseau manque.
+     */
+    fun prefetchRoute(ctx: Context, pts: List<LL>) {
+        if (Net.offline || pts.size < 2) return
+        val keys = LinkedHashSet<Pair<Int, Int>>()
+        var last: LL? = null
+        for (p in pts) {
+            if (last != null && Geo.dist(last, p) < 300.0) continue
+            last = p
+            keys += Math.floor(p.lat / T).toInt() to Math.floor(p.lon / T).toInt()
+            if (keys.size >= 60) break
+        }
+        Thread({
+            for ((i, j) in keys) {
+                val k = key(i, j)
+                try {
+                    if (fromDisk(ctx, k) != null) continue
+                    if (Net.offline) break
+                    download(ctx, i, j, k)?.let { mem.put(k, it) }
+                    Thread.sleep(1500)
+                } catch (e: Throwable) { try { Thread.sleep(5000) } catch (x: Throwable) { } }
+            }
+        }, "osm-lamps-route").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }.start()
+    }
+
     private fun file(ctx: Context, k: String) = File(File(ctx.cacheDir, "osmlamps").apply { mkdirs() }, "$k.json")
 
     private fun fromDisk(ctx: Context, k: String): Area? {

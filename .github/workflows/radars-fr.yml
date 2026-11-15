@@ -23,3 +23,4 @@ jobs:
         run: |
           gh release view radars >/dev/null 2>&1 || gh release create radars --title "Radars France (données)" --notes "Fichier des radars fixes de France pour Horizon Nav FR, mis à jour chaque jour (liste officielle du ministère de l'Intérieur, directions Lufop CC BY-SA 4.0 et OpenStreetMap)." --latest=false
           gh release upload radars radars_fr.json --clobber
+          if [ -f lufop_cache.json ]; then gh release upload radars lufop_cache.json --clobber; fi
