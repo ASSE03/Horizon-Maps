@@ -2,9 +2,8 @@ name: Radars France
 on:
   schedule:
     - cron: "17 3 * * *"
+  # pas de relance à chaque modification : le quota Lufop (200 requêtes/jour) ne permet qu'un passage par jour
   workflow_dispatch:
-  push:
-    paths: [tools/radars_fr.py, .github/workflows/radars-fr.yml]
 permissions:
   contents: write
 jobs:
