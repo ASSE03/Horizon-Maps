@@ -306,8 +306,10 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
         // barre (en haut à droite, elle passait sous les boutons Signaler / Lieux / 2D d'Android Auto) ; en guidage, en haut à droite
         // sous ces boutons
         val tempBar = engine.route == null && !arriving
+        // (boutons d'Android Auto cachés : la bulle remonte dans le coin)
+        val tempDrop by androidx.compose.animation.core.animateDpAsState(if (portrait || !ctlShown) 0.dp else 76.dp, tween(300), label = "tempDrop")
         if (tempOn && wx != null) Row((if (tempBar && !portrait) Modifier.align(Alignment.TopStart).padding(start = left + topW + 12.dp, top = top)
-            else Modifier.align(Alignment.TopEnd).padding(end = if (portrait) rightTop else insR + edge, top = top + if (portrait) 0.dp else 76.dp)).height(60.dp)
+            else Modifier.align(Alignment.TopEnd).padding(end = if (portrait) rightTop else (if (!ctlShown && insR > 60.dp) 0.dp else insR) + edge, top = top + tempDrop)).height(60.dp)
             .onSizeChanged { tempW = it.width }
             .panel(10.dp, RoundedCornerShape(30.dp), c.surface).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.material3.Icon(wxIcon(wx.code), null, tint = wxTint(wx.code), modifier = Modifier.size(30.dp))
