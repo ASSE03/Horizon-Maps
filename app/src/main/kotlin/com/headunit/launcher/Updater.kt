@@ -158,6 +158,7 @@ object Updater {
         if (notes.none { it.first == installedBuild } && !installedFallback.isNullOrBlank()) {
             notes += installedBuild to "### $version\n$installedFallback"
         }
+        // (only each version's text: joining the pairs themselves put "(567, ### 1.0.567" on the card after skipping a version)
         return notes.sortedBy { it.first }.joinToString("\n\n") { it.second }.take(4000).ifBlank { installedFallback.orEmpty() }
     }
 
@@ -344,12 +345,26 @@ object Updater {
                             return
                         }
                         progress("Ouverture de l'installateur…")
-                        val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                        // Android Auto only lists an app outside Google Play when its install record says Play installed it (and the
+                        // system installer did the installing). Opening the installer the ordinary way recorded the system installer
+                        // instead, so updating from here took Horizon Nav out of Android Auto. Asking the installer to record Play as
+                        // the installer keeps it there (found by marcocebrian, GitHub #96). The plain way stays as a fallback.
+                        val install = Intent(INSTALL_ACTION).setDataAndType(uri, "application/vnd.android.package-archive")
                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                        // Explicit ClipData helps the package installer receive the content-URI read grant
-                        // consistently across Android versions and installer implementations.
-                        i.clipData = android.content.ClipData.newRawUri("Mise à jour d'Horizon Nav", uri)
-                        ctx.startActivity(i)
+                            .putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")
+                        install.clipData = android.content.ClipData.newRawUri("Mise à jour d'Horizon Nav", uri)
+                        try {
+                            ctx.startActivity(install)
+                            // (so the next update knows "installed by Play" came from here, not from AAEnabler)
+                            try { ctx.getSharedPreferences("updater", Context.MODE_PRIVATE).edit().putBoolean("selfAsPlay", true).apply() } catch (e: Exception) { }
+                        } catch (e: android.content.ActivityNotFoundException) {
+                            val i = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                            // Explicit ClipData helps the package installer receive the content-URI read grant
+                            // consistently across Android versions and installer implementations.
+                            i.clipData = android.content.ClipData.newRawUri("Mise à jour d'Horizon Nav", uri)
+                            ctx.startActivity(i)
+                        }
                         return
                     }
                     DownloadManager.STATUS_FAILED -> { dm.remove(id); throw IllegalStateException("Download failed") }
@@ -379,10 +394,16 @@ object Updater {
      * Horizon Nav isn't on Google Play, so "installée par Google Play" means a tool like AAEnabler installed it, to get it into
      * Android Auto. Android Auto drops an app that then updates itself.
      */
+    // (Intent.ACTION_INSTALL_PACKAGE: marked old, but the only way to tell the installer which installer to record)
+    @Suppress("DEPRECATION")
+    private val INSTALL_ACTION: String = Intent.ACTION_INSTALL_PACKAGE
+
     fun installedViaAaTool(ctx: Context): Boolean = try {
         val inst = if (android.os.Build.VERSION.SDK_INT >= 30) ctx.packageManager.getInstallSourceInfo(ctx.packageName).installingPackageName
             else @Suppress("DEPRECATION") ctx.packageManager.getInstallerPackageName(ctx.packageName)
-        inst == "com.android.vending"
+        // (the app's own updater now records Play as the installer too, which keeps it in Android Auto by itself: then there's no
+        // need to go round by AAEnabler)
+        inst == "com.android.vending" && !ctx.getSharedPreferences("updater", Context.MODE_PRIVATE).getBoolean("selfAsPlay", false)
     } catch (e: Exception) { false }
 
     /**
@@ -452,6 +473,17 @@ object Updater {
         pkgs += listOf("com.google.android.packageinstaller", "com.android.packageinstaller", "com.samsung.android.packageinstaller")
         for (p in pkgs) try { ctx.grantUriPermission(p, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) { }
     }
+
+    /** The install record Android Auto checks, for the problem report: "installer=… · initiating=…". */
+    fun installRecord(ctx: Context): String = try {
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val s = ctx.packageManager.getInstallSourceInfo(ctx.packageName)
+            "installer=${s.installingPackageName ?: "none"} · initiating=${s.initiatingPackageName ?: "none"}"
+        } else {
+            @Suppress("DEPRECATION") val inst = ctx.packageManager.getInstallerPackageName(ctx.packageName)
+            "installer=${inst ?: "none"}"
+        }
+    } catch (e: Exception) { "unknown" }
 
     /** Copies the checked update into the phone's Downloads folder (Android 10 and newer: no permission needed). */
     @androidx.annotation.RequiresApi(29)

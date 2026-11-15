@@ -48,6 +48,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     var tilt3d by mutableStateOf(prefs.b(PreferenceKeys.VIEW_3D, true))
     var simMode by mutableIntStateOf(0)
     var message by mutableStateOf<String?>(null)
+    /** A button on the short message (e.g. Undo straight after a report), or null. */
+    var msgAction by mutableStateOf<Pair<String, () -> Unit>?>(null)
+    /** One of your reports, tapped on the map: a small card offers to remove it. */
+    var reportCard by mutableStateOf<Report?>(null)
     var busy by mutableStateOf(false)
     var previewing by mutableStateOf(false)
     var northUp by mutableStateOf(false)
@@ -789,6 +793,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             else if (route != null && !previewing && dest != null) addStop(place) else startRoute(place)
         }
         map.onAlprTap = { who -> toast("Caméra de lecture de plaques" + (if (who.isNotBlank()) " · $who" else ""), 3500) }
+        map.onReportTap = { p -> reportAt(p)?.let { r -> showReportCard(r) } }
         map.onPoiTap = { name, p -> tappedPoi = name to p; tappedAt = android.os.SystemClock.uptimeMillis(); toast(if (route != null && !previewing) "$name : appui long pour l'ajouter comme étape" else "$name : appui long pour y aller", 3000) }
         // (with "all locations" open the map stays where it's moved, and "Search this area" shows)
         map.onUserGesture = { if (chain != null) chainMoved = true else { if (following) { following = false }; scheduleRecentre(12_000) } }
@@ -889,8 +894,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun toast(msg: String, ms: Long = 4000) {
         message = msg
+        msgAction = null
         val token = ++msgToken
-        scope.launch { delay(ms); if (token == msgToken) message = null }
+        scope.launch { delay(ms); if (token == msgToken) { message = null; msgAction = null } }
+    }
+
+    /** A short message with one button ([label]); tapping it runs [act] and closes the message. */
+    fun toastAction(msg: String, label: String, ms: Long, act: () -> Unit) {
+        toast(msg, ms)
+        val token = msgToken
+        msgAction = label to {
+            if (token == msgToken) { message = null; msgAction = null; msgToken++ }
+            try { act() } catch (e: Exception) { }
+        }
     }
 
     // ---- style ----
@@ -1113,9 +1129,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     private fun lightPreset(dark: Boolean): String {
+        // the car screen goes by its own choice (Always day / Always night on the car), not the phone's: with the phone set to Night,
+        // picking Always day on the car still left the car's map dark, and the other way round
+        if (isCar) when (prefs.s(PreferenceKeys.CARTHEME, "car")) { "day" -> return "day"; "night" -> return "night" }
         val theme = prefs.s(PreferenceKeys.THEME, "auto")
-        if (theme == "day") return "day"
-        if (theme == "night") return "night"
+        if (!isCar && theme == "day") return "day"
+        if (!isCar && theme == "night") return "night"
         if (theme == "times") return if (dark) "night" else "day"
         // Headlights (and the car screen following the car): only the lights decide, so a tunnel at midday goes properly dark and
         // coming out goes straight back to day. The sun's dawn and dusk light is left out, as it would tint the map whatever the
@@ -1621,6 +1640,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             run { val me = MapErrors.read(); if (me.isNotBlank()) { appendLine(); appendLine("Erreurs de chargement de la carte :"); appendLine(me) } }
             if (mgLimits()) appendLine("Limitations (MG4Dash) : ${MgSpeedLimit.status.take(400)}")
             run { val ll = LimitLog.read(ctx); if (ll.isNotBlank()) { appendLine(); appendLine("Limitations (dernières) :"); appendLine(ll) } }
+            // what Android Auto checks before listing the app (Play as installer, the system installer as initiating)
+            appendLine("Install record: ${Updater.installRecord(ctx)}")
             if (crash != null) { appendLine(); appendLine("Last crash:"); appendLine(crash) }
             val freeze = try { FreezeWatch.file(ctx).takeIf { it.exists() }?.readText()?.take(2500) } catch (e: Exception) { null }
             if (freeze != null) { appendLine(); appendLine("Last freeze:"); appendLine(freeze) }
@@ -3126,10 +3147,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val rc = routeCams
         if (navigatingNow() && onRouteNow && rc.isNotEmpty()) {
             // on a route: the cameras along it, by distance along the road (works round bends, where "straight ahead" doesn't)
+            // the cameras that start or end an average speed check (or stand along one) are announced as the check, not as a plain
+            // camera: both used the same banner, so "Speed camera" came up first and hid "Average speed check" (GitHub #107)
+            val zones = if (prefs.b(PreferenceKeys.AVGZONES, true)) placed?.takeIf { it.route === route }?.avg.orEmpty() else emptyList()
             for ((c, off) in rc) {
                 val ahead = off - curProg
                 if (ahead < -15.0 || ahead > warnAt || ahead >= bestD) continue
                 if (!camFacesUs(c, p.heading)) continue
+                if (zones.any { off >= it.start - 150.0 && off <= it.end + 150.0 }) continue
                 best = c; bestD = max(0.0, ahead)
             }
         } else if (p.speed > 3.0) {
@@ -4392,15 +4417,20 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Camera alerts are on: switched on in Settings, and not in a country that bans them (unless you've chosen to keep them there). */
     fun camerasOn(): Boolean = !walking && prefs.b(PreferenceKeys.CAMERA_WARNINGS, true) && !(detectedCountry in CAMERA_BANNED && prefs.b(PreferenceKeys.CAMBANOBEY, true))
 
-    private var banNoted = ""
-    /** Says once, on arriving in a country that bans camera warnings, that they've been switched off. */
+    /**
+     * Says that camera warnings have been switched off, the first time you're in a country that bans them, and never again for
+     * that country (it came back every time the app opened, GitHub #120). It names the switch that keeps them on there, as the
+     * main Speed cameras switch being on doesn't (it was taken for a fault).
+     */
     private fun noteCameraBan() {
         val cc = detectedCountry
-        val name = CAMERA_BANNED[cc]
-        if (name == null || !prefs.b(PreferenceKeys.CAMERA_WARNINGS, true) || !prefs.b(PreferenceKeys.CAMBANOBEY, true)) { if (name == null) banNoted = ""; return }
-        if (banNoted == cc) return
-        banNoted = cc
-        toast("Les alertes radar sont désactivées en $name, où elles sont interdites. Modifiable dans Réglages > Alertes.", 7000)
+        val name = CAMERA_BANNED[cc] ?: return
+        if (!prefs.b(PreferenceKeys.CAMERA_WARNINGS, true) || !prefs.b(PreferenceKeys.CAMBANOBEY, true)) return
+        val seen = prefs.s(PreferenceKeys.CAMBAN_SEEN, "").split(',').filter { it.isNotBlank() }
+        if (cc in seen) return
+        prefs.put(PreferenceKeys.CAMBAN_SEEN, (seen + cc).joinToString(","))
+        toast("Les alertes radar sont désactivées en $name, où elles ne sont pas autorisées. Modifiable dans Réglages > Alertes." +
+            " (" + "Désactivé là où c'est interdit" + ")", 9000)
     }
 
     /** False when the camera is known to check only the other direction (or a road crossing yours), judged against [heading]. */
@@ -4441,8 +4471,16 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (seen.add(Math.round(c.lat * 1e5) * 1000003L + Math.round(c.lon * 1e5))) out += c
         }
         cameras = out
-        // on a route only the cameras on it are drawn (the ones still ahead); otherwise every camera around you
-        val shown = if (navigatingNow()) routeCams.filter { it.second > curProg - 20.0 }.map { it.first } else out
+        // the cameras along a route are matched as soon as it's planned (the route choice and demo drives too), not only once
+        // you're driving it: a camera far along the route used to show only when you got within 10 km of it
+        route?.let { r -> if (camsRoute !== r || camsCount != System.identityHashCode(knownCams) * 31 + System.identityHashCode(aroundCams)) updateRouteCams(r, curProg) }
+        // on a route only the cameras on it are drawn (the ones still ahead); choosing a route, the whole route's and the ones
+        // around you; otherwise every camera around you
+        val shown = when {
+            navigatingNow() -> routeCams.filter { it.second > curProg - 20.0 }.map { it.first }
+            route != null && camsRoute === route -> (routeCams.map { it.first } + out).distinct()
+            else -> out
+        }
         if (shown != camsShown) { camsShown = shown; map.setCameras(shown) }
     }
     private var camsShown: List<LL>? = null
@@ -4609,8 +4647,38 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val list = keep + Report(kind, p, System.currentTimeMillis())
         prefs.put(PreferenceKeys.REPORTS, list.joinToString(";") { "${it.kind},${it.pos.lat},${it.pos.lon},${it.t}" })
         prefs.put(PreferenceKeys.POLICEREP, "")
-        toast("Signalement enregistré ici : ${reportName(kind)}", 3000)
+        val made = list.last()
+        // a report made by mistake can be taken back straight away
+        toastAction("Signalement ${L.t(reportName(kind))} enregistré ici", "Annuler", 6000) { removeReport(made) }
         pushHazards(hzProgress)
+    }
+
+    /** The report of yours nearest [p] (where the map was tapped), within about 60 m. */
+    fun reportAt(p: LL): Report? = reportsActive().minByOrNull { Geo.dist(it.pos, p) }?.takeIf { Geo.dist(it.pos, p) < 60.0 }
+
+    /** Shows the Remove / Keep card for one of your reports; it closes by itself after 10 seconds. */
+    private var reportCardToken = 0
+    fun showReportCard(r: Report) {
+        reportCard = r
+        val token = ++reportCardToken
+        scope.launch { delay(10_000); if (token == reportCardToken) reportCard = null }
+    }
+
+    /** "Your report · 12 min ago" for the card. */
+    fun reportAge(r: Report): String {
+        val min = ((System.currentTimeMillis() - r.t) / 60_000L).toInt()
+        val ago = when { min < 1 -> "à l'instant"; min < 60 -> "il y a $min min"; else -> "il y a ${min / 60} h" }
+        return "Votre signalement · $ago"
+    }
+
+    /** Takes one report away (the rest stay). */
+    fun removeReport(r: Report) {
+        val keep = reportsActive().filterNot { it.kind == r.kind && it.t == r.t && Geo.dist(it.pos, r.pos) < 1.0 }
+        prefs.put(PreferenceKeys.REPORTS, keep.joinToString(";") { "${it.kind},${it.pos.lat},${it.pos.lon},${it.t}" })
+        prefs.put(PreferenceKeys.POLICEREP, "")
+        if (reportCard != null) { reportCard = null; reportCardToken++ }
+        pushHazards(hzProgress)
+        toast("Signalement supprimé", 2500)
     }
 
     fun reportPolice() = report("police")
@@ -5481,23 +5549,31 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 "off" -> false
                 else -> gap <= max(300.0, (fix?.speed ?: 0.0) * 15.0)
             }
+            // what's at the turn (lights or a stop sign), worked out again every 20 m or so from about 600 m out
+            val lmK = "$sk|${(progress / 20).toInt()}"
+            if (lmK != lmKey) { lmKey = lmK; lmVal = if (d <= 600 && !arriving) (try { landmarkAt(r, cur, progress) } catch (e: Throwable) { 0 }) else 0 }
+            val lm = lmVal
             val newTurn = TurnInfo(
                 d, street, cur.maneuver, if (thenOn) nxt?.maneuver else null,
                 if (thenOn && nxt != null) "Puis " + Geo.maneuverText(nxt.maneuver, nxt.roundExit) + (if (nxt.street.isNotBlank()) " sur ${nxt.street}" else "") else "",
                 laneSec, Geo.stepTag(cur), laneAdv, cur.roundExit, cur.sign,
                 exitNo = cur.exitNo, rbIn = cur.rbIn, rbOut = cur.rbOut, rbExits = cur.rbExits, thenGap = if (thenOn) gap else 0.0, thenExit = if (thenOn) (nxt?.roundExit ?: 0) else 0,
                 junctionPic = cur.junctionPic,
+                landmark = if (d <= 500) when (lm) { 1 -> "Aux feux"; 2 -> "Aux deuxièmes feux"; 3 -> "Au stop"; else -> "" } else "",
             )
             // only publish a new turn card when something a driver can see changed (about 3 m of distance), so the screen is not redrawn four times a second for nothing
             val ot = turn
-            if (ot == null || ot.maneuver != newTurn.maneuver || ot.street != newTurn.street || ot.lanes !== newTurn.lanes || ot.thenText != newTurn.thenText || abs(ot.dist - newTurn.dist) >= 3.0 || newTurn.dist < 30.0) turn = newTurn
+            if (ot == null || ot.maneuver != newTurn.maneuver || ot.street != newTurn.street || ot.lanes !== newTurn.lanes || ot.thenText != newTurn.thenText || ot.landmark != newTurn.landmark || abs(ot.dist - newTurn.dist) >= 3.0 || newTurn.dist < 30.0) turn = newTurn
             val word = Geo.maneuverText(cur.maneuver, cur.roundExit)
             // (Settings > Sound > Say road names off: just the direction, "In 200 metres, turn left")
             val tail = if (arriving || cur.street.isBlank() || !prefs.b(PreferenceKeys.VOICE_ROADS, true)) "" else " sur ${cur.street}"
             val lane = if (laneAdv != null) ". $laneAdv" else ""
             if (onRoad.isNotBlank()) tripRoads.add(onRoad)
             // smarter voice: junction numbers, sign destinations and the next move when it follows quickly
-            val phrase = if (arriving) word else smartPhrase(cur, nxt, word, tail)
+            val phrase0 = if (arriving) word else smartPhrase(cur, nxt, word, tail)
+            // "At the traffic lights, turn right onto Smith Street" in place of the distance, when the turn is at the lights
+            val lmPhrase = when (lm) { 1 -> "Aux feux, $phrase0"; 2 -> "Aux deuxièmes feux, $phrase0"; 3 -> "Au stop, $phrase0"; else -> "" }
+            val phrase = phrase0
             // on roads you drive a lot the early heads-ups are skipped and the main one comes a little later
             val familiar = prefs.b(PreferenceKeys.SMARTVOICE, true) && onRoad.isNotBlank() && (roadFam[onRoad] ?: 0) >= 6
             val fFrom = if (familiar) 330.0 else 520.0
@@ -5505,9 +5581,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (!familiar && d <= 1700 && d > 1100 && p0Speed() > 18.0 && !arriving && said.add("${sk}e"))
                 speak("Dans ${Geo.spoken(d, imperial)}, $phrase")
             if (d <= fFrom && d > 200 && said.add("${sk}f"))
-                speak(if (arriving) "Dans ${Geo.spoken(d, imperial)}, vous serez arrivé" + (if (side.isNotEmpty()) ". Votre destination est ${Geo.sideFr(side)}" else "") else "Dans ${Geo.spoken(d, imperial)}, $phrase$lane")
+                speak(if (lmPhrase.isNotEmpty()) lmPhrase + lane else if (arriving) "Dans ${Geo.spoken(d, imperial)}, vous serez arrivé" + (if (side.isNotEmpty()) ". Votre destination est ${Geo.sideFr(side)}" else "") else "Dans ${Geo.spoken(d, imperial)}, $phrase" + lane)
             if (d <= 120 && said.add("${sk}n"))
-                speak(if (arriving) (if (side.isNotEmpty()) "Votre destination est ${Geo.sideFr(side)}" else "Vous êtes arrivé") else phrase.replaceFirstChar { it.uppercase() })
+                speak(if (arriving) (if (side.isNotEmpty()) "Votre destination est ${Geo.sideFr(side)}" else "Vous êtes arrivé") else if (lmPhrase.isNotEmpty()) lmPhrase else phrase.replaceFirstChar { it.uppercase() })
         }
         // a route that stops short of the destination (the downloaded map ran out): at its end, plan on from here instead
         if (shortRoute && rem < 200) {
@@ -5779,6 +5855,41 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         sign.split(',', '/', ';', '|').map { refRx.replace(it, "").replace(Regex("[()]"), "").trim() }.filter { it.length >= 3 && it.any { ch -> ch.isLetter() } }.distinct()
 
     /** "take junction 9 towards Winchester, then keep left for the A34", from the route's step and sign data. */
+    /**
+     * What's at the turn ahead, for "At the traffic lights, turn right" (GitHub request): 1 the lights (the only set between here and
+     * the turn), 2 the second set of lights, 3 a stop sign, 0 nothing to name (or too many lights on the way to be clear, when the
+     * distance is said as before). The lights are the ones found on the route from OpenStreetMap, or Mapbox's own marks on its routes.
+     */
+    private fun landmarkAt(r: Route, cur: Step, progress: Double): Int {
+        if (!prefs.b(PreferenceKeys.LANDMARK_DIRS, true)) return 0
+        val m = cur.maneuver.uppercase()
+        // only plain turns at a junction: roundabouts already say so, and motorway exits, slip roads and "keep" have no lights to name
+        if (m.startsWith("ROUNDABOUT") || m.startsWith("ARRIVE") || m.startsWith("DEPART") || m.contains("EXIT") || m.contains("RAMP") ||
+            m.contains("MOTORWAY") || m.contains("FREEWAY") || m.contains("HIGHWAY") || m.startsWith("KEEP") || m == "STRAIGHT" || m == "FOLLOW" ||
+            m.contains("FERRY") || m.contains("PARALLEL") || m.contains("MAIN_ROAD")) return 0
+        val offs = if (lightRoute === r) lightOffs else DoubleArray(0)
+        // the sets of lights from here to the turn (lights within 60 m of each other are one junction)
+        var sets = 0; var last = -1e9
+        for (o in offs) {
+            if (o <= progress + 5.0) continue
+            if (o > cur.off + 25.0) break
+            if (o - last > 60.0) sets++
+            last = o
+        }
+        val atTurn = sets > 0 && last >= cur.off - 35.0
+        return when {
+            atTurn && sets == 1 -> 1
+            atTurn && sets == 2 -> 2
+            sets > 0 -> 0
+            // none found from OpenStreetMap here: Mapbox's own marks, when it shows lights at the turn and none on the way to it
+            cur.lights && cur.lightsBefore == 0 -> 1
+            cur.stopSign && cur.lightsBefore == 0 -> 3
+            else -> 0
+        }
+    }
+    private var lmKey = ""
+    private var lmVal = 0
+
     private fun smartPhrase(cur: Step, nxt: Step?, word: String, tail: String): String {
         if (!prefs.b(PreferenceKeys.SMARTVOICE, true)) return word + tail
         val sayRoads = prefs.b(PreferenceKeys.VOICE_ROADS, true)
@@ -6443,7 +6554,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 }
                 val secs = (now - avgEnterAt) / 1000.0
                 val avg = if (secs > 4.0) (progress - avgEnterProg) / secs else sp
-                val lim = cur.def.limit ?: speedLimit
+                // the check's own limit, unless the road you're on has a lower one signed (a mapping slip shouldn't ever tell you
+                // to go faster than the sign beside you)
+                val roadLim = speedLimit?.takeIf { !limitEstimated }
+                val zoneLim = cur.def.limit
+                val lim = if (zoneLim == null) speedLimit else if (roadLim != null && roadLim < zoneLim - 1.4) roadLim else zoneLim
                 val over = lim != null && secs > 15.0 && avg > lim + 0.45
                 if (over && !avgOverWarned) {
                     avgOverWarned = true
@@ -6462,10 +6577,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (avgIn != null) { avgIn = null; toast("Fin du radar tronçon", 2500) }
                 val next = pl.avg.filter { it.start > progress && it.start - progress < 1200.0 }.minByOrNull { it.start }
                 avgInfo = next?.let { AvgInfo(0.0, it.def.limit ?: speedLimit, it.end - it.start, false, true, it.start - progress) }
-                if (next != null && next.start - progress < 500.0 && avgAlerted.add(next.def.id)) {
+                // (warned as early as a plain camera would be: at least 500 m, or about 18 seconds ahead at speed)
+                if (next != null && next.start - progress < max(500.0, sp * 18.0) && avgAlerted.add(next.def.id)) {
                     achime("camera", android.media.ToneGenerator.TONE_PROP_PROMPT)
-                    raiseAlert("avg", "Radar tronçon devant, sur ${Geo.fmtDist(next.end - next.start, imperial)}", 6000)
-                    aspeak("camera", "Radar tronçon devant", true)
+                    raiseAlert("avg", "Radar tronçon à l'approche, sur ${Geo.fmtDist(next.end - next.start, imperial)}", 6000)
+                    aspeak("camera", "Radar tronçon à l'approche", true)
                 }
             }
         } else if (avgInfo != null) avgInfo = null

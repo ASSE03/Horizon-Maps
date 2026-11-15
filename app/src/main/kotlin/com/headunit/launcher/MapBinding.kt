@@ -192,7 +192,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // only the style itself failing is reported (a missing tile now and then is normal)
             if (e.type == MapLoadingErrorType.STYLE) onError?.invoke(e.message)
             // the 3D model couldn't be loaded: the picture of the same shape instead (until the app is restarted)
-            else if (modelOn && (e.sourceId ?: "").startsWith("dl-me-m")) main0.post { modelBroken = true; modelWanted = false; reinstall() }
+            else if (modelOn && (e.sourceId ?: "").startsWith("dl-me-m")) main0.post {
+                // your own model: only it is given up (until another file is picked), and the car picture shows; a built-in one: the
+                // picture of the same shape for the rest of this run
+                if (modelShape == "own") { ownFailed = true; ownFailedStamp = ownStamp } else modelBroken = true
+                modelWanted = false; reinstall()
+            }
             // a piece of Mapbox's map itself (not one of the app's extras, like traffic) couldn't be loaded
             else if ((e.type == MapLoadingErrorType.TILE || e.type == MapLoadingErrorType.SOURCE) && !(e.sourceId ?: "").startsWith("dl-")) onTileMissing?.invoke()
         }
@@ -1189,25 +1194,94 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     fun setBeam(on: Boolean, mps: Double) {
         val was = beamOn
         beamOn = on; beamSpeed = mps
-        if (was && !on) main0.post { try { src("dl-beam")?.featureCollection(empty()) } catch (e: Throwable) { } }
+        if (was && !on) main0.post { try { pushBeam() } catch (e: Throwable) { } }
     }
+
+    // The beam is a "location indicator" layer: its place and direction are set straight on the layer each time the arrow moves,
+    // the way Mapbox moves its own location puck. (It used to be a GeoJSON symbol, re-sent 15 times a second: each update rebuilt
+    // the symbol, so it flickered, sometimes vanished for a moment, and the extra work slowed the map.)
+    private var beamShown = false
+    private var beamLat = 0.0; private var beamLon = 0.0; private var beamHead = -999.0
+    private var beamScale = -1.0
 
     private fun pushBeam() {
-        val s = src("dl-beam") ?: return
+        val st = style ?: return
+        if (!st.styleLayerExists("dl-beam-l")) return
         val p = me
         val night = lightPreset == "night" || lightPreset == "dusk"
-        if (p == null || !beamOn || !night || satellite) { s.featureCollection(empty()); return }
-        val f = Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat))
-        f.addNumberProperty("h", meHeading)
-        // a little longer the faster you go (up to about 70 mph)
-        f.addNumberProperty("s", 0.8 + (beamSpeed.coerceIn(0.0, 31.0) / 31.0) * 0.5)
-        s.feature(f)
+        if (p == null || !beamOn || !night || satellite) {
+            if (beamShown) { st.setStyleLayerProperty("dl-beam-l", "visibility", Value.valueOf("none")); beamShown = false }
+            return
+        }
+        // a little longer the faster you go (up to about 70 mph), in steps so the size isn't reset on every fix
+        val sc = Math.round((0.8 + (beamSpeed.coerceIn(0.0, 31.0) / 31.0) * 0.5) * 10.0) / 10.0
+        if (sc != beamScale) {
+            beamScale = sc
+            Value.fromJson("[\"interpolate\",[\"linear\"],[\"zoom\"],13,${0.35 * sc},16,${0.75 * sc},18,${1.3 * sc},20,${2.2 * sc}]").value
+                ?.let { st.setStyleLayerProperty("dl-beam-l", "bearing-image-size", it) }
+        }
+        // the cone starts at the arrow's nose, not its middle: the arrow is a picture over the map, so a cone starting at the
+        // car's spot was hidden under it, which read as light under the arrow (GitHub). Moved ahead by the arrow's front half.
+        val a = beamAhead(p)
+        val q = if (a > 0.0) Furniture.offset(p, meHeading, a) else p
+        // only when it has really moved or turned (the arrow is moved up to 15 times a second)
+        val moved = Math.abs(q.lat - beamLat) > 1.5e-6 || Math.abs(q.lon - beamLon) > 1.5e-6
+        var dh = Math.abs(meHeading - beamHead) % 360.0; if (dh > 180.0) dh = 360.0 - dh
+        if (moved || dh > 0.4 || !beamShown) {
+            beamLat = q.lat; beamLon = q.lon; beamHead = meHeading
+            Value.fromJson("[${q.lat},${q.lon},0]").value?.let { st.setStyleLayerProperty("dl-beam-l", "location", it) }
+            st.setStyleLayerProperty("dl-beam-l", "bearing", Value.valueOf(meHeading))
+        }
+        if (!beamShown) { st.setStyleLayerProperty("dl-beam-l", "visibility", Value.valueOf("visible")); beamShown = true }
     }
 
-    /** The beam: warm light fading out from the arrow, with soft edges. */
+    /**
+     * How far ahead of the car's spot (in metres) the arrow's nose is on the map at the current zoom and tilt: the arrow's
+     * front reach on screen, turned into metres along the way you're heading. 0 if it can't be worked out.
+     */
+    private fun beamAhead(p: LL): Double {
+        return try {
+            val tilt = try { mbMap.cameraState.pitch } catch (e: Throwable) { tiltNow }
+            val cosT = Math.cos(Math.toRadians(tilt)).coerceAtLeast(0.2)
+            val bmp = spriteBmp
+            // the arrow's front reach in screen pixels (3D arrow / car pictures stand up on screen; the flat arrow lies on the map)
+            val reachPx: Double = when {
+                modelOn -> modelPxPerUnit() * (if (carLike) 2.3 else 0.85) * cosT
+                locatorStyle != "flat" && bmp != null -> drawnRadius(bmp) * spriteSize() * 0.8
+                else -> (flatArrow?.let { drawnRadius(it) * (if (theme == "immersive") 0.25f else 0.625f) * arrowScale } ?: 0f) * cosT
+            }
+            if (reachPx <= 0.0) return 0.0
+            // screen pixels per metre straight ahead (shrinks with the tilt, as the screen sees the road at a slant)
+            val a = mbMap.pixelForCoordinate(Point.fromLngLat(p.lon, p.lat))
+            val f = Furniture.offset(p, meHeading, 20.0)
+            val b = mbMap.pixelForCoordinate(Point.fromLngLat(f.lon, f.lat))
+            val pxPerM = Math.hypot(b.x - a.x, b.y - a.y) / 20.0
+            if (pxPerM < 1e-3) 0.0 else (reachPx / pxPerM).coerceIn(0.0, 60.0)
+        } catch (e: Throwable) { 0.0 }
+    }
+
+    /** How far from the centre a picture's drawing really reaches (its empty margin left out), in its own pixels. */
+    private val drawnReach = java.util.WeakHashMap<Bitmap, Float>()
+    private fun drawnRadius(b: Bitmap): Float = drawnReach.getOrPut(b) {
+        val w = b.width; val h = b.height; val cx = w / 2f; val cy = h / 2f
+        val row = IntArray(w); var best = 0f
+        var y = 0
+        while (y < h) {
+            b.getPixels(row, 0, w, 0, y, w, 1)
+            var x = 0
+            while (x < w) { if ((row[x] ushr 24) > 40) { val d = Math.hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat(); if (d > best) best = d }; x += 2 }
+            y += 2
+        }
+        best
+    }
+
+    /**
+     * The beam: warm light fading out from the arrow, with soft edges. Drawn in the top half of a picture twice its height, as the
+     * location indicator centres its picture on the car (so the cone starts at the arrow and reaches ahead).
+     */
     private fun beamBitmap(): Bitmap {
         val w = 256; val h = 320
-        val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val b = Bitmap.createBitmap(w, h * 2, Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(b)
         val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             shader = android.graphics.RadialGradient(w / 2f, h.toFloat(), h.toFloat(),
@@ -2005,6 +2079,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                 if (cur.size >= 2) chunks += cur
                 var usedPack = false
                 var n = 0
+                // (a stretch that couldn't be searched is tried again later; a later stretch that worked used to clear the error, so
+                // the failed one, and its cameras, were never looked for again)
+                var anyFailed = false
                 for (ch in chunks) {
                     if (token != signalToken) return@Thread
                     n++
@@ -2044,7 +2121,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                             Thread.sleep(longArrayOf(5000L, 10000L, 20000L, 30000L, 30000L)[attempt])
                         }
                     }
-                    if (found == null) { sigFailAt = android.os.SystemClock.uptimeMillis(); continue }
+                    if (found == null) { anyFailed = true; sigFailAt = android.os.SystemClock.uptimeMillis(); continue }
+                    if (camsMissed) { anyFailed = true; sigFailAt = android.os.SystemClock.uptimeMillis() }
                     // keep only lights near this stretch (the offline search is a box, and the corridor search is a little generous)
                     val keep = found.filter { p ->
                         val k = cellKey(p.lat, p.lon)
@@ -2066,12 +2144,13 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                         snap = ArrayList(sigAll.values)
                     }
                     if (token != signalToken) return@Thread
-                    signalErr = ""
+                    if (!anyFailed) signalErr = ""
                     main0.post {
                         if (token == signalToken) { signalPts = snap; pushSignals() }
                         try { onRouteCameras?.invoke(camSnap) } catch (e: Throwable) { }
                     }
                 }
+                if (anyFailed && signalErr.isEmpty()) signalErr = "part of the route couldn't be searched"
                 val snap = synchronized(sigLock) { ArrayList(sigAll.values) }
                 main0.post {
                     if (token == signalToken) {
@@ -2387,11 +2466,14 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         } catch (e: Throwable) { }
         // the headlight beam (under the arrow; night only, while moving)
         addImg(st, "dl-beam", beamBitmap())
-        addS(st, GeoJsonSource.Builder("dl-beam").featureCollection(empty()).build())
-        if (!satellite) addL(st, SymbolLayer("dl-beam-l", "dl-beam").iconImage("dl-beam").iconAnchor(IconAnchor.BOTTOM)
-            .iconRotate(Expression.get("h")).iconRotationAlignment(IconRotationAlignment.MAP).iconPitchAlignment(IconPitchAlignment.MAP)
-            .iconAllowOverlap(true).iconIgnorePlacement(true).iconEmissiveStrength(1.0).iconOpacity(0.9)
-            .iconSize(Expression.fromRaw("[\"interpolate\",[\"linear\"],[\"zoom\"],13,[\"*\",0.35,[\"get\",\"s\"]],16,[\"*\",0.75,[\"get\",\"s\"]],18,[\"*\",1.3,[\"get\",\"s\"]],20,[\"*\",2.2,[\"get\",\"s\"]]]")))
+        beamShown = false; beamScale = -1.0; beamHead = -999.0
+        try {
+            // (no movement animation: it's moved with the arrow, which is already smoothed)
+            val json = "{\"id\":\"dl-beam-l\",\"type\":\"location-indicator\",\"layout\":{\"bearing-image\":\"dl-beam\",\"visibility\":\"none\"}," +
+                "\"paint\":{\"location\":[0,0,0],\"bearing\":0,\"bearing-image-size\":0.8,\"perspective-compensation\":0," +
+                "\"accuracy-radius\":0,\"emphasis-circle-radius\":0,\"location-transition\":{\"duration\":0,\"delay\":0},\"bearing-transition\":{\"duration\":0,\"delay\":0}}}"
+            Value.fromJson(json).value?.let { st.addStyleLayer(it, null) }
+        } catch (e: Throwable) { android.util.Log.w("MapBinding", "beam: ${e.message}") }
         // arriving: a dotted walk from the car park, and the entrance marked
         addS(st, GeoJsonSource.Builder("dl-walk").featureCollection(empty()).build())
         addL(st, LineLayer("dl-walk-line", "dl-walk").lineColor("#2E7CF6").lineWidth(5.0).lineOpacity(0.95)
@@ -2684,6 +2766,25 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     @Volatile private var alprs: List<Pair<LL, String>> = emptyList()
     /** A number-plate camera on the map was tapped: what it is. */
     var onAlprTap: ((String) -> Unit)? = null
+    /** One of your own reports (accident, police…) tapped on the map, with where it is. */
+    var onReportTap: ((LL) -> Unit)? = null
+
+    /** Your report badge nearest a tap, within about 28 dp of it. */
+    private fun reportBadgeAt(sp: android.graphics.PointF): LL? {
+        val list = hazards.filter { it.second in 3..7 }
+        if (list.isEmpty()) return null
+        val reach = 28f * mapView.resources.displayMetrics.density
+        var best: LL? = null
+        var bd = reach * reach
+        for ((p, _) in list) {
+            val px = try { mbMap.pixelForCoordinate(Point.fromLngLat(p.lon, p.lat)) } catch (e: Throwable) { continue }
+            val dx = px.x.toFloat() - sp.x
+            val dy = px.y.toFloat() - sp.y
+            val d = dx * dx + dy * dy
+            if (d < bd) { bd = d; best = p }
+        }
+        return best
+    }
 
     fun setAlpr(list: List<Pair<LL, String>>) {
         main0.post { if (list != alprs) { alprs = list; pushAlpr() } }
@@ -3412,21 +3513,33 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // the real 3D model: [color] is "<arrow|car>|<colour>"; when it can't be shown (Lite, Lightest, satellite) the picture of the
         // same shape and colour is used
         val wantModel = styleName == "model"
-        val oldModel = Triple(modelWanted, modelShape, modelColour + modelGlow)
+        val oldModel = Triple(modelWanted, modelShape, modelColour + modelGlow + ownStamp)
+        val oldTurn = ownTurn
         if (wantModel) {
             val parts = color.split('|')
             modelGlow = parts.getOrNull(2) != "0"
-            modelShape = if (parts.getOrNull(0) == "car") "car" else "arrow"
-            modelColour = parts.getOrNull(1)?.takeIf { it.startsWith("#") } ?: (if (modelShape == "car") "#F4F5F7" else "#F2F2F6")
+            // (your own model, but its file has gone: the car)
+            modelShape = when (parts.getOrNull(0)) { "car" -> "car"; "own" -> if (OwnModel.file(ctx) != null) "own" else "car"; else -> "arrow" }
+            modelColour = parts.getOrNull(1)?.takeIf { it.startsWith("#") } ?: (if (modelShape != "arrow") "#F4F5F7" else "#F2F2F6")
+            ownTurn = parts.getOrNull(3)?.toDoubleOrNull() ?: 0.0
+            ownStamp = parts.getOrNull(4) ?: ""
+            if (modelShape == "own") ownSide = OwnModel.info(Prefs(ctx))?.third ?: 4.4
         }
-        modelWanted = wantModel && !modelBroken
+        // (your own model that wouldn't load isn't tried again until a different file is picked)
+        if (modelShape == "own" && ownStamp != ownFailedStamp) ownFailed = false
+        modelWanted = wantModel && !modelBroken && !(modelShape == "own" && ownFailed)
         // your own picture, but none saved (or it was deleted): the 3D arrow
         val noPic = styleName == "custom" && !java.io.File(ctx.filesDir, "locator.png").exists()
-        locatorStyle = when { wantModel -> modelShape; noPic -> "arrow"; else -> styleName }
+        // (your own model has no picture of its own: where it can't be drawn, the car picture stands in)
+        locatorStyle = when { wantModel -> if (modelShape == "own") "car" else modelShape; noPic -> "arrow"; else -> styleName }
         locatorColor = when { wantModel -> modelColour; noPic -> "#F2F2F6"; else -> color }
         if (style == null) return
         // the model's layers are put in (or taken out, or recoloured) with the rest of the app's layers
-        if (oldModel != Triple(modelWanted, modelShape, modelColour + modelGlow)) reinstall() else applyLocatorVisibility()
+        if (oldModel != Triple(modelWanted, modelShape, modelColour + modelGlow + ownStamp)) reinstall() else {
+            applyLocatorVisibility()
+            // turned: only the model's direction changes
+            if (oldTurn != ownTurn && modelOn) { modelHead = -999.0; moveModel() }
+        }
         spriteName = null
         pushModel(true)
     }
@@ -3437,6 +3550,16 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private var modelBroken = false
     private var modelShape = "arrow"
     private var modelColour = "#F2F2F6"
+    /** Your own model (shape "own"): how far it's turned, which copy of the file, and its longest side in its own units. */
+    private var ownTurn = 0.0
+    private var ownStamp = ""
+    private var ownSide = 4.4
+    /** Your own model couldn't be loaded: the car picture is shown instead, and Settings says so. */
+    @Volatile var ownFailed = false
+        private set
+    private var ownFailedStamp = ""
+    /** The arrow or a car-sized model (the built-in car or your own). */
+    private val carLike: Boolean get() = modelShape != "arrow"
     /** Settings > Your arrow > Glow: a soft blue glow on the ground round the model, and the model fully lit. */
     private var modelGlow = true
     /** The 3D model is on the map now (it's then drawn instead of the picture). */
@@ -3445,7 +3568,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private var modelHead = -999.0
 
     /** Screen pixels per model unit (the model is built in the same units as the picture's shape). */
-    private fun modelPxPerUnit(): Double = arrowScale * (if (modelShape == "car") 300.0 / 4.4 * 0.6 * 0.28 else 300.0 * 0.42 * 0.31)
+    // (your own model is brought to the built-in car's length first, whatever scale it was made at)
+    private fun modelPxPerUnit(): Double = arrowScale * (if (carLike) 300.0 / 4.4 * 0.6 * 0.28 * (if (modelShape == "own") 4.4 / ownSide.coerceIn(1e-4, 1e6) else 1.0) else 300.0 * 0.42 * 0.31)
 
     /**
      * The model's size: the same size on screen at every zoom, exactly like the picture locator. Mapbox's location-indicator models
@@ -3460,7 +3584,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val m = HashMap<String, Value>()
         m["uri"] = Value(uri)
         m["position"] = Value(listOf(Value(p?.lon ?: 0.0), Value(p?.lat ?: 0.0)))
-        m["orientation"] = Value(listOf(Value(0.0), Value(0.0), Value(head)))
+        m["orientation"] = Value(listOf(Value(0.0), Value(0.0), Value(head + (if (modelShape == "own") ownTurn else 0.0))))
         val models = HashMap<String, Value>()
         models["me"] = Value(m)
         return Value(models)
@@ -3469,11 +3593,18 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** The real 3D car's files for the chosen car type (Settings > Your arrow > Car type); the saloon is the original model. */
     private fun carUri(part: String): String = if (carModel == "saloon" || carModel !in CAR_MODELS) "asset://models/car_$part.glb" else "asset://models/car_${part}_$carModel.glb"
 
+    /** The model files: the coloured part and the untinted part (your own model is one file, used for both, the second hidden). */
+    private fun modelUris(): Pair<String, String> = when (modelShape) {
+        "car" -> carUri("body") to carUri("parts")
+        "own" -> (OwnModel.uri(ctx) ?: carUri("body")).let { it to it }
+        else -> "asset://models/arrow.glb" to "asset://models/disc.glb"
+    }
+
     private fun installModel(st: Style) {
-        val car = modelShape == "car"
+        val car = carLike
+        val own = modelShape == "own"
         val p = me
-        val uriA = if (car) carUri("body") else "asset://models/arrow.glb"
-        val uriB = if (car) carUri("parts") else "asset://models/disc.glb"
+        val (uriA, uriB) = modelUris()
         try {
             for ((id, uri) in listOf("dl-me-ma" to uriA, "dl-me-mb" to uriB)) {
                 val props = HashMap<String, Value>()
@@ -3494,11 +3625,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // set up the way Mapbox's own location marker is (a "location indicator" model, no shadows): the tested path
             addL(st, ModelLayer("dl-me-model-b", "dl-me-mb").modelType(ModelType.LOCATION_INDICATOR).modelScaleMode(ModelScaleMode.VIEWPORT).modelScale(scale)
                 .modelCastShadows(false).modelReceiveShadows(false).modelEmissiveStrength(if (car) (if (modelGlow) 0.85 else 0.6) else 1.0)
-                .visibility(vis(p != null)))
+                .visibility(vis(p != null && !own)))
             // the arrow / car in your colour. In the default white it keeps the model's own shading (a white top over a grey-blue
             // edge, matched to the picture locator); a chosen colour tints it all. Mostly self-lit, so night doesn't grey it out
             addL(st, ModelLayer("dl-me-model-a", "dl-me-ma").modelType(ModelType.LOCATION_INDICATOR).modelScaleMode(ModelScaleMode.VIEWPORT).modelScale(scale)
-                .modelColor(modelColour).modelColorMixIntensity(if (modelColour.equals(if (car) "#F4F5F7" else "#F2F2F6", true)) 0.0 else 1.0)
+                // (your own model keeps its own colours)
+                .modelColor(modelColour).modelColorMixIntensity(if (own || modelColour.equals(if (car) "#F4F5F7" else "#F2F2F6", true)) 0.0 else 1.0)
                 .modelCastShadows(false).modelReceiveShadows(false).modelEmissiveStrength(if (modelGlow) 1.0 else if (car) 0.75 else 0.9)
                 .visibility(vis(p != null)))
             modelOn = st.styleLayerExists("dl-me-model-a")
@@ -3514,13 +3646,13 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         if (prev != null && Math.abs(prev.lat - p.lat) < 1e-8 && Math.abs(prev.lon - p.lon) < 1e-8 && Math.abs(modelHead - meHeading) < 0.2) return
         val first = prev == null
         modelAt = p; modelHead = meHeading
-        val car = modelShape == "car"
+        val (uriA, uriB) = modelUris()
         try {
-            st.setStyleSourceProperty("dl-me-ma", "models", modelSourceValue(if (car) carUri("body") else "asset://models/arrow.glb", p, meHeading))
-            st.setStyleSourceProperty("dl-me-mb", "models", modelSourceValue(if (car) carUri("parts") else "asset://models/disc.glb", p, meHeading))
+            st.setStyleSourceProperty("dl-me-ma", "models", modelSourceValue(uriA, p, meHeading))
+            st.setStyleSourceProperty("dl-me-mb", "models", modelSourceValue(uriB, p, meHeading))
             if (modelGlow && (first || prev == null || Math.abs(prev.lat - p.lat) > 1e-8 || Math.abs(prev.lon - p.lon) > 1e-8))
                 src("dl-me-glow")?.featureCollection(FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)))))
-            if (first) { layer("dl-me-model-a")?.visibility(vis(true)); layer("dl-me-model-b")?.visibility(vis(true)) }
+            if (first) { layer("dl-me-model-a")?.visibility(vis(true)); layer("dl-me-model-b")?.visibility(vis(modelShape != "own")) }
         } catch (e: Throwable) { }
     }
 
@@ -3954,7 +4086,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // the Classic look has a flat blue ring on the map under the arrow (the Modern look draws its ring in the picture itself)
             val discHalf = if (theme == "immersive") 0f else 15f * 0.625f * arrowScale * dens * Math.cos(Math.toRadians(tilt)).toFloat()
             // the picture has empty space round the arrow / car: measure where its drawing really ends at the bottom
-            val below = if (modelOn) (modelPxPerUnit() * (if (modelShape == "car") 2.3 else 0.85) * Math.cos(Math.toRadians(tilt))).toFloat()
+            val below = if (modelOn) (modelPxPerUnit() * (if (carLike) 2.3 else 0.85) * Math.cos(Math.toRadians(tilt))).toFloat()
                         else if (locatorStyle != "flat" && bmp != null) drawnBelowCentre(bmp) * spriteSize()
                         else flatArrow?.let { drawnBelowCentre(it) * (if (theme == "immersive") 0.25f else 0.625f) * arrowScale * Math.cos(Math.toRadians(tilt)).toFloat() } ?: 0f
             roadView.translationY = pt.y + maxOf(discHalf, below) + 3f * dens
@@ -4026,7 +4158,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             (layer("dl-me-arrow") as? SymbolLayer)?.iconSize((if (im) 0.25 else 0.625) * f)
             (layer("dl-me-halo") as? CircleLayer)?.circleRadius(15.0 * 0.625 * f)
             if (modelOn) { val sc = modelScale(); (layer("dl-me-model-a") as? ModelLayer)?.modelScale(sc); (layer("dl-me-model-b") as? ModelLayer)?.modelScale(sc)
-                (layer("dl-me-glow-l") as? CircleLayer)?.circleRadius(sc[0] * (if (modelShape == "car") 2.2 else 1.45)) }
+                (layer("dl-me-glow-l") as? CircleLayer)?.circleRadius(sc[0] * (if (carLike) 2.2 else 1.45)) }
         } catch (e: Exception) { }
         placeLocator()
     }
@@ -4653,6 +4785,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         flyDone?.let { d -> flyDone = null; flyToken++; try { mapView.camera.cancelAllAnimators() } catch (e: Throwable) { }; d(); return true }
         // a number-plate camera: say what it is
         alprAt(sp)?.let { a -> onAlprTap?.invoke(a.second); return true }
+        // one of your own reports: offer to remove it
+        if (onReportTap != null) reportBadgeAt(sp)?.let { p -> onReportTap?.invoke(p); return true }
         if (liveLines.isEmpty()) return false
         return try {
             val dp = mapView.resources.displayMetrics.density

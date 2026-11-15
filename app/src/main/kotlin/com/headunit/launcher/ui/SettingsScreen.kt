@@ -75,6 +75,7 @@ import com.headunit.launcher.Geo
 import com.headunit.launcher.L
 import com.headunit.launcher.NavEngine
 import com.headunit.launcher.OfflinePlaces
+import com.headunit.launcher.OwnModel
 import com.headunit.launcher.Place
 import com.headunit.launcher.Prefs
 import com.headunit.launcher.PreferenceKeys
@@ -217,10 +218,13 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
           CompositionLocalProvider(LocalSettingHighlight provides highlight) {
            // the map pages show the real map at the top, so every change can be seen as it's made
            val withPreview = cat in 0..3
+           // (in portrait too the preview now stays at the top while the settings scroll under it, as in landscape, so a change
+           // can be seen as it's made, GitHub #124. Only a really short screen still scrolls it away, to leave room for the settings)
+           val pinPreview = !narrowS || androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp >= 600
            Column(Modifier.fillMaxSize()) {
-            if (withPreview && !narrowS) SettingsMapPreview(engine, 210)
+            if (withPreview && pinPreview) SettingsMapPreview(engine, if (narrowS) 170 else 210)
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 4.dp)) {
-                if (withPreview && narrowS) SettingsMapPreview(engine, 170)
+                if (withPreview && !pinPreview) SettingsMapPreview(engine, 170)
                 if (narrowS) Row(Modifier.padding(bottom = 6.dp).clip(RoundedCornerShape(50)).clickable { showList = true }.padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(42.dp).clip(CircleShape).background(c.tile), contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.ArrowBack, "Tous les réglages", tint = c.text, modifier = Modifier.size(22.dp))
@@ -404,13 +408,29 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
         SPictureChoice("Repère de position", null, listOf("arrow" to "Flèche 3D", "car" to "Voiture", "model" to "Vrai modèle 3D", "flat" to "Flèche plate", "custom" to "Votre image"), loc, { id, c -> locatorPicture(id, c) }) {
             if (it == "custom" && !hasPic) choosePic() else prefs.put(PreferenceKeys.LOCATOR, it)
         }
-        if (loc == "model") {
-            SChoice("Forme du modèle", listOf("arrow" to "Flèche", "car" to "Voiture"), prefs.s(PreferenceKeys.MODEL_SHAPE, "arrow")) { prefs.put(PreferenceKeys.MODEL_SHAPE, it) }
-            SToggle(prefs, "Halo", PreferenceKeys.MODEL_GLOW, true, "Un léger halo bleu autour du modèle, et le modèle bien éclairé")
-            if (prefs.mapDetail() != "full") SNote("Le vrai modèle 3D s'affiche avec Niveau de détail : 3D complète. En Allégée et Minimale, l'image de la même forme est utilisée.")
+        // your own 3D model (.glb): picked, checked and measured, then turned to point the way you drive
+        val own = OwnModel.info(prefs)
+        val pickModel = rememberModelPicker(prefs) { why ->
+            if (why == null) prefs.put(PreferenceKeys.MODEL_SHAPE, "own")
+            else android.widget.Toast.makeText(ctx, "Ce fichier n'est pas un modèle 3D .glb (ou il dépasse 8 Mo)", android.widget.Toast.LENGTH_LONG).show()
         }
+        fun chooseModel() { if (!pickModel()) android.widget.Toast.makeText(ctx, "Aucune application de cet appareil ne peut choisir un fichier (installez un gestionnaire de fichiers)", android.widget.Toast.LENGTH_LONG).show() }
+        if (loc == "model") {
+            SChoice("Forme du modèle", listOf("arrow" to "Flèche", "car" to "Voiture", "own" to "Votre modèle"), prefs.s(PreferenceKeys.MODEL_SHAPE, "arrow")) {
+                if (it == "own" && own == null) chooseModel() else prefs.put(PreferenceKeys.MODEL_SHAPE, it)
+            }
+            if (prefs.s(PreferenceKeys.MODEL_SHAPE, "arrow") == "own" && own != null) {
+                SItem("Fichier du modèle 3D", own.first + " · " + String.format(java.util.Locale.UK, "%.1f MB", own.second / (1024.0 * 1024.0))) { SButton("Modifier") { chooseModel() } }
+                SNote("Un .glb de 8 Mo maximum. Orientez-le dans votre sens de marche avec Rotation ; au-delà de 3 Mo il peut saccader sur les autoradios lents")
+                if (engine.map.ownFailed) SNote("Votre modèle 3D n'a pas pu être affiché, la voiture intégrée est donc utilisée")
+                SSlider("Rotation", prefs.s(PreferenceKeys.MODEL_TURN, "0").toFloatOrNull() ?: 0f, 0f..345f, "°", steps = 22, reset = 0f) { prefs.put(PreferenceKeys.MODEL_TURN, it.toString()) }
+            }
+            SToggle(prefs, "Halo", PreferenceKeys.MODEL_GLOW, true, "Un doux halo bleu autour du modèle, éclairé vivement")
+            if (prefs.mapDetail() != "full") SNote("Le vrai modèle 3D s'affiche avec Détail de la carte : 3D complète. En Allégée et La plus légère, l'image de la même forme est utilisée.")
+        }
+        val ownShape = loc == "model" && prefs.s(PreferenceKeys.MODEL_SHAPE, "arrow") == "own" && own != null
         val shapeCar = loc == "car" || (loc == "model" && prefs.s(PreferenceKeys.MODEL_SHAPE, "arrow") == "car")
-        val shapeArrow = loc == "arrow" || (loc == "model" && !shapeCar)
+        val shapeArrow = loc == "arrow" || (loc == "model" && !shapeCar && !ownShape)
         if (loc == "custom") {
             SItem("Image", "Un PNG à fond transparent rend le mieux. Orientez son haut dans le sens de la marche") { SButton(if (hasPic) "Changer" else "Choisir") { choosePic() } }
             SToggle(prefs, "Tourne avec vous", PreferenceKeys.LOCATOR_IMAGE_TURNS, true, "À plat sur la route et tourne avec vous, comme la flèche. Désactivé : reste droite")
@@ -449,7 +469,7 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
             "#1FC7A6" to "Bleu canard", "#3DDC84" to "Vert", "#B5E34A" to "Vert citron", "#FFD54A" to "Jaune", "#FF9A3C" to "Orange", "#FF4D5E" to "Rouge",
             "#FF6FB5" to "Rose", "#A56BFF" to "Violet",
         ), prefs.s(PreferenceKeys.ARROW_COLOUR, "#F2F2F6")) { prefs.put(PreferenceKeys.ARROW_COLOUR, it) }
-        SSlider(if (shapeCar) "Taille de la voiture" else if (loc == "custom") "Taille de l'image" else "Taille de la flèche", prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toFloatOrNull() ?: 240f, 100f..500f, "%", reset = 240f) { prefs.put(PreferenceKeys.ARROW_PERCENT, it.toString()) }
+        SSlider(if (ownShape) "Taille du modèle" else if (shapeCar) "Taille de la voiture" else if (loc == "custom") "Taille de l'image" else "Taille de la flèche", prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toFloatOrNull() ?: 240f, 100f..500f, "%", reset = 240f) { prefs.put(PreferenceKeys.ARROW_PERCENT, it.toString()) }
         SToggle(prefs, "Faisceau des phares la nuit", PreferenceKeys.BEAM, true, "Un doux cône de lumière sur la route devant vous la nuit, en roulant")
     }
     SGroup("Tracé de l'itinéraire") {
@@ -704,6 +724,7 @@ private fun SoundSection(prefs: Prefs, engine: NavEngine) {
         SChoice("Guidage vocal", listOf("0" to "Tout", "1" to "Alertes seules", "2" to "Désactivé"), engine.soundMode.toString(),
             "Alertes seules : pas d'instructions de direction, mais radars, limitations et dangers restent annoncés") { prefs.put(PreferenceKeys.SOUND_MODE, it.toInt()) }
         SToggle(prefs, "Annoncer les noms de rues", PreferenceKeys.VOICE_ROADS, true, "Désactivé : seulement la direction, « Dans 200 mètres, tournez à gauche », sans la rue ni les villes des panneaux")
+        SToggle(prefs, "Repères dans les indications", PreferenceKeys.LANDMARK_DIRS, true, "« Aux feux, tournez à droite » au lieu de la distance quand le virage est à des feux ou à un stop, sur la carte de direction et dans la voix")
         SToggle(prefs, "Instructions plus intelligentes", "smartvoice", true, "Numéros de sortie et directions des panneaux, la manœuvre suivante quand elle suit de près, et moins d'annonces anticipées sur vos routes habituelles")
     }
     SGroup("Voix et volume") {
@@ -1121,10 +1142,12 @@ private fun AndroidAutoSection(prefs: Prefs) {
             when (prefs.s(PreferenceKeys.CARTHEME, "sun")) { "sun" -> "Passe en mode nuit au coucher du soleil et en mode jour à son lever, là où vous êtes"; "car" -> "Suit le réglage de la voiture (ses phares ou son propre mode)"; "phone" -> "Clair ou sombre comme le téléphone"; else -> null }) { prefs.put(PreferenceKeys.CARTHEME, it) }
     }
     SGroup("Tailles sur l'écran de la voiture") {
-        SSlider("Taille globale sur l'écran de la voiture", prefs.i(PreferenceKeys.CARSCALE, 100).toFloat(), 40f..300f, "%", sub = "Échelle de base de tout l'affichage", steps = 25, reset = 100f) { prefs.put(PreferenceKeys.CARSCALE, it) }
-        SSlider("Taille du compteur et du panneau de limitation", prefs.i(PreferenceKeys.CAR_SPEED_SIZE, 100).toFloat(), 40f..180f, "%", sub = "Réduit automatiquement si la place à l'écran est insuffisante", reset = 100f) { prefs.put(PreferenceKeys.CAR_SPEED_SIZE, it) }
-        SChoice("Position de la vitesse sur l'écran de la voiture", listOf("bottom" to "En bas", "middle" to "Au milieu", "top" to "En haut"), prefs.s(PreferenceKeys.SPEED_POS_CAR, "bottom"),
-            "Du côté opposé aux cartes. Indépendant du réglage de cet écran") { prefs.put(PreferenceKeys.SPEED_POS_CAR, it) }
+        SSlider("Taille générale sur l'écran de la voiture", prefs.i(PreferenceKeys.CARSCALE, 100).toFloat(), 40f..300f, "%", sub = "Échelle de base pour tout l'affichage", steps = 25, reset = 100f) { prefs.put(PreferenceKeys.CARSCALE, it) }
+        SSlider("Taille du compteur et du panneau de limitation", prefs.i(PreferenceKeys.CAR_SPEED_SIZE, 100).toFloat(), 40f..180f, "%", sub = "Rétrécit automatiquement si la zone d'écran disponible est trop petite", reset = 100f) { prefs.put(PreferenceKeys.CAR_SPEED_SIZE, it) }
+        SChoice("Position de la vitesse sur l'écran de la voiture", listOf("bottom" to "Coin inférieur", "middle" to "Sous la carte de direction", "top" to "En haut à droite"), prefs.s(PreferenceKeys.SPEED_POS_CAR, "bottom"),
+            "Coin inférieur utilise le côté choisi dans Position des cartes. Sur un écran de voiture peu haut, En haut à droite demande le style Compact : l'anneau se place alors sous la carte de direction") { prefs.put(PreferenceKeys.SPEED_POS_CAR, it) }
+        SChoice("Style du compteur sur l'écran de la voiture", listOf("app" to "Comme dans l'appli", "compact" to "Compact"), prefs.s(PreferenceKeys.CAR_SPEED_STYLE, "app"),
+            "Compact est une petite pastille sombre avec la limite et votre vitesse côte à côte") { prefs.put(PreferenceKeys.CAR_SPEED_STYLE, it) }
         var carAdvanced by rememberSaveable { mutableStateOf(false) }
         SItem("Tailles avancées pour l'écran de la voiture", "Réglez finement chaque élément") {
             SButton(if (carAdvanced) "Masquer" else "Afficher") { carAdvanced = !carAdvanced }

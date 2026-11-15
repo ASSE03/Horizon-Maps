@@ -5,13 +5,20 @@ import androidx.compose.runtime.setValue
 import java.util.Locale
 
 /**
- * The app's language: English, Dutch, German, French, Spanish, Italian, Portuguese, Polish, Thai, Japanese, Indonesian, Bulgarian or Slovenian. "auto" follows the phone (English when the phone's language
+ * The app's language: English, Dutch, German, French, Spanish, Italian, Portuguese, Polish, Thai, Japanese, Indonesian, Bulgarian, Slovenian, Romanian, Basque, Traditional Chinese, Greek, Czech, Finnish, Simplified Chinese, Slovak, Danish, Croatian, Malay or Hungarian. "auto" follows the phone (English when the phone's language
  * isn't one of these). Text is looked up by its English wording: [t] gives the phrase in the chosen language, with {0}, {1}…
  * filled in from the arguments; a phrase with no translation yet stays in English.
  */
 object L {
     val supported = listOf("en" to "English", "nl" to "Nederlands", "de" to "Deutsch", "fr" to "Français", "es" to "Español",
-        "it" to "Italiano", "pt" to "Português", "pl" to "Polski", "th" to "ไทย", "ja" to "日本語", "id" to "Bahasa Indonesia", "bg" to "Български", "sl" to "Slovenščina")
+        "it" to "Italiano", "pt" to "Português", "pl" to "Polski", "th" to "ไทย", "ja" to "日本語", "id" to "Bahasa Indonesia", "bg" to "Български", "sl" to "Slovenščina",
+        "ro" to "Română", "eu" to "Euskara", "zh" to "繁體中文",
+        "el" to "Ελληνικά", "cs" to "Čeština", "fi" to "Suomi",
+        "zhs" to "简体中文", "sk" to "Slovenčina", "da" to "Dansk", "hr" to "Hrvatski", "ms" to "Bahasa Melayu", "hu" to "Magyar",
+        "tr" to "Türkçe", "sr" to "Srpski", "ar" to "العربية", "he" to "עברית", "ur" to "اردو")
+
+    /** Arabic, Hebrew and Urdu read right to left: the cards and settings are laid out that way round. */
+    val rtl: Boolean get() = lang == "ar" || lang == "he" || lang == "ur"
 
     // (a Compose state: screens showing text redraw in the new language as soon as it's changed)
     var lang: String by androidx.compose.runtime.mutableStateOf(pick("auto"))
@@ -22,7 +29,15 @@ object L {
         "nl" -> Locale("nl", "NL"); "de" -> Locale.GERMANY; "fr" -> Locale.FRANCE; "es" -> Locale("es", "ES")
         "it" -> Locale.ITALY; "pl" -> Locale("pl", "PL")
         "th" -> Locale("th", "TH"); "ja" -> Locale.JAPAN; "id" -> Locale("id", "ID")
-        "bg" -> Locale("bg", "BG"); "sl" -> Locale("sl", "SI")
+        "bg" -> Locale("bg", "BG"); "sl" -> Locale("sl", "SI"); "ro" -> Locale("ro", "RO"); "eu" -> Locale("eu", "ES")
+        "el" -> Locale("el", "GR"); "cs" -> Locale("cs", "CZ"); "fi" -> Locale("fi", "FI")
+        "zhs" -> Locale("zh", "CN"); "sk" -> Locale("sk", "SK"); "da" -> Locale("da", "DK"); "hr" -> Locale("hr", "HR"); "ms" -> Locale("ms", "MY"); "hu" -> Locale("hu", "HU")
+        "tr" -> Locale("tr", "TR"); "sr" -> Locale("sr", "RS")
+        "he" -> Locale("he", "IL"); "ur" -> Locale("ur", "PK")
+        // (Arabic: the phone's own country when it's set to Arabic, Saudi Arabia otherwise)
+        "ar" -> Locale.getDefault().takeIf { it.language == "ar" } ?: Locale("ar", "SA")
+        // (Traditional Chinese: a Cantonese voice on a Hong Kong or Macau phone, Taiwan's Mandarin otherwise)
+        "zh" -> if (Locale.getDefault().country in setOf("HK", "MO")) Locale("zh", "HK") else Locale("zh", "TW")
         // (Brazilian Portuguese on a Brazilian phone, Portugal's otherwise)
         "pt" -> Locale.getDefault().takeIf { it.language == "pt" } ?: Locale("pt", "PT")
         else -> Locale.getDefault().takeIf { it.language == "en" } ?: Locale.UK
@@ -44,6 +59,9 @@ object L {
 
     val en: Boolean get() = lang == "en"
 
+    /** The language code Mapbox's search takes (Chinese in the right script). */
+    val mapboxLang: String get() = when (lang) { "zh" -> "zh-Hant"; "zhs" -> "zh-Hans"; "ur" -> "en"; else -> lang }
+
     fun t(text: String, vararg args: Any?): String {
         val s = if (lang == "en") text else (table[lang]?.get(text) ?: text)
         if (args.isEmpty()) return s
@@ -58,11 +76,23 @@ object L {
      */
     fun voiceToEnglish(text: String): String {
         val rules = voiceRules[lang] ?: return text
-        var t = " " + text.lowercase(locale).trim() + " "
+        // (a capital İ made lower-case the English way leaves a stray dot mark, so "İşe" wouldn't match "işe")
+        var t = " " + text.lowercase(locale).replace("\u0307", "").trim() + " "
         // Japanese puts the place first ("渋谷駅に行って"): the place is what comes before "…に行って" / "…までナビ"
         if (lang == "ja") Regex("(に|へ|まで)\\s*(行って|行く|行きたい|向かって|ナビして|ナビ|案内して|案内)(ください|下さい)?\\s*$").find(t.trimEnd())?.let { m ->
             val place = t.trimEnd().substring(0, m.range.first).trim()
             if (place.isNotEmpty() && !Regex(rules[0].first).containsMatchIn(" $place ") && !Regex(rules[1].first).containsMatchIn(" $place ")) return "go to $place"
+        }
+        // Turkish puts the place first too, with "to" as an ending: "Ankara'ya git", "Kadıköy'e götür"
+        if (lang == "tr") Regex("^\\s*(.+?)(['’](y?[ae]|n[ae]|[iıuü]?n[ae])|ya|ye)?\\s+(git|gidelim|gidiyoruz|götür|beni götür|sür|yol tarifi( al| ver)?|rota oluştur|navigasyon( başlat)?)\\s*$").find(t.trim())?.let { m ->
+            val place = m.groupValues[1].trim()
+            if (place.isNotEmpty() && !Regex(rules[0].first).containsMatchIn(" $place ") && !Regex(rules[1].first).containsMatchIn(" $place ") &&
+                !Regex(rules[0].first).containsMatchIn(t) && !Regex(rules[1].first).containsMatchIn(t)) return "go to $place"
+        }
+        // Urdu puts the place first as well: "لاہور چلو", "لاہور لے چلو"
+        if (lang == "ur") Regex("^\\s*(.+?)(\\s+(کو|کی طرف|تک))?\\s+(چلو|چلیں|لے چلو|لے چلیں|جانا ہے|جاؤ|راستہ دکھاؤ|نیویگیٹ کرو)\\s*$").find(t.trim())?.let { m ->
+            val place = m.groupValues[1].trim()
+            if (place.isNotEmpty() && !Regex(rules[0].first).containsMatchIn(t) && !Regex(rules[1].first).containsMatchIn(t)) return "go to $place"
         }
         // "navigate to …" (the last rule) first: the place's name is kept as it was said, so a name with a word like
         // "restaurant" in it is searched for, not turned into a nearby search
@@ -220,6 +250,229 @@ object L {
                 "povečaj|približaj" to "zoom in", "pomanjšaj|oddalji" to "zoom out", "sever zgoraj" to "north up", "koliko je ura" to "what time",
                 "^\\s*(pelji me do|pelji me v|pelji me na|navigiraj do|pojdi do|gremo do|do)\\s" to "go to",
             ),
+            "ro" to r(
+                "\\s(acasă|spre casă|du-mă acasă)\\s" to "go home", "\\s(la serviciu|la birou|la muncă)\\s" to "go to work",
+                "^\\s*(raportează|semnalează)\\s" to "report", "accident" to "accident", "poliția|poliție|poliţia" to "police", "pană|defecțiune" to "breakdown", "radar|cameră" to "camera",
+                "benzinărie|benzinăria|carburant|benzină|motorină|alimentare" to "fuel", "stație de încărcare|încărcare|încărcător" to "charging", "toaletă|toaleta|wc" to "toilet", "cafea|cafenea" to "coffee",
+                "mâncare|restaurant|să mănânc" to "food", "zonă de servicii|parcare de odihnă" to "services", "parcare|parcarea|să parchez" to "parking",
+                "\\s(caută|găsește|cea mai apropiată|cel mai apropiat|unde e|unde este|am nevoie de)\\s" to "find", "cea mai ieftină|cel mai ieftin|ieftin[ăe]?" to "cheap",
+                "evită (drumurile cu )?taxă|fără taxă|fără vinietă" to "avoid toll", "evită autostrad(a|ele)|fără autostrad(ă|e)" to "avoid motorway",
+                "evită acest drum" to "avoid this road", "când ajung|cât mai e|cât mai am" to "eta", "distribuie|trimite" to "share",
+                "pornește vocea|vocea pornită" to "voice on", "doar avertizări" to "alerts only", "fără sunet|liniște|oprește vocea" to "mute",
+                "(oprește|încheie|anulează) (traseul|navigarea|navigația)" to "end route", "privire de ansamblu|tot traseul" to "overview",
+                "mărește|apropie" to "zoom in", "micșorează|depărtează" to "zoom out", "nordul sus" to "north up", "cât e ceasul|ce oră e" to "what time",
+                "^\\s*(du-mă la|navighează la|mergi la|condu-mă la|spre|la)\\s" to "go to",
+            ),
+            "eu" to r(
+                "\\s(etxera|eraman nazazu etxera)\\s" to "go home", "\\s(lanera|bulegora)\\s" to "go to work",
+                "^\\s*(jakinarazi|salatu)\\s" to "report", "istripua|istripu" to "accident", "polizia|ertzaintza" to "police", "matxura" to "breakdown", "radarra|radar|kamera" to "camera",
+                "gasolindegia|gasolindegi|erregaia|gasolina|diesela" to "fuel", "karga-puntua|kargagunea|kargatu" to "charging", "komuna|komunak|wc" to "toilet", "kafea|kafetegia" to "coffee",
+                "janaria|jatetxea" to "food", "zerbitzugunea|atsedenlekua" to "services", "aparkalekua|aparkatu" to "parking",
+                "\\s(bilatu|aurkitu|hurbilena|non dago|behar dut)\\s" to "find", "merkeena|merkea" to "cheap",
+                "saihestu (ordainsariak|ordainpekoak)|ordainsaririk gabe|bidesaririk gabe" to "avoid toll", "saihestu autobideak?|autobiderik gabe" to "avoid motorway",
+                "saihestu errepide hau" to "avoid this road", "noiz iritsiko naiz|zenbat falta da|zenbat geratzen da" to "eta", "partekatu" to "share",
+                "aktibatu ahotsa|ahotsa piztu" to "voice on", "abisuak soilik" to "alerts only", "isilarazi|isilik|desaktibatu ahotsa|ahotsa itzali" to "mute",
+                "(amaitu|gelditu|bertan behera utzi) (ibilbidea|nabigazioa)" to "end route", "ikuspegi orokorra|ibilbide osoa" to "overview",
+                "handitu|hurbildu" to "zoom in", "txikitu|urrundu" to "zoom out", "iparra goian" to "north up", "zer ordu da" to "what time",
+                "^\\s*(eraman nazazu|joan|nabigatu)\\s" to "go to",
+            ),
+            // (Chinese doesn't put spaces between words either)
+            "zh" to r(
+                "回家|返屋企|返歸" to "go home", "(去|到)(公司|上班|辦公室|返工)|返工" to "go to work",
+                "^\\s*(回報|報告|通報)" to "report", "車禍|事故|意外" to "accident", "警察|臨檢" to "police", "故障|拋錨|壞車" to "breakdown", "測速照相|測速|影快相|相機|鏡頭" to "camera",
+                "加油站|油站|入油|加油" to "fuel", "充電站|充電" to "charging", "廁所|洗手間" to "toilet", "咖啡" to "coffee",
+                "餐廳|吃飯|食飯|食物|美食" to "food", "休息站|服務區" to "services", "停車場|停車|泊車" to "parking",
+                "^\\s*(搜尋|尋找|找|搵)|最近的|附近的|喺邊|在哪" to "find", "最便宜|便宜|平啲|最平" to "cheap",
+                "避開收費|不走收費|唔行收費" to "avoid toll", "避開(高速公路|國道|快速公路)|不走高速" to "avoid motorway",
+                "避開這條路|避開呢條路" to "avoid this road", "幾點到|還要多久|仲要幾耐|還有多遠|仲有幾遠" to "eta", "分享" to "share",
+                "開啟語音|開聲" to "voice on", "只有警示|只要警示" to "alerts only", "靜音|關閉語音|閂聲|安靜" to "mute",
+                "(結束|停止|取消)(導航|路線)" to "end route", "總覽|全程|整條路線" to "overview",
+                "放大" to "zoom in", "縮小" to "zoom out", "北方朝上|北向上" to "north up", "現在幾點|而家幾點|幾點" to "what time",
+                "^\\s*(導航到|導航去|帶我去|去|到)\\s*" to "go to",
+            ),
+            "zhs" to r(
+                "回家" to "go home", "(去|到)(公司|上班|单位|办公室)" to "go to work",
+                "^\\s*(上报|报告|举报)" to "report", "车祸|事故" to "accident", "警察|交警|查车" to "police", "故障|抛锚|坏车" to "breakdown", "测速摄像头|测速|摄像头|电子眼" to "camera",
+                "加油站|加油" to "fuel", "充电站|充电桩|充电" to "charging", "厕所|洗手间|卫生间" to "toilet", "咖啡" to "coffee",
+                "餐厅|饭店|吃饭|美食" to "food", "服务区" to "services", "停车场|停车" to "parking",
+                "^\\s*(搜索|寻找|找)|最近的|附近的|在哪" to "find", "最便宜|便宜" to "cheap",
+                "避开收费|不走收费|躲避收费" to "avoid toll", "避开高速|不走高速" to "avoid motorway",
+                "避开这条路" to "avoid this road", "几点到|还要多久|还有多远" to "eta", "分享" to "share",
+                "打开语音|开启语音" to "voice on", "只要提醒|仅提醒" to "alerts only", "静音|关闭语音|安静" to "mute",
+                "(结束|停止|取消|退出)(导航|路线)" to "end route", "全览|全程|整条路线" to "overview",
+                "放大" to "zoom in", "缩小" to "zoom out", "北向上|正北朝上" to "north up", "现在几点|几点了" to "what time",
+                "^\\s*(导航到|导航去|带我去|去|到)\\s*" to "go to",
+            ),
+            "el" to r(
+                "\\s(σπίτι|για σπίτι|στο σπίτι)\\s" to "go home", "\\s(στη δουλειά|για δουλειά|στο γραφείο|στην εργασία)\\s" to "go to work",
+                "^\\s*(αναφορά|ανάφερε)\\s" to "report", "ατύχημα|τροχαίο" to "accident", "αστυνομία|μπλόκο" to "police", "βλάβη|χαλασμένο" to "breakdown", "κάμερα|ραντάρ" to "camera",
+                "βενζινάδικο|πρατήριο|βενζίνη|καύσιμα|πετρέλαιο" to "fuel", "φόρτιση|φορτιστή|φορτιστής" to "charging", "τουαλέτα|τουαλέτες|wc" to "toilet", "καφές|καφέ|καφετέρια" to "coffee",
+                "φαγητό|εστιατόριο|να φάω" to "food", "σταθμός εξυπηρέτησης|χώρος στάθμευσης αυτοκινητόδρομου" to "services", "πάρκινγκ|στάθμευση|παρκάρω" to "parking",
+                "\\s(βρες|ψάξε|αναζήτησε|πλησιέστερο|πλησιέστερη|κοντινότερο|κοντινότερη|πού είναι|χρειάζομαι)\\s" to "find", "φθηνότερο|φθηνότερη|φθηνό|φτηνό" to "cheap",
+                "χωρίς διόδια|απόφυγε (τα )?διόδια" to "avoid toll", "χωρίς αυτοκινητόδρομους|απόφυγε (τους )?αυτοκινητόδρομους|χωρίς εθνική" to "avoid motorway",
+                "απόφυγε αυτόν τον δρόμο" to "avoid this road", "πότε φτάνω|πόσο ακόμα|πόσο μένει" to "eta", "κοινοποίησε|μοιράσου|στείλε" to "share",
+                "άνοιξε (τη )?φωνή|ενεργοποίησε (τη )?φωνή" to "voice on", "μόνο ειδοποιήσεις" to "alerts only", "σίγαση|σιωπή|κλείσε (τη )?φωνή" to "mute",
+                "(τέλος|σταμάτα|ακύρωσε) (τη |την )?(διαδρομή|πλοήγηση)" to "end route", "επισκόπηση|όλη η διαδρομή" to "overview",
+                "μεγέθυνση|ζουμ μέσα" to "zoom in", "σμίκρυνση|ζουμ έξω" to "zoom out", "βορράς πάνω" to "north up", "τι ώρα είναι" to "what time",
+                "^\\s*(πήγαινέ με (στο|στη|στην|σε)|πλοήγηση (προς|στο|στη)|πάμε (στο|στη|στην|σε)|πήγαινε (στο|στη|στην|σε)|προς)\\s" to "go to",
+            ),
+            "cs" to r(
+                "\\s(domů|jedu domů|jeď domů)\\s" to "go home", "\\s(do práce|do kanceláře)\\s" to "go to work",
+                "^\\s*(nahlas|nahlásit|ohlas)\\s" to "report", "nehoda|nehodu" to "accident", "policie|policii|policajti" to "police", "porucha|poruchu|porouchané" to "breakdown", "radar|kamera|kameru" to "camera",
+                "benzínka|benzínku|benzinka|benzinku|čerpací stanice|čerpačka|čerpačku|palivo|natankovat|tankování" to "fuel", "nabíječka|nabíječku|nabíjení|nabíjecí stanice" to "charging", "záchod|toaleta|toaletu|wc" to "toilet", "káva|kávu|kafe|kavárna|kavárnu" to "coffee",
+                "jídlo|restaurace|restauraci|najíst" to "food", "odpočívadlo|odpočívka|odpočívku" to "services", "parkoviště|parkování|zaparkovat" to "parking",
+                "\\s(najdi|hledej|vyhledej|nejbližší|kde je|potřebuju|potřebuji)\\s" to "find", "nejlevnější|levn[áéý]" to "cheap",
+                "bez mýta|vyhni se (placeným silnicím|mýtu)|bez dálniční známky" to "avoid toll", "bez dálnic|vyhni se dálnicím|vyhni se dálnici" to "avoid motorway",
+                "vyhni se této silnici" to "avoid this road", "kdy tam budu|kdy dorazím|jak dlouho ještě|jak daleko" to "eta", "sdílej|pošli" to "share",
+                "zapni hlas|hlas zapnout" to "voice on", "jen upozornění|pouze upozornění" to "alerts only", "ztlum|ticho|vypni hlas|ztlumit" to "mute",
+                "(ukonči|zastav|zruš) (trasu|navigaci)" to "end route", "přehled|celá trasa|celou trasu" to "overview",
+                "přibliž|zvětši" to "zoom in", "oddal|zmenši" to "zoom out", "sever nahoře" to "north up", "kolik je hodin" to "what time",
+                "^\\s*(naviguj do|naviguj na|jeď do|jeď na|vezmi mě do|vezmi mě na|do|na)\\s" to "go to",
+            ),
+            // (Finnish puts the place first, in its own case: "aja Tampereelle" is matched as "go to Tampereelle", which search still finds)
+            "fi" to r(
+                "\\s(kotiin|vie minut kotiin|aja kotiin)\\s" to "go home", "\\s(töihin|työpaikalle|toimistolle)\\s" to "go to work",
+                "^\\s*(ilmoita|raportoi)\\s" to "report", "onnettomuus|kolari" to "accident", "poliisi|poliisit" to "police", "rikkoutunut|hajonnut|vika" to "breakdown", "kamera|peltipoliisi|nopeusvalvonta" to "camera",
+                "huoltoasema|bensa-asema|bensa|polttoaine|tankkaus|tankata|diesel" to "fuel", "latauspiste|lataus|laturi|latausasema" to "charging", "vessa|wc|käymälä" to "toilet", "kahvi|kahvila|kahvia" to "coffee",
+                "ruoka|ravintola|syömään|ruokaa" to "food", "levähdysalue|palvelualue|taukopaikka" to "services", "pysäköinti|parkkipaikka|parkki|parkkeerata" to "parking",
+                "\\s(etsi|hae|lähin|lähimmän|missä on|tarvitsen)\\s" to "find", "halvin|halvimman|halpa" to "cheap",
+                "vältä tietulleja|ei tietulleja|ilman tietulleja" to "avoid toll", "vältä moottoriteitä|ei moottoriteitä|ilman moottoriteitä" to "avoid motorway",
+                "vältä tätä tietä" to "avoid this road", "milloin olen perillä|kauanko vielä|kuinka pitkä matka|paljonko on matkaa" to "eta", "jaa|lähetä" to "share",
+                "puhe päälle|ääni päälle" to "voice on", "vain varoitukset" to "alerts only", "mykistä|hiljaa|puhe pois|ääni pois" to "mute",
+                "(lopeta|keskeytä|peruuta) (reitti|navigointi|opastus)" to "end route", "yleiskuva|koko reitti" to "overview",
+                "lähennä|suurenna" to "zoom in", "loitonna|pienennä" to "zoom out", "pohjoinen ylös" to "north up", "paljonko kello on|mitä kello on" to "what time",
+                "^\\s*(navigoi kohteeseen|navigoi|vie minut|aja|mene)\\s" to "go to",
+            ),
+            "sk" to r(
+                "\\s(domov|choď domov|ideme domov)\\s" to "go home", "\\s(do práce|do kancelárie)\\s" to "go to work",
+                "^\\s*(nahlás|nahlásiť)\\s" to "report", "nehoda|nehodu" to "accident", "polícia|políciu|policajti" to "police", "porucha|poruchu|pokazené" to "breakdown", "radar|kamera|kameru" to "camera",
+                "benzínka|benzínku|čerpacia stanica|čerpaciu stanicu|pumpa|pumpu|palivo|natankovať|tankovanie" to "fuel", "nabíjačka|nabíjačku|nabíjanie|nabíjacia stanica" to "charging", "záchod|toaleta|toaletu|wc" to "toilet", "káva|kávu|kaviareň" to "coffee",
+                "jedlo|reštaurácia|reštauráciu|najesť" to "food", "odpočívadlo|odpočívka" to "services", "parkovisko|parkovanie|zaparkovať" to "parking",
+                "\\s(nájdi|hľadaj|vyhľadaj|najbližšia|najbližší|najbližšie|kde je|potrebujem)\\s" to "find", "najlacnejš[iaie]|lacn[áéý]" to "cheap",
+                "bez mýta|vyhni sa (spoplatneným cestám|mýtu)|bez diaľničnej známky" to "avoid toll", "bez diaľnic|vyhni sa diaľniciam|vyhni sa diaľnici" to "avoid motorway",
+                "vyhni sa tejto ceste" to "avoid this road", "kedy tam budem|kedy dorazím|ako dlho ešte|ako ďaleko" to "eta", "zdieľaj|pošli" to "share",
+                "zapni hlas" to "voice on", "len upozornenia" to "alerts only", "stlm|ticho|vypni hlas" to "mute",
+                "(ukonči|zastav|zruš) (trasu|navigáciu)" to "end route", "prehľad|celá trasa|celú trasu" to "overview",
+                "priblíž|zväčši" to "zoom in", "oddiaľ|zmenši" to "zoom out", "sever hore" to "north up", "koľko je hodín" to "what time",
+                "^\\s*(naviguj do|naviguj na|choď do|choď na|vezmi ma do|vezmi ma na|do|na)\\s" to "go to",
+            ),
+            "hu" to r(
+                "\\s(haza|hazamegyek|vigyél haza|menjünk haza)\\s" to "go home", "\\s(munkába|munkahelyre|irodába|dolgozni)\\s" to "go to work",
+                "^\\s*(bejelentés|jelentsd|jelents)\\s" to "report", "baleset" to "accident", "rendőr|rendőrség|rendőrök" to "police", "lerobban|lerobbant|műszaki hiba" to "breakdown", "traffipax|kamera" to "camera",
+                "benzinkút|benzinkutat|tankolás|tankolni|üzemanyag|benzin|dízel" to "fuel", "töltő|töltőt|töltés|töltőállomás" to "charging", "mosdó|vécé|wc" to "toilet", "kávé|kávézó" to "coffee",
+                "étel|étterem|éttermet|enni" to "food", "pihenő|pihenőhely" to "services", "parkoló|parkolót|parkolás|parkolni" to "parking",
+                "\\s(keress|keresd|keresés|legközelebbi|hol van|kell egy)\\s" to "find", "legolcsóbb|olcsó" to "cheap",
+                "fizetős utak nélkül|kerüld a fizetős|matrica nélkül|autópálya-matrica nélkül" to "avoid toll", "autópálya nélkül|kerüld az autópályát|kerüld az autópályákat" to "avoid motorway",
+                "kerüld ezt az utat" to "avoid this road", "mikor érek oda|mennyi idő még|milyen messze|mennyi van még" to "eta", "oszd meg|küldd el" to "share",
+                "hang be|kapcsold be a hangot" to "voice on", "csak figyelmeztetések" to "alerts only", "némítás|csend|hang ki|kapcsold ki a hangot" to "mute",
+                "(állítsd le|fejezd be|szakítsd meg) a (navigációt|útvonalat)|navigáció vége" to "end route", "áttekintés|teljes útvonal" to "overview",
+                "nagyítás|nagyíts" to "zoom in", "kicsinyítés|kicsinyíts" to "zoom out", "észak felül|észak fent" to "north up", "hány óra van|mennyi az idő" to "what time",
+                "^\\s*(navigálj ide|navigálj|vigyél el|menj ide|menjünk)\\s" to "go to",
+            ),
+            "tr" to r(
+                "\\s(eve|evime|eve git|eve götür|beni eve götür)\\s" to "go home", "\\s(işe|iş yerine|işyerine|ofise)\\s" to "go to work",
+                "^\\s*(bildir|ihbar et)\\s" to "report", "kaza" to "accident", "polis|çevirme" to "police", "arıza|arızalı|bozuk araç" to "breakdown", "radar|kamera|hız kamerası" to "camera",
+                "benzinlik|benzin istasyonu|akaryakıt|yakıt|benzin|mazot|dizel|depoyu doldur" to "fuel", "şarj istasyonu|şarj noktası|şarj" to "charging", "tuvalet|wc" to "toilet", "kahve|kafe" to "coffee",
+                "yemek|restoran|lokanta" to "food", "dinlenme tesisi|tesis|mola yeri" to "services", "otopark|park yeri|park" to "parking",
+                "\\s(bul|ara|en yakın|nerede|lazım|gerek)\\s" to "find", "en ucuz|ucuz" to "cheap",
+                "ücretli yollardan kaçın|otoyol ücreti olmadan|gişesiz|köprü ve otoyol ücreti olmadan" to "avoid toll", "otoyollardan kaçın|otoyolsuz|otoyol olmadan" to "avoid motorway",
+                "bu yoldan kaçın" to "avoid this road", "ne zaman varırım|ne zaman varacağım|ne kadar kaldı|kaç dakika kaldı" to "eta", "paylaş|gönder" to "share",
+                "sesi aç|sesli yönlendirmeyi aç" to "voice on", "yalnızca uyarılar|sadece uyarılar" to "alerts only", "sessize al|sustur|sesi kapat" to "mute",
+                "(rotayı|navigasyonu) (bitir|durdur|iptal et|sonlandır)" to "end route", "genel bakış|tüm rota" to "overview",
+                "yakınlaştır" to "zoom in", "uzaklaştır" to "zoom out", "kuzey yukarı" to "north up", "saat kaç" to "what time",
+                "^\\s*(navigasyon başlat|yol tarifi al|git)\\s" to "go to",
+            ),
+            "sr" to r(
+                "\\s(kući|vozi me kući|idemo kući)\\s" to "go home", "\\s(na posao|u kancelariju)\\s" to "go to work",
+                "^\\s*(prijavi|javi)\\s" to "report", "nesreća|nesreću|sudar|udes" to "accident", "policija|policiju|murija" to "police", "kvar|pokvaren[oi]" to "breakdown", "radar|kamera|kameru" to "camera",
+                "benzinska|benzinsku|benzinska pumpa|pumpa|pumpu|gorivo|sipati gorivo|točenje" to "fuel", "punjač|punjenje|stanica za punjenje" to "charging", "wc|toalet|klozet" to "toilet", "kafa|kafu|kafić" to "coffee",
+                "hrana|hranu|restoran|jesti" to "food", "odmorište|odmorišta" to "services", "parking|parkiralište|parkirati" to "parking",
+                "\\s(nađi|pronađi|traži|potraži|najbliža|najbliži|najbliže|gde je|treba mi)\\s" to "find", "najjeftinij[aie]|jeftin[aoi]" to "cheap",
+                "bez putarine|izbegni (putarinu|naplatu)|bez naplate" to "avoid toll", "bez autoputa|izbegni autoput[e]?" to "avoid motorway",
+                "izbegni ovaj put" to "avoid this road", "kad stižem|kada stižem|koliko još|koliko je još" to "eta", "podeli|pošalji" to "share",
+                "uključi glas" to "voice on", "samo upozorenja" to "alerts only", "utišaj|tišina|isključi glas" to "mute",
+                "(završi|zaustavi|prekini|otkaži) (rutu|navigaciju)" to "end route", "pregled|cela ruta|celu rutu" to "overview",
+                "uvećaj|približi" to "zoom in", "umanji|udalji" to "zoom out", "sever gore" to "north up", "koliko je sati" to "what time",
+                "^\\s*(vozi me do|vozi me u|navigiraj do|idi do|idemo u|idemo do|do)\\s" to "go to",
+            ),
+            "ar" to r(
+                "\\s(المنزل|البيت|إلى البيت|الى البيت|خذني للبيت|خذني إلى البيت)\\s" to "go home", "\\s(العمل|الشغل|المكتب|إلى العمل|الى العمل)\\s" to "go to work",
+                "^\\s*(أبلغ عن|ابلغ عن|بلغ عن)\\s" to "report", "حادث|حادثة" to "accident", "شرطة|الشرطة" to "police", "عطل|معطلة|سيارة معطلة" to "breakdown", "كاميرا|رادار|ساهر" to "camera",
+                "محطة وقود|محطة بنزين|بنزين|وقود|ديزل" to "fuel", "شاحن|شحن|محطة شحن" to "charging", "حمام|دورة مياه|مرحاض" to "toilet", "قهوة|مقهى|كافيه" to "coffee",
+                "طعام|أكل|مطعم" to "food", "استراحة|محطة استراحة" to "services", "موقف|مواقف|موقف سيارات|باركنج" to "parking",
+                "\\s(ابحث عن|جد|أقرب|اقرب|أين|وين|أحتاج)\\s" to "find", "أرخص|ارخص|رخيص" to "cheap",
+                "تجنب الرسوم|بدون رسوم|تجنب الطرق المدفوعة" to "avoid toll", "تجنب الطرق السريعة|بدون طرق سريعة|تجنب الطريق السريع" to "avoid motorway",
+                "تجنب هذا الطريق" to "avoid this road", "متى أصل|متى اوصل|متى سأصل|كم باقي|كم بقي" to "eta", "شارك|أرسل|ارسل" to "share",
+                "شغل الصوت|تشغيل الصوت" to "voice on", "التنبيهات فقط|تنبيهات فقط" to "alerts only", "كتم|اكتم|اسكت|إيقاف الصوت" to "mute",
+                "(أنه|انهي|أوقف|اوقف|ألغ|الغ|إلغاء) (المسار|الملاحة|التوجيه)" to "end route", "نظرة عامة|المسار كامل|كل المسار" to "overview",
+                "تكبير|كبر الخريطة|قرب الخريطة" to "zoom in", "تصغير|صغر الخريطة|بعد الخريطة" to "zoom out", "الشمال للأعلى" to "north up", "كم الساعة|كم الوقت" to "what time",
+                "^\\s*(خذني إلى|خذني الى|اذهب إلى|اذهب الى|روح على|انتقل إلى|وجهني إلى|نوجه إلى|إلى|الى)\\s" to "go to",
+            ),
+            "he" to r(
+                "\\s(הביתה|קח אותי הביתה|סע הביתה)\\s" to "go home", "\\s(לעבודה|למשרד|עבודה)\\s" to "go to work",
+                "^\\s*(דווח על|דווח)\\s" to "report", "תאונה" to "accident", "משטרה|שוטרים|ניידת" to "police", "רכב תקוע|תקלה|רכב מושבת" to "breakdown", "מצלמה|מצלמת מהירות|ממל\"ז" to "camera",
+                "תחנת דלק|דלק|לתדלק|סולר" to "fuel", "עמדת טעינה|טעינה|מטען" to "charging", "שירותים|נוחיות" to "toilet", "קפה|בית קפה" to "coffee",
+                "אוכל|מסעדה|לאכול" to "food", "תחנת שירות|חניון לילה" to "services", "חניה|חנייה|חניון" to "parking",
+                "\\s(מצא|חפש|הכי קרוב|הכי קרובה|הקרוב|הקרובה|איפה|צריך)\\s" to "find", "הכי זול|הכי זולה|זול|זולה" to "cheap",
+                "בלי אגרה|הימנע מאגרה|בלי כביש אגרה|בלי כביש 6" to "avoid toll", "בלי כבישים מהירים|הימנע מכבישים מהירים" to "avoid motorway",
+                "הימנע מהכביש הזה" to "avoid this road", "מתי אגיע|כמה זמן נשאר|כמה עוד" to "eta", "שתף|שלח" to "share",
+                "הפעל קול|הפעל הנחיות קוליות" to "voice on", "רק התראות" to "alerts only", "השתק|שקט|כבה קול" to "mute",
+                "(סיים|עצור|בטל) (מסלול|ניווט|את המסלול|את הניווט)" to "end route", "סקירה|כל המסלול" to "overview",
+                "הגדל|התקרב" to "zoom in", "הקטן|התרחק" to "zoom out", "צפון למעלה" to "north up", "מה השעה" to "what time",
+                "^\\s*(נווט אל|נווט ל-?|סע אל|סע ל-?|קח אותי אל|קח אותי ל-?|תיקח אותי ל-?)" to "go to ",
+            ),
+            "ur" to r(
+                "\\s(گھر|گھر چلو|گھر لے چلو)\\s" to "go home", "\\s(دفتر|کام پر|آفس)\\s" to "go to work",
+                "^\\s*(رپورٹ کرو|رپورٹ)\\s" to "report", "حادثہ|ایکسیڈنٹ" to "accident", "پولیس|ناکہ" to "police", "خراب گاڑی|خرابی|بریک ڈاؤن" to "breakdown", "کیمرہ|سپیڈ کیمرہ|ریڈار" to "camera",
+                "پیٹرول پمپ|پٹرول پمپ|پیٹرول|پٹرول|ڈیزل|ایندھن|فیول" to "fuel", "چارجنگ|چارجر" to "charging", "واش روم|ٹوائلٹ|بیت الخلا" to "toilet", "کافی|چائے" to "coffee",
+                "کھانا|ریسٹورنٹ|ہوٹل" to "food", "سروس ایریا|ریسٹ ایریا" to "services", "پارکنگ" to "parking",
+                "\\s(ڈھونڈو|تلاش کرو|سب سے قریب|قریب ترین|کہاں ہے|چاہیے)\\s" to "find", "سب سے سستا|سستا" to "cheap",
+                "ٹول سے بچو|بغیر ٹول" to "avoid toll", "موٹروے سے بچو|بغیر موٹروے" to "avoid motorway",
+                "اس سڑک سے بچو" to "avoid this road", "کب پہنچیں گے|کب پہنچوں گا|کتنا وقت باقی|کتنا رہ گیا" to "eta", "شیئر کرو|بھیجو" to "share",
+                "آواز چلاؤ|آواز آن" to "voice on", "صرف انتباہ|صرف الرٹ" to "alerts only", "خاموش|آواز بند" to "mute",
+                "(راستہ|نیویگیشن) (ختم کرو|بند کرو|روکو)" to "end route", "پورا راستہ|جائزہ" to "overview",
+                "زوم ان|قریب کرو" to "zoom in", "زوم آؤٹ|دور کرو" to "zoom out", "شمال اوپر" to "north up", "کیا وقت ہے|ٹائم کیا ہے" to "what time",
+                "^\\s*(نیویگیٹ کرو|راستہ دکھاؤ)\\s" to "go to",
+            ),
+            "ms" to r(
+                "\\s(balik rumah|pulang ke rumah|pulang|bawa saya pulang)\\s" to "go home", "\\s(pergi kerja|ke tempat kerja|ke pejabat)\\s" to "go to work",
+                "^\\s*laporkan\\s" to "report", "kemalangan|eksiden" to "accident", "polis|sekatan jalan raya" to "police", "kereta rosak|rosak" to "breakdown", "kamera had laju|kamera|perangkap laju" to "camera",
+                "stesen minyak|minyak|isi minyak|petrol" to "fuel", "pengecas|cas kereta|pengecasan|stesen cas" to "charging", "tandas" to "toilet", "kopi|kafe|kedai kopi" to "coffee",
+                "makanan|makan|restoran|kedai makan" to "food", "r ?& ?r|hentian rehat|kawasan rehat" to "services", "tempat letak kereta|parkir|letak kereta" to "parking",
+                "\\s(cari|carikan|terdekat|paling dekat|di mana|perlukan)\\s" to "find", "termurah|paling murah|murah" to "cheap",
+                "elak tol|tanpa tol|tak nak tol" to "avoid toll", "elak lebuh raya|tanpa lebuh raya" to "avoid motorway",
+                "elak jalan ini" to "avoid this road", "bila sampai|berapa lama lagi|berapa jauh lagi|jauh lagi" to "eta", "kongsi" to "share",
+                "hidupkan suara|suara hidup" to "voice on", "amaran sahaja" to "alerts only", "senyap|matikan suara|diam" to "mute",
+                "(hentikan|tamatkan|batalkan) (navigasi|laluan)" to "end route", "gambaran keseluruhan|seluruh laluan" to "overview",
+                "zum masuk|besarkan" to "zoom in", "zum keluar|kecilkan" to "zoom out", "utara di atas" to "north up", "pukul berapa" to "what time",
+                "^\\s*(pergi ke|bawa saya ke|navigasi ke|tunjukkan jalan ke|ke)\\s" to "go to",
+            ),
+            "hr" to r(
+                "\\s(kući|vozi me kući|idemo kući)\\s" to "go home", "\\s(na posao|u ured)\\s" to "go to work",
+                "^\\s*(prijavi|javi)\\s" to "report", "nesreća|nesreću|sudar" to "accident", "policija|policiju" to "police", "kvar|pokvaren[oi]" to "breakdown", "radar|kamera|kameru" to "camera",
+                "benzinska|benzinsku|benzinska postaja|pumpa|pumpu|gorivo|natočiti|točenje" to "fuel", "punionica|punionicu|punjenje|punjač" to "charging", "wc|zahod|toalet" to "toilet", "kava|kavu|kafić" to "coffee",
+                "hrana|hranu|restoran|jesti" to "food", "odmorište|odmorišta" to "services", "parking|parkiralište|parkirati" to "parking",
+                "\\s(nađi|pronađi|traži|potraži|najbliža|najbliži|najbliže|gdje je|trebam)\\s" to "find", "najjeftinij[aie]|jeftin[aoi]" to "cheap",
+                "bez cestarine|izbjegni (cestarinu|naplatu)|bez naplate" to "avoid toll", "bez autocest[ae]|izbjegni autocest[eu]" to "avoid motorway",
+                "izbjegni ovu cestu" to "avoid this road", "kad stižem|kada stižem|koliko još|koliko je još" to "eta", "podijeli|pošalji" to "share",
+                "uključi glas" to "voice on", "samo upozorenja" to "alerts only", "utišaj|tišina|isključi glas" to "mute",
+                "(završi|zaustavi|prekini|otkaži) (rutu|navigaciju)" to "end route", "pregled|cijela ruta|cijelu rutu" to "overview",
+                "povećaj|približi" to "zoom in", "smanji|udalji" to "zoom out", "sjever gore" to "north up", "koliko je sati" to "what time",
+                "^\\s*(vozi me do|vozi me u|navigiraj do|idi do|idemo u|idemo do|do)\\s" to "go to",
+            ),
+            "da" to r(
+                "\\s(hjem|kør hjem|tag mig hjem)\\s" to "go home", "\\s(på arbejde|til arbejde|til kontoret)\\s" to "go to work",
+                "^\\s*(rapportér|rapporter|meld)\\s" to "report", "ulykke|uheld" to "accident", "politi|politiet" to "police", "i stykker|motorstop|nedbrud" to "breakdown", "fartkamera|kamera|fotovogn" to "camera",
+                "tankstation|benzin|brændstof|tanke|diesel" to "fuel", "ladestander|opladning|lader|ladestation" to "charging", "toilet|wc" to "toilet", "kaffe|café" to "coffee",
+                "\\smad\\s|restaurant|spise" to "food", "rasteplads|rastepladsen|motorvejscafé" to "services", "parkering|parkeringsplads|parkere" to "parking",
+                "\\s(find|søg|søg efter|nærmeste|hvor er|jeg skal bruge)\\s" to "find", "billigste|billig" to "cheap",
+                "undgå betalingsveje|uden betalingsveje|undgå bro(af)?gift" to "avoid toll", "undgå motorveje|uden motorvej" to "avoid motorway",
+                "undgå denne vej" to "avoid this road", "hvornår er jeg fremme|hvor lang tid|hvor langt" to "eta", "\\s(del|send) (min |ankomst)" to "share",
+                "stemme til|slå stemmen til" to "voice on", "kun advarsler" to "alerts only", "lydløs|stille|slå stemmen fra|stemme fra" to "mute",
+                "(afslut|stop|annuller) (ruten|navigationen|navigation)" to "end route", "oversigt|hele ruten" to "overview",
+                "zoom ind" to "zoom in", "zoom ud" to "zoom out", "nord op" to "north up", "hvad er klokken" to "what time",
+                "^\\s*(naviger til|kør til|tag mig til|før mig til|til)\\s" to "go to",
+            ),
             "id" to r(
                 "\\s(pulang|ke rumah|pulang ke rumah|antar saya pulang)\\s" to "go home", "\\s(pergi |antar saya )?ke (kantor|tempat kerja)\\s" to "go to work",
                 "^\\s*laporkan\\s" to "report", "kecelakaan" to "accident", "polisi|razia" to "police", "mogok" to "breakdown", "kamera tilang|kamera" to "camera",
@@ -244,7 +497,15 @@ object L {
         "it" -> "${n}ª"
         "th" -> "ที่ $n"
         "ja" -> "${n}番目"
-        "id" -> "ke-$n"
+        "id", "ms" -> "ke-$n"
+        // (with "the": "az" before a vowel sound, "a" otherwise: az 1., a 2., az 5.)
+        "hu" -> if (n == 1 || n == 5 || n in 50..59) "az $n." else "a $n."
+        "eu", "cs", "fi", "sk", "da", "hr", "tr", "sr" -> "$n."
+        "ar", "he", "ur" -> "$n"
+        "el" -> "${n}η"
+        "ro" -> if (n == 1) "prima" else "a $n-a"
+        "zh" -> "第${n}個"
+        "zhs" -> "第${n}个"
         // 1-ви, 2-ри, 3-ти, 7-ми, 8-ми (11-ти to 13-ти, and the rest -ти)
         "bg" -> when {
             n % 100 in 11..19 -> "$n-ти"
@@ -260,25 +521,65 @@ object L {
 
     /** The ordinal as it's said ("2nd" is read out well in English; the others as words up to tenth). */
     fun ordSpoken(n: Int): String {
-        val words = when (lang) {
-            "nl" -> listOf("eerste", "tweede", "derde", "vierde", "vijfde", "zesde", "zevende", "achtste", "negende", "tiende")
-            "de" -> listOf("erste", "zweite", "dritte", "vierte", "fünfte", "sechste", "siebte", "achte", "neunte", "zehnte")
-            "fr" -> listOf("première", "deuxième", "troisième", "quatrième", "cinquième", "sixième", "septième", "huitième", "neuvième", "dixième")
-            "es" -> listOf("primera", "segunda", "tercera", "cuarta", "quinta", "sexta", "séptima", "octava", "novena", "décima")
-            "it" -> listOf("prima", "seconda", "terza", "quarta", "quinta", "sesta", "settima", "ottava", "nona", "decima")
-            "pt" -> listOf("primeira", "segunda", "terceira", "quarta", "quinta", "sexta", "sétima", "oitava", "nona", "décima")
-            "pl" -> listOf("pierwszy", "drugi", "trzeci", "czwarty", "piąty", "szósty", "siódmy", "ósmy", "dziewiąty", "dziesiąty")
-            "sl" -> listOf("prvi", "drugi", "tretji", "četrti", "peti", "šesti", "sedmi", "osmi", "deveti", "deseti")
-            "bg" -> listOf("първия", "втория", "третия", "четвъртия", "петия", "шестия", "седмия", "осмия", "деветия", "десетия")
-            "id" -> listOf("pertama", "kedua", "ketiga", "keempat", "kelima", "keenam", "ketujuh", "kedelapan", "kesembilan", "kesepuluh")
-            // (Thai and Japanese voices read "ที่ 2" and "2番目" well)
-            else -> return ordShort(n)
+        // (kept as one plain string per language and cut by hand: a list per language, picked in a "when", built a method that
+        // Android 13's checker on some head units turned down, which stopped the whole app opening)
+        val all = ordWords(lang)
+        if (all.isEmpty() || n < 1) return ordShort(n)
+        var start = 0
+        for (i in 1 until n) {
+            val bar = all.indexOf('|', start)
+            if (bar < 0) return ordShort(n)
+            start = bar + 1
         }
-        return words.getOrNull(n - 1) ?: ordShort(n)
+        val end = all.indexOf('|', start)
+        return if (end < 0) all.substring(start) else all.substring(start, end)
+    }
+
+    /** The ordinals 1st to 10th as said in [l], split by "|"; blank where the figure is read out instead
+     *  (Thai, Japanese and Chinese voices read "ที่ 2", "2番目" and "第2個" well). */
+    private fun ordWords(l: String): String = when (l) {
+        "nl" -> "eerste|tweede|derde|vierde|vijfde|zesde|zevende|achtste|negende|tiende"
+        "de" -> "erste|zweite|dritte|vierte|fünfte|sechste|siebte|achte|neunte|zehnte"
+        "fr" -> "première|deuxième|troisième|quatrième|cinquième|sixième|septième|huitième|neuvième|dixième"
+        "es" -> "primera|segunda|tercera|cuarta|quinta|sexta|séptima|octava|novena|décima"
+        "it" -> "prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima"
+        "pt" -> "primeira|segunda|terceira|quarta|quinta|sexta|sétima|oitava|nona|décima"
+        "pl" -> "pierwszy|drugi|trzeci|czwarty|piąty|szósty|siódmy|ósmy|dziewiąty|dziesiąty"
+        "sl" -> "prvi|drugi|tretji|četrti|peti|šesti|sedmi|osmi|deveti|deseti"
+        "bg" -> "първия|втория|третия|четвъртия|петия|шестия|седмия|осмия|деветия|десетия"
+        "ro" -> "prima|a doua|a treia|a patra|a cincea|a șasea|a șaptea|a opta|a noua|a zecea"
+        "eu" -> "lehenengo|bigarren|hirugarren|laugarren|bosgarren|seigarren|zazpigarren|zortzigarren|bederatzigarren|hamargarren"
+        // (said in the form the roundabout phrase needs: "στη δεύτερη έξοδο", "druhým výjezdem", "toisesta liittymästä")
+        "el" -> "πρώτη|δεύτερη|τρίτη|τέταρτη|πέμπτη|έκτη|έβδομη|όγδοη|ένατη|δέκατη"
+        "cs" -> "prvním|druhým|třetím|čtvrtým|pátým|šestým|sedmým|osmým|devátým|desátým"
+        "fi" -> "ensimmäisestä|toisesta|kolmannesta|neljännestä|viidennestä|kuudennesta|seitsemännestä|kahdeksannesta|yhdeksännestä|kymmenennestä"
+        "sk" -> "prvým|druhým|tretím|štvrtým|piatym|šiestym|siedmym|ôsmym|deviatym|desiatym"
+        // (with "the", as the roundabout phrase needs: "hajtson ki a második kijáraton")
+        "hu" -> "az első|a második|a harmadik|a negyedik|az ötödik|a hatodik|a hetedik|a nyolcadik|a kilencedik|a tizedik"
+        "ms" -> "pertama|kedua|ketiga|keempat|kelima|keenam|ketujuh|kelapan|kesembilan|kesepuluh"
+        "hr", "sr" -> "prvi|drugi|treći|četvrti|peti|šesti|sedmi|osmi|deveti|deseti"
+        "ar" -> "الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر"
+        // (with "the" joined on, as the roundabout phrase needs: "ביציאה השנייה")
+        "he" -> "ראשונה|שנייה|שלישית|רביעית|חמישית|שישית|שביעית|שמינית|תשיעית|עשירית"
+        "ur" -> "پہلا|دوسرا|تیسرا|چوتھا|پانچواں|چھٹا|ساتواں|آٹھواں|نواں|دسواں"
+        "tr" -> "birinci|ikinci|üçüncü|dördüncü|beşinci|altıncı|yedinci|sekizinci|dokuzuncu|onuncu"
+        "da" -> "første|anden|tredje|fjerde|femte|sjette|syvende|ottende|niende|tiende"
+        "id" -> "pertama|kedua|ketiga|keempat|kelima|keenam|ketujuh|kedelapan|kesembilan|kesepuluh"
+        else -> ""
     }
 
     /** "two", "three" in English; a figure in the others (the voices read figures well). */
     fun count(n: Int): String = if (lang == "en") when (n) { 2 -> "two"; 3 -> "three"; else -> n.toString() } else n.toString()
+
+    /** Puts one language's own file (see I18nRo and the others) into the table. */
+    private fun addOwn(m: Map<String, HashMap<String, String>>, code: String, rows: List<Pair<String, String>>) {
+        val into: HashMap<String, String> = m[code] ?: return
+        for (row in rows) {
+            val en: String = row.first
+            val tr: String = row.second
+            if (tr.isNotEmpty()) into[en] = tr
+        }
+    }
 
     private val table: Map<String, Map<String, String>> by lazy {
         val keys = listOf("nl", "de", "fr", "es")
@@ -286,12 +587,30 @@ object L {
         val keys3 = listOf("th", "ja", "id")
         val keys4 = listOf("bg")
         val keys5 = listOf("sl")
-        val m = (keys + keys2 + keys3 + keys4 + keys5).associateWith { HashMap<String, String>() }
+        val m = (keys + keys2 + keys3 + keys4 + keys5 + listOf("ro", "eu", "zh", "el", "cs", "fi", "zhs", "sk", "da", "hr", "ms", "hu", "tr", "sr", "ar", "he", "ur")).associateWith { HashMap<String, String>() }
         for ((en, tr) in rows) for ((i, k) in keys.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows2) for ((i, k) in keys2.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows3) for ((i, k) in keys3.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in I18nD.rows()) for ((i, k) in keys4.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in I18nE.rows()) for ((i, k) in keys5.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
+        // (one file per language from here on)
+        addOwn(m, "ro", I18nRo.rows())
+        addOwn(m, "eu", I18nEu.rows())
+        addOwn(m, "zh", I18nZhHant.rows())
+        addOwn(m, "el", I18nEl.rows())
+        addOwn(m, "cs", I18nCs.rows())
+        addOwn(m, "fi", I18nFi.rows())
+        addOwn(m, "zhs", I18nZhHans.rows())
+        addOwn(m, "sk", I18nSk.rows())
+        addOwn(m, "da", I18nDa.rows())
+        addOwn(m, "hr", I18nHr.rows())
+        addOwn(m, "ms", I18nMs.rows())
+        addOwn(m, "hu", I18nHu.rows())
+        addOwn(m, "tr", I18nTr.rows())
+        addOwn(m, "sr", I18nSr.rows())
+        addOwn(m, "ar", I18nAr.rows())
+        addOwn(m, "he", I18nHe.rows())
+        addOwn(m, "ur", I18nUr.rows())
         m
     }
 
@@ -1789,6 +2108,33 @@ object L {
         "The turn card stays top left on Android Auto, where its own buttons leave room" to listOf("De afslagkaart blijft linksboven in Android Auto, waar de eigen knoppen ruimte laten", "Die Abbiegekarte bleibt in Android Auto oben links, wo dessen eigene Tasten Platz lassen", "La carte de direction reste en haut à gauche dans Android Auto, là où ses propres boutons laissent de la place", "La tarjeta de giro se queda arriba a la izquierda en Android Auto, donde sus propios botones dejan sitio"),
         "Start from here" to listOf("Vanaf hier starten", "Von hier starten", "Partir d'ici", "Salir desde aquí"),
         "Starting from {0}" to listOf("Start vanaf {0}", "Start von {0}", "Départ de {0}", "Salida desde {0}"),
+        "Undo" to listOf("Ongedaan maken", "Rückgängig", "Annuler", "Deshacer"),
+        "Your report · {0}" to listOf("Uw melding · {0}", "Ihre Meldung · {0}", "Votre signalement · {0}", "Tu aviso · {0}"),
+        "Report removed" to listOf("Melding verwijderd", "Meldung entfernt", "Signalement supprimé", "Aviso eliminado"),
+        "Your model" to listOf("Uw model", "Ihr Modell", "Votre modèle", "Tu modelo"),
+        "3D model file" to listOf("3D-modelbestand", "3D-Modelldatei", "Fichier du modèle 3D", "Archivo del modelo 3D"),
+        "A .glb up to 8 MB. Point it the way you drive with Turn; over 3 MB it may stutter on slower head units" to listOf("Een .glb tot 8 MB. Richt hem met Draaien in uw rijrichting; boven 3 MB kan hij haperen op tragere head units", "Eine .glb bis 8 MB. Mit Drehen in Fahrtrichtung ausrichten; über 3 MB kann es auf langsameren Geräten ruckeln", "Un .glb de 8 Mo maximum. Orientez-le dans votre sens de marche avec Rotation ; au-delà de 3 Mo il peut saccader sur les autoradios lents", "Un .glb de hasta 8 MB. Oriéntalo hacia donde conduces con Girar; con más de 3 MB puede ir a tirones en equipos lentos"),
+        "Turn" to listOf("Draaien", "Drehen", "Rotation", "Girar"),
+        "Model size" to listOf("Modelgrootte", "Modellgröße", "Taille du modèle", "Tamaño del modelo"),
+        "That file isn't a .glb 3D model (or it's over 8 MB)" to listOf("Dat bestand is geen .glb 3D-model (of het is groter dan 8 MB)", "Diese Datei ist kein .glb-3D-Modell (oder größer als 8 MB)", "Ce fichier n'est pas un modèle 3D .glb (ou il dépasse 8 Mo)", "Ese archivo no es un modelo 3D .glb (o supera los 8 MB)"),
+        "Your 3D model couldn't be shown, so the built-in car is used" to listOf("Uw 3D-model kon niet worden getoond, dus de ingebouwde auto wordt gebruikt", "Ihr 3D-Modell konnte nicht angezeigt werden, daher wird das eingebaute Auto verwendet", "Votre modèle 3D n'a pas pu être affiché, la voiture intégrée est donc utilisée", "No se pudo mostrar tu modelo 3D, así que se usa el coche integrado"),
+        "No app on this unit can pick a file (try installing a file manager)" to listOf("Geen app op dit apparaat kan een bestand kiezen (installeer een bestandsbeheerder)", "Keine App auf diesem Gerät kann eine Datei auswählen (installieren Sie einen Dateimanager)", "Aucune application de cet appareil ne peut choisir un fichier (installez un gestionnaire de fichiers)", "Ninguna app de este equipo puede elegir un archivo (instala un gestor de archivos)"),
+        "At the lights" to listOf("Bij de verkeerslichten", "An der Ampel", "Aux feux", "En el semáforo"),
+        "At the second set of lights" to listOf("Bij de tweede verkeerslichten", "An der zweiten Ampel", "Aux deuxièmes feux", "En el segundo semáforo"),
+        "At the stop sign" to listOf("Bij het stopbord", "Am Stoppschild", "Au stop", "En la señal de stop"),
+        "At the traffic lights, {0}" to listOf("Bij de verkeerslichten {0}", "An der Ampel {0}", "Aux feux, {0}", "En el semáforo, {0}"),
+        "At the second set of lights, {0}" to listOf("Bij de tweede verkeerslichten {0}", "An der zweiten Ampel {0}", "Aux deuxièmes feux, {0}", "En el segundo semáforo, {0}"),
+        "At the stop sign, {0}" to listOf("Bij het stopbord {0}", "Am Stoppschild {0}", "Au stop, {0}", "En la señal de stop, {0}"),
+        "Landmarks in directions" to listOf("Herkenningspunten in aanwijzingen", "Orientierungspunkte in Ansagen", "Repères dans les indications", "Referencias en las indicaciones"),
+        "\"At the traffic lights, turn right\" in place of the distance when the turn is at the lights or a stop sign, on the turn card and in the voice" to listOf("\"Bij de verkeerslichten rechtsaf\" in plaats van de afstand als de afslag bij verkeerslichten of een stopbord is, op de afslagkaart en in de stem", "„An der Ampel rechts abbiegen\" statt der Entfernung, wenn die Abbiegung an einer Ampel oder einem Stoppschild ist, auf der Abbiegekarte und in der Sprachansage", "« Aux feux, tournez à droite » au lieu de la distance quand le virage est à des feux ou à un stop, sur la carte de direction et dans la voix", "\"En el semáforo, gire a la derecha\" en lugar de la distancia cuando el giro está en un semáforo o una señal de stop, en la tarjeta de giro y en la voz"),
+        "Your order" to listOf("Volgorde", "Reihenfolge", "Ordre d'affichage", "Orden"),
+        "Bottom corner" to listOf("Hoek onderaan", "Untere Ecke", "Coin inférieur", "Esquina inferior"),
+        "Bottom corner uses the side picked under Card positions. On a short car screen, Top right needs the Compact style: the ring goes under the turn card there" to listOf("Hoek onderaan gebruikt de kant die bij Kaartposities is gekozen. Op een laag autoscherm heeft Rechtsboven de stijl Compact nodig: de ring komt daar onder de afslagkaart", "Untere Ecke nutzt die unter Kartenpositionen gewählte Seite. Auf einem niedrigen Autobildschirm braucht Oben rechts den Stil Kompakt: der Ring kommt dort unter die Abbiegekarte", "Coin inférieur utilise le côté choisi dans Position des cartes. Sur un écran de voiture peu haut, En haut à droite demande le style Compact : l'anneau se place alors sous la carte de direction", "Esquina inferior usa el lado elegido en Posición de las tarjetas. En una pantalla de coche baja, Arriba a la derecha necesita el estilo Compacto: allí el anillo va bajo la tarjeta de giro"),
+        "Compact" to listOf("Compact", "Kompakt", "Compact", "Compacto"),
+        "Compact is a small dark pill with the limit and your speed side by side" to listOf("Compact is een klein donker blokje met de limiet en je snelheid naast elkaar", "Kompakt ist eine kleine dunkle Pille mit Tempolimit und Geschwindigkeit nebeneinander", "Compact est une petite pastille sombre avec la limite et votre vitesse côte à côte", "Compacto es una pequeña pastilla oscura con el límite y tu velocidad uno al lado del otro"),
+        "Same as the app" to listOf("Zoals in de app", "Wie in der App", "Comme dans l'appli", "Igual que en la app"),
+        "Speedometer style" to listOf("Stijl snelheidsmeter", "Tacho-Stil", "Style du compteur", "Estilo del velocímetro"),
+        "Speedometer style on the car screen" to listOf("Stijl snelheidsmeter op het autoscherm", "Tacho-Stil auf dem Autobildschirm", "Style du compteur sur l'écran de la voiture", "Estilo del velocímetro en la pantalla del coche"),
     )
 
     private fun rowsB0(): List<Pair<String, List<String>>> = listOf(
@@ -3274,5 +3620,32 @@ object L {
         "The turn card stays top left on Android Auto, where its own buttons leave room" to listOf("La scheda di svolta resta in alto a sinistra in Android Auto, dove i suoi pulsanti lasciano spazio", "O cartão de direção fica em cima à esquerda no Android Auto, onde os botões dele deixam espaço", "Karta skrętu zostaje w Android Auto w lewym górnym rogu, gdzie jego przyciski zostawiają miejsce"),
         "Start from here" to listOf("Parti da qui", "Partir daqui", "Zacznij stąd"),
         "Starting from {0}" to listOf("Partenza da {0}", "Partida de {0}", "Start z: {0}"),
+        "Undo" to listOf("Annulla", "Desfazer", "Cofnij"),
+        "Your report · {0}" to listOf("La tua segnalazione · {0}", "O seu reporte · {0}", "Twoje zgłoszenie · {0}"),
+        "Report removed" to listOf("Segnalazione rimossa", "Reporte removido", "Zgłoszenie usunięte"),
+        "Your model" to listOf("Il tuo modello", "O seu modelo", "Twój model"),
+        "3D model file" to listOf("File del modello 3D", "Ficheiro do modelo 3D", "Plik modelu 3D"),
+        "A .glb up to 8 MB. Point it the way you drive with Turn; over 3 MB it may stutter on slower head units" to listOf("Un .glb fino a 8 MB. Orientalo nel senso di marcia con Ruota; oltre 3 MB può scattare sulle autoradio più lente", "Um .glb até 8 MB. Aponte-o no sentido em que conduz com Rodar; acima de 3 MB pode engasgar em rádios mais lentos", "Plik .glb do 8 MB. Skieruj go w stronę jazdy suwakiem Obrót; powyżej 3 MB może się zacinać na wolniejszych radiach"),
+        "Turn" to listOf("Ruota", "Rodar", "Obrót"),
+        "Model size" to listOf("Dimensione del modello", "Tamanho do modelo", "Rozmiar modelu"),
+        "That file isn't a .glb 3D model (or it's over 8 MB)" to listOf("Quel file non è un modello 3D .glb (o supera 8 MB)", "Esse ficheiro não é um modelo 3D .glb (ou tem mais de 8 MB)", "Ten plik nie jest modelem 3D .glb (albo ma ponad 8 MB)"),
+        "Your 3D model couldn't be shown, so the built-in car is used" to listOf("Non è stato possibile mostrare il tuo modello 3D, quindi si usa l'auto integrata", "Não foi possível mostrar o seu modelo 3D, por isso é usado o carro incluído", "Nie udało się wyświetlić Twojego modelu 3D, więc używany jest wbudowany samochód"),
+        "No app on this unit can pick a file (try installing a file manager)" to listOf("Nessuna app su questo dispositivo può scegliere un file (installa un file manager)", "Nenhuma app desta unidade consegue escolher um ficheiro (instale um gestor de ficheiros)", "Żadna aplikacja na tym urządzeniu nie może wybrać pliku (zainstaluj menedżer plików)"),
+        "At the lights" to listOf("Al semaforo", "No semáforo", "Na światłach"),
+        "At the second set of lights" to listOf("Al secondo semaforo", "No segundo semáforo", "Na drugich światłach"),
+        "At the stop sign" to listOf("Allo stop", "No sinal de stop", "Przy znaku stop"),
+        "At the traffic lights, {0}" to listOf("Al semaforo, {0}", "No semáforo, {0}", "Na światłach {0}"),
+        "At the second set of lights, {0}" to listOf("Al secondo semaforo, {0}", "No segundo semáforo, {0}", "Na drugich światłach {0}"),
+        "At the stop sign, {0}" to listOf("Allo stop, {0}", "No sinal de stop, {0}", "Przy znaku stop {0}"),
+        "Landmarks in directions" to listOf("Punti di riferimento nelle indicazioni", "Referências nas indicações", "Punkty orientacyjne we wskazówkach"),
+        "\"At the traffic lights, turn right\" in place of the distance when the turn is at the lights or a stop sign, on the turn card and in the voice" to listOf("\"Al semaforo, svolta a destra\" al posto della distanza quando la svolta è a un semaforo o a uno stop, sulla scheda di svolta e nella voce", "\"No semáforo, vire à direita\" em vez da distância quando a curva é num semáforo ou sinal de stop, no cartão de manobra e na voz", "„Na światłach skręć w prawo\" zamiast odległości, gdy skręt jest na światłach lub przy znaku stop, na karcie manewru i w komunikatach głosowych"),
+        "Your order" to listOf("Ordine", "Ordem", "Kolejność"),
+        "Bottom corner" to listOf("Angolo in basso", "Canto inferior", "Dolny róg"),
+        "Bottom corner uses the side picked under Card positions. On a short car screen, Top right needs the Compact style: the ring goes under the turn card there" to listOf("Angolo in basso usa il lato scelto in Posizione delle schede. Su uno schermo auto basso, In alto a destra richiede lo stile Compatto: lì l'anello va sotto la scheda di svolta", "Canto inferior usa o lado escolhido em Posição dos cartões. Num ecrã de carro baixo, Canto superior direito precisa do estilo Compacto: aí o anel fica sob o cartão de manobra", "Dolny róg używa strony wybranej w Położeniu kart. Na niskim ekranie samochodu Prawy górny wymaga stylu Kompaktowy: pierścień trafia tam pod kartę manewru"),
+        "Compact" to listOf("Compatto", "Compacto", "Kompaktowy"),
+        "Compact is a small dark pill with the limit and your speed side by side" to listOf("Compatto è una piccola pillola scura con il limite e la tua velocità affiancati", "Compacto é uma pequena pílula escura com o limite e a sua velocidade lado a lado", "Kompaktowy to mała ciemna kapsułka z ograniczeniem i twoją prędkością obok siebie"),
+        "Same as the app" to listOf("Come nell'app", "Igual à app", "Jak w aplikacji"),
+        "Speedometer style" to listOf("Stile del tachimetro", "Estilo do velocímetro", "Styl prędkościomierza"),
+        "Speedometer style on the car screen" to listOf("Stile del tachimetro sullo schermo dell'auto", "Estilo do velocímetro no ecrã do carro", "Styl prędkościomierza na ekranie samochodu"),
     )
 }

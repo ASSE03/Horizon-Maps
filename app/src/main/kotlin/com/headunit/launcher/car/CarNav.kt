@@ -57,6 +57,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.headunit.launcher.KEEP_LEFT
 import com.headunit.launcher.MapBinding
 import com.headunit.launcher.MapboxRest
+import com.headunit.launcher.carArrowScale
 import com.headunit.launcher.locatorSpec
 import com.headunit.launcher.mapDetail
 import com.headunit.launcher.NavEngine
@@ -270,7 +271,7 @@ class CarNavSession : Session() {
         // Keep the locator proportionate to the more compact Android Auto overlay sizing.
         // Android Auto uses a smaller map surface than the main head-unit app. Keep the
         // user preference, but normalise it so the 240% main-app default doesn't create an enormous car-screen locator.
-        map.setArrowScale(((prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(1f, 5f) * 0.9f * (prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(30, 180) / 100f))
+        map.setArrowScale(prefs.carArrowScale())
         map.setMapDetail(prefs.mapDetail())
         map.setTrafficGreen(prefs.b(PreferenceKeys.TRAFFIC_GREEN, false))
         map.setCarModel(prefs.s(PreferenceKeys.CAR_MODEL, "saloon"))
@@ -295,6 +296,10 @@ class CarNavSession : Session() {
         ClusterLink.engine = engine
         // (the app's own short messages don't show on the car screen: a tapped number-plate camera says what it is with Android Auto's)
         map.onAlprTap = { who -> try { androidx.car.app.CarToast.makeText(carContext, "Caméra de lecture de plaques" + (if (who.isNotBlank()) " · $who" else ""), androidx.car.app.CarToast.LENGTH_SHORT).show() } catch (e: Exception) { } }
+        // one of your own reports tapped: what it is, with Remove / Keep
+        map.onReportTap = { p ->
+            try { engine.reportAt(p)?.let { r -> mapScreen?.screenManager?.push(RemoveReportScreen(carContext, engine, r)) } } catch (e: Exception) { }
+        }
         // back in the car: the "Votre voiture" spot on the phone isn't needed any more
         try { prefs.put(PreferenceKeys.PARKED_SPOT, "") } catch (e: Exception) { }
         com.headunit.launcher.ParkedNotice.cancel(carContext)
@@ -454,6 +459,8 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
 
     override fun onVisibleAreaChanged(visibleArea: Rect) {
         lastVisible = Rect(visibleArea)
+        // (in the log, for working out layouts on a head unit or the Desktop Head Unit)
+        android.util.Log.i("CarNav", "visible area ${visibleArea.toShortString()} of ${width}x$height at $currentDpi dpi")
         CarLayout.short = visibleArea.height() in 1..519 || visibleArea.width() in 1..699
         try { com.headunit.launcher.CarDiag.screen = "${width}x$height, visible ${visibleArea.left},${visibleArea.top},${visibleArea.right},${visibleArea.bottom}" } catch (e: Exception) { }
         // some head units report a visible area that can't be right (a sliver of the screen, or one off the edge): going by it put
@@ -626,7 +633,7 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
         // host redo its layout for nothing); the turn and distance go to the car's displays through updateTrip
         val sig = "${guiding}|${e.previewing}|${e.active}|${e.routes.size}|${e.busy}|${e.simMode}|${e.faster?.savedMin}|${e.soundMode}|${e.demoNext}"
         if (sig != lastSig) { lastSig = sig; invalidate() }
-        val tsig = "${t?.maneuver}|${t?.street}|${t?.exit}|${t?.dist?.let { Math.round(it / 10) }}|${eta?.secs?.let { Math.round(it / 30) }}|${eta?.dist?.let { Math.round(it / 100) }}|${System.identityHashCode(t?.lanes)}"
+        val tsig = "${t?.maneuver}|${t?.street}|${t?.landmark}|${t?.exit}|${t?.dist?.let { Math.round(it / 10) }}|${eta?.secs?.let { Math.round(it / 30) }}|${eta?.dist?.let { Math.round(it / 100) }}|${System.identityHashCode(t?.lanes)}"
         if (guiding && t != null && eta != null && tsig != lastTrip) {
             lastTrip = tsig
             try { nav?.updateTrip(trip(e, t, eta)) } catch (x: Exception) { }
@@ -881,7 +888,9 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
                 t.tag.isNotBlank() -> t.tag
                 else -> com.headunit.launcher.Geo.maneuverText(m, t.exit).replaceFirstChar { it.uppercase() }
             }
-            val cue = if (t.street.isNotBlank()) "$what · ${t.street}" else what
+            // at traffic lights or a stop sign: "At the lights · Smith Street"
+            val lead = if (t.landmark.isNotBlank()) t.landmark else what
+            val cue = if (t.street.isNotBlank()) "$lead · ${t.street}" else lead
             val sb = Step.Builder(cue).setManeuver(mb.build())
             if (t.street.isNotBlank()) sb.setRoad(t.street)
             // which lanes to be in, for the car's own displays (the dashboard behind the wheel or a head-up display, where the car has
@@ -1061,6 +1070,22 @@ class AltRoutesScreen(carContext: CarContext, private val holder: CarHolder) : S
                 .setOnClickListener { e?.switchToAlt(i); screenManager.pop() }.build())
         }
         return b.setSingleList(list.build()).build()
+    }
+}
+
+/** One of your reports, tapped on the car's map: Remove takes just that one away, Keep goes back to the map. */
+class RemoveReportScreen(carContext: CarContext, private val engine: NavEngine, private val r: NavEngine.Report) : Screen(carContext) {
+    override fun onGetTemplate(): Template {
+        val remove = Action.Builder().setTitle("Supprimer")
+            .setBackgroundColor(androidx.car.app.model.CarColor.RED)
+            .setOnClickListener { try { engine.removeReport(r) } catch (e: Exception) { }; try { androidx.car.app.CarToast.makeText(carContext, "Signalement supprimé", androidx.car.app.CarToast.LENGTH_SHORT).show() } catch (e: Exception) { }; screenManager.pop() }
+            .build()
+        val keep = Action.Builder().setTitle("Garder").setOnClickListener { screenManager.pop() }.build()
+        return androidx.car.app.model.MessageTemplate.Builder(engine.reportAge(r))
+            .setTitle(L.t(engine.reportName(r.kind)))
+            .setHeaderAction(Action.BACK)
+            .addAction(remove).addAction(keep)
+            .build()
     }
 }
 
@@ -1329,14 +1354,24 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
                 val levels = listOf(30, 45, 60, 80, 100, 120, 140, 160, 180)
                 val next = levels[(levels.indexOf(arrowSize).takeIf { it >= 0 } ?: 2).let { (it + 1) % levels.size }]
                 prefs.put(PreferenceKeys.CAR_ARROW_SIZE, next)
-                try { holder.map?.setArrowScale(((prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(1f, 5f) * 0.9f * (next / 100f)) } catch (_: Exception) { }
+                try { holder.map?.setArrowScale(prefs.carArrowScale()) } catch (_: Exception) { }
                 invalidate()
             }.build()
         // where the speed sign sits on the car screen (the same setting as the app's Settings > Android Auto)
         val spPos = prefs.s(PreferenceKeys.SPEED_POS_CAR, "bottom")
         rows += Row.Builder().setTitle("Position du panneau de vitesse")
-            .addText(when (spPos) { "middle" -> "Milieu"; "top" -> "Haut"; else -> "Bas" } + " · touchez pour changer")
-            .setOnClickListener { prefs.put(PreferenceKeys.SPEED_POS_CAR, when (spPos) { "bottom" -> "middle"; "middle" -> "top"; else -> "bottom" }); invalidate() }.build()
+            .addText(L.t(when (spPos) { "middle" -> "Under the turn card"; "top" -> "Top right"; else -> "Bottom corner" }) + " · touchez pour changer")
+            // (a short car screen has no room top right for the ring, between Android Auto's own buttons: it's only offered there
+            // with the compact speedometer)
+            .setOnClickListener {
+                val topFits = !CarLayout.short || prefs.s(PreferenceKeys.CAR_SPEED_STYLE, "app") == "compact"
+                prefs.put(PreferenceKeys.SPEED_POS_CAR, when (spPos) { "bottom" -> "middle"; "middle" -> if (topFits) "top" else "bottom"; else -> "bottom" }); invalidate()
+            }.build()
+        // the ring (or block) as in the app, or the small dark pill
+        val spStyle = prefs.s(PreferenceKeys.CAR_SPEED_STYLE, "app")
+        rows += Row.Builder().setTitle("Style du compteur")
+            .addText(L.t(if (spStyle == "compact") "Compact" else "Same as the app") + " · touchez pour changer")
+            .setOnClickListener { prefs.put(PreferenceKeys.CAR_SPEED_STYLE, if (spStyle == "compact") "app" else "compact"); invalidate() }.build()
         // the arrow stays to the side when the cards on the left fold away (GitHub), rather than moving back to the middle
         rows += toggleRow("Keep the arrow to the side", PreferenceKeys.ARROW_SIDE, false, "When the cards fold away, instead of moving to the middle")
         // 12 or 24-hour times (the same setting as the app's Settings > Units)

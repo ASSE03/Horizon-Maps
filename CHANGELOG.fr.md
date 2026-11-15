@@ -5,6 +5,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Repères dans les indications : quand un virage est à des feux ou à un stop, la carte de direction dit « Aux feux » et la voix « Aux feux, tournez à droite sur… » (ou « Aux deuxièmes feux »). Réglages › Son et voix › Repères dans les indications.
+- Votre propre modèle 3D : Réglages › Votre flèche › Vrai modèle 3D › Votre modèle charge un fichier .glb (8 Mo au plus) comme flèche, mis à la taille de la voiture intégrée, avec Rotation pour l'orienter. Aussi sur Android Auto.
+- Compteur compact sur Android Auto : une petite pastille sombre avec le panneau de limitation et votre vitesse côte à côte (Réglages › Android Auto › Style du compteur), assez petite pour se placer en haut à droite même sur un écran bas.
+- Ordre des raccourcis : dans Réglages › Lieux et trajets, les raccourcis sous la barre de recherche se rangent avec des flèches haut et bas.
+- Retirer un signalement : un signalement fait par erreur s'annule avec Annuler sur le message, et toucher un de vos signalements sur la carte (téléphone ou Android Auto) propose Retirer ou Garder.
 - Signaler une limitation fausse en roulant : appui long sur le panneau de limitation du téléphone, ou deux touches sur celui de l'écran de la voiture. Un diagnostic part aussitôt avec la position, le cap, la limite affichée et sa source, et le journal des limitations le note.
 - Excès de vitesse au choix : dans Comment être prévenu, la ligne « Excès de vitesse » a aussi ses choix Écran (le compteur passe au rouge), Bip et Voix (« Attention, limitation à 90 », au dépassement puis toutes les 30 s tant qu'il dure).
 - Comment être prévenu, alerte par alerte : dans Réglages › Alertes, chaque type d'alerte (radars, changement de limitation, virages dangereux, stops, ralentisseurs, écoles, passages à niveau et gués, incidents, zones à faibles émissions, contresens, pluie, pause, trajets planifiés) a ses trois choix Écran, Bip et Voix, à activer ou couper séparément. Les anciens réglages de la limitation (bannière, « Comment ») sont repris.
@@ -81,6 +86,15 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Bouton Son : pendant le guidage, le son est un grand bouton en haut à droite ; la voix et les étapes passent dans Options de la carte › Ce trajet, et la carte de trajet ne garde que Fin (et les bornes en électrique).
+- Android Auto suit vos réglages tout de suite (thème, couleurs, niveau de détail, flèche ou voiture, tailles, extras 3D, lumière), sans reconnecter.
+- Position du compteur sur Android Auto : Coin inférieur, Sous la carte de direction ou En haut à droite, chacun calé contre une carte ou un coin.
+- Écran partagé Android Auto : en guidage, la bande du trajet est une barre centrée en bas de la carte.
+- Taille des boutons et des cartes sur Android Auto : elles s'appliquent aussi aux boutons de la carte de trajet, aux raccourcis ronds et aux cartes de choix d'itinéraire.
+- Prêt pour Android 16 (comme Google Play l'exige), en restant à l'écart de l'encoche de la caméra.
+- Aperçu de la carte dans les réglages sur téléphone : il reste en haut pendant que vous faites défiler les réglages.
+- Radars tronçons : annoncés aussi tôt qu'un radar fixe, et les radars de début et de fin sont annoncés comme le tronçon.
+- Alertes radar dans les pays où elles sont interdites : le message ne s'affiche plus qu'une fois par pays.
 - Radars de chantier partout en France : la tâche de nuit garde un cache des zones Lufop et redemande chaque nuit les plus anciennes ; en quelques nuits tout le pays est couvert, puis rafraîchi en continu, dans le quota gratuit.
 - Lampadaires du trajet à l'avance : au départ d'un guidage, ceux des 100 premiers kilomètres environ sont téléchargés tranquillement et gardés un mois, pour ne plus dépendre des serveurs Overpass, souvent lents, une fois la nuit tombée.
 - Plan de recharge plus fin : au dernier arrêt, l'appli ne charge que ce qu'il faut pour arriver avec la charge à garder (au lieu de 80 % partout), et les temps de charge suivent la courbe de la voiture (pleine puissance jusqu'à 50 %, puis plus lente) et la puissance de la borne.
@@ -132,6 +146,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Faisceau des phares : il part maintenant de l'avant de la flèche, et ne clignote plus.
+- Limite des radars tronçons hors du Royaume-Uni : lue dans l'unité du pays (un « 60 » n'est plus lu en miles).
+- Mises à jour depuis l'appli : l'installateur enregistre Google Play comme source, ce que vérifie Android Auto ; une mise à jour ne fait plus disparaître l'appli d'Android Auto.
+- Nouveautés après une mise à jour sautée : plus de texte parasite entre les notes des versions.
+- Raccourcis dans les réglages sur téléphone : les boutons passent à la ligne au lieu d'écraser le dernier.
 - Rues absentes de la carte : dans certains pays, les routes HD de Mapbox masquaient les rues ordinaires, ne laissant que les grands axes. Les routes HD (marquages au sol, flèches, ponts en 3D) deviennent un réglage dans Réglages › Style de carte, activé d'office seulement au Royaume-Uni.
 - Recherche avec une clé TomTom récente : si la recherche classique de TomTom refuse la clé (les nouvelles clés n'ont parfois que les services « Orbis »), la même recherche est essayée sur Orbis, et l'appli dit une fois pourquoi si TomTom refuse les deux.
 - Compteur sur les écrans Android Auto bas : il reste dans le coin en bas à gauche, avec la carte de trajet sur une ligne à côté pendant le guidage, au lieu de glisser avec les boutons de zoom et de cacher le logo Mapbox.

@@ -21,6 +21,10 @@ internal object PreferenceKeys {
     const val LOCATOR_IMAGE_CIRCLE = "locimgcircle"
     const val MODEL_SHAPE = "modelshape"
     const val MODEL_GLOW = "modelglow"
+    /** Your own 3D model: "<stamp>|<bytes>|<longest side>|<file name>" (the file itself is in the app's storage). */
+    const val OWN_MODEL = "ownmodel"
+    /** How far your own 3D model is turned, in degrees, so it points the way you drive. */
+    const val MODEL_TURN = "modelturn"
     const val CAR_COLOUR = "carcolour"
     const val ARROW_COLOUR = "arrowcolour"
     const val TRAFFIC = "traffic"
@@ -110,6 +114,8 @@ internal object PreferenceKeys {
     const val BRIGHT = "bright"
     const val BUMPS = "bumps"
     const val CAMBANOBEY = "cambanobey"
+    /** Countries whose "camera alerts are off here" message has already been shown (comma-separated codes): it's said once, ever. */
+    const val CAMBAN_SEEN = "cambanseen"
     const val CARSCALE = "carscale"
     const val CARTHEME = "cartheme"
     const val CINEMATIC = "cinematic"
@@ -243,8 +249,12 @@ internal object PreferenceKeys {
     const val HILLSHADE = "hillshade"
     /** Where the speed limit and speedometer sit, on the side away from the cards: "bottom" (as it always was), "middle" or "top". */
     const val SPEED_POS = "speedpos"
-    /** The same for the Android Auto screen: "bottom" (as it always was), "middle" or "top" of the right-hand side. */
+    /** The same for the Android Auto screen: "bottom" (the bottom corner), "middle" (under the turn card; the name is from when
+     *  it was the middle of the right-hand side) or "top" (top right, under Android Auto's buttons). */
     const val SPEED_POS_CAR = "speedposcar"
+    /** The speedometer's look on the Android Auto screen: "app" (the same as the app: the ring or the block) or "compact"
+     *  (a small dark pill with the limit sign and your speed side by side, easy to tuck into a corner). */
+    const val CAR_SPEED_STYLE = "carspeedstyle"
     /** Electric car: still show the Fuel (petrol station) button on the map page. */
     const val EV_SHOW_FUEL = "evshowfuel"
     /** While navigating, the notification shows the next turn (arrow, distance, road) for launchers, watches and other screens. */
@@ -317,6 +327,8 @@ internal object PreferenceKeys {
     const val FULLSCREEN = "fullscreen"
     const val NSW_FUEL_SECRET = "nswsecret"
     const val VOICE_ROADS = "voiceroads"
+    /** Directions that name the traffic lights or stop sign at the turn ("At the traffic lights, turn right"), on the card and in the voice. */
+    const val LANDMARK_DIRS = "landmarkdirs"
     const val AVOID_TOLL_COUNTRIES = "avoid_toll_cc"
     const val ROAD_NAME_SIZE = "roadnamesize"
     const val CAR_ROAD_NAME_SIZE = "carroadnamesize"
@@ -429,16 +441,27 @@ fun Prefs.locatorSpec(): Pair<String, String> {
     return when (loc) {
         "custom" -> loc to (s(PreferenceKeys.LOCATOR_IMAGE, "0") + "|" + (if (b(PreferenceKeys.LOCATOR_IMAGE_TURNS, true)) "1" else "0") + "|" + (if (b(PreferenceKeys.LOCATOR_IMAGE_CIRCLE, false)) "1" else "0"))
         "model" -> {
-            val shape = s(PreferenceKeys.MODEL_SHAPE, "arrow")
-            loc to (shape + "|" + s(if (shape == "car") PreferenceKeys.CAR_COLOUR else PreferenceKeys.ARROW_COLOUR, if (shape == "car") "#F4F5F7" else "#F2F2F6") +
-                "|" + (if (b(PreferenceKeys.MODEL_GLOW, true)) "1" else "0"))
+            // (your own model, but none saved: the arrow)
+            val shape = s(PreferenceKeys.MODEL_SHAPE, "arrow").let { if (it == "own" && s(PreferenceKeys.OWN_MODEL, "").isBlank()) "arrow" else it }
+            val carLike = shape != "arrow"
+            loc to (shape + "|" + s(if (carLike) PreferenceKeys.CAR_COLOUR else PreferenceKeys.ARROW_COLOUR, if (carLike) "#F4F5F7" else "#F2F2F6") +
+                "|" + (if (b(PreferenceKeys.MODEL_GLOW, true)) "1" else "0") +
+                // your own model: its turn and which copy of the file
+                (if (shape == "own") "|" + s(PreferenceKeys.MODEL_TURN, "0") + "|" + s(PreferenceKeys.OWN_MODEL, "").substringBefore('|') else ""))
         }
         "car" -> loc to s(PreferenceKeys.CAR_COLOUR, "#F4F5F7")
         else -> loc to s(PreferenceKeys.ARROW_COLOUR, "#F2F2F6")
     }
 }
 
-/** Settings > Map > Map detail: "full", "lite" or "lightest" (the old "Carte légère" switch counts as lite). */
+/**
+ * The arrow's size on the Android Auto map: the app's arrow size, normalised for the smaller car surface (so the 240% main-app
+ * default doesn't make an enormous arrow there), times the car screen's own "Navigation arrow size".
+ */
+fun Prefs.carArrowScale(): Float =
+    ((s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(1f, 5f) * 0.9f * (i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(30, 180) / 100f)
+
+/** Settings > Map > Map detail: "full", "lite" or "lightest" (the old "Light map" switch counts as lite). */
 fun Prefs.mapDetail(): String = s(PreferenceKeys.MAP_DETAIL, if (b(PreferenceKeys.MAP_LITE, false)) "lite" else "full")
 
 

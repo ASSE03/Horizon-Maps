@@ -140,7 +140,11 @@ object RouteExtras {
             "node(around:12,$pl)[\"highway\"=\"stop\"]->.s;.s out body 300;way(bn.s)[\"highway\"]->.sw;.sw out body geom 600;" +
             "(node(around:12,$pl)[\"railway\"=\"level_crossing\"];node(around:12,$pl)[\"ford\"=\"yes\"];way(around:12,$pl)[\"ford\"=\"yes\"];)->.f;.f out center tags 200;" +
             "rel($bbox)[\"enforcement\"=\"average_speed\"]->.r;.r out body;node(r.r);out skel qt;"
-        val els = Overpass.query(q, 12000, 40000, 3)
+        // (the big search can fail on a busy server: then the average speed checks are asked for on their own, a much lighter
+        // request, so a check isn't missed just because the bumps and schools couldn't be fetched)
+        val els = try { Overpass.query(q, 12000, 40000, 3) } catch (e: Exception) {
+            Overpass.query("[out:json][timeout:20];rel($bbox)[\"enforcement\"=\"average_speed\"]->.r;.r out body;node(r.r);out skel qt;", 10000, 25000, 3)
+        }
         val pois = ArrayList<RoutePoi>()
         // (crossings come from their own set, so they never crowd out the bumps and schools)
         val nodes = HashMap<Long, LL>()
@@ -182,9 +186,11 @@ object RouteExtras {
                 when (m.optString("role")) { "from" -> from += p; "to" -> to += p; else -> dev += p }
             }
             val t = rel.optJSONObject("tags") ?: JSONObject()
-            val lim = t.optString("maxspeed").takeIf { it.isNotBlank() }?.let { Overpass.parseSpeed(it, "GB") }
             val starts = from.ifEmpty { dev }; val ends = to.ifEmpty { dev }
             if (starts.isEmpty() || ends.isEmpty()) continue
+            // read in the country the check is in: it was always read as British, where a limit with no unit is in mph, so a
+            // 60 km/h check elsewhere came out as 60 mph and showed as 95 km/h (GitHub #106)
+            val lim = t.optString("maxspeed").takeIf { it.isNotBlank() }?.let { Overpass.parseSpeed(it, Overpass.countryAt(starts.first())) }
             avgs += AvgDef(rel.optLong("id"), t.optString("name").ifBlank { "Radar tronçon" }, starts, ends, lim)
         }
         return pois to avgs

@@ -12,9 +12,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
@@ -74,7 +80,7 @@ internal fun recommendedMainUiScale(widthDp: Int, heightDp: Int): Int {
 
 /** The whole app: the map full screen with its overlays, and the settings screen on top when it is open. */
 @Composable
-fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) {
+fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { TextSides {
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var whatsNewVisible by remember { mutableStateOf(false) }
     var whatsNewNotes by remember { mutableStateOf("") }
@@ -321,9 +327,42 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) {
                 ) {
                     // fork FR : un message sur plusieurs lignes (la fiche d'une borne) : des coins arrondis plutôt qu'une pilule
                     val msgShape = if ((lastMsg.value ?: "").contains('\n')) RoundedCornerShape(22.dp) else RoundedCornerShape(50)
-                    Box(
-                        Modifier.shadow(10.dp, msgShape).clip(msgShape).background(navVw(c).surface).border(1.dp, navVw(c).line, msgShape).padding(horizontal = 22.dp, vertical = 11.dp),
-                    ) { Text(lastMsg.value ?: "", color = navVw(c).text, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium) }
+                    val act = engine.msgAction
+                    Row(
+                        Modifier.shadow(10.dp, msgShape).clip(msgShape).background(navVw(c).surface).border(1.dp, navVw(c).line, msgShape)
+                            .padding(start = 22.dp, end = if (act != null) 8.dp else 22.dp, top = if (act != null) 7.dp else 11.dp, bottom = if (act != null) 7.dp else 11.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(lastMsg.value ?: "", color = navVw(c).text, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                        // a button on the message (Undo straight after a report)
+                        if (act != null) Box(
+                            Modifier.padding(start = 14.dp).clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.16f))
+                                .clickable { act.second() }.padding(horizontal = 16.dp, vertical = 7.dp),
+                        ) { Text(act.first, color = c.accent, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                    }
+                }
+                // one of your reports tapped on the map: what it is and when you made it, with Remove / Keep
+                val rc = if (settings) null else engine.reportCard
+                // (above the trip card on a tall screen, where that card fills the bottom)
+                val tallScreen = LocalConfiguration.current.screenHeightDp > LocalConfiguration.current.screenWidthDp
+                if (rc != null) Column(
+                    Modifier.align(Alignment.BottomCenter).padding(bottom = if (tallScreen) 170.dp else 18.dp).width(300.dp)
+                        .shadow(10.dp, RoundedCornerShape(18.dp)).clip(RoundedCornerShape(18.dp)).background(navVw(c).surface).border(1.dp, navVw(c).line, RoundedCornerShape(18.dp))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Text(L.t(engine.reportName(rc.kind)), color = navVw(c).text, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    Text(engine.reportAge(rc), color = navVw(c).text.copy(alpha = 0.65f), fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
+                    Row {
+                        Box(
+                            Modifier.weight(1f).clip(RoundedCornerShape(50)).background(Color(0xFFE24B4A).copy(alpha = 0.18f)).clickable { engine.removeReport(rc) }.padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("Supprimer", color = if (c.dark) Color(0xFFFF8A8A) else Color(0xFFC62828), fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                        Box(Modifier.width(8.dp))
+                        Box(
+                            Modifier.weight(1f).clip(RoundedCornerShape(50)).background(navVw(c).line).clickable { engine.reportCard = null }.padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("Garder", color = navVw(c).text, fontSize = 15.sp) }
+                    }
                 }
                 // alerts (camera, speed limit, incident, rain, break) get a large banner that is hard to miss
                 if (!settings) {
@@ -416,4 +455,18 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) {
         }
     }
 
+} } }
+
+/**
+ * Keeps the app clear of the camera notch, and of the status and navigation bars when Full screen is off. Android 15 and newer
+ * draw every app behind them (for apps targeting Android 15 and up); before, Android kept the app clear by itself. This keeps
+ * it looking exactly as it did, with the gap filled black. (On older Android these gaps already come back as nothing.)
+ */
+@Composable
+internal fun SafeArea(prefs: Prefs, content: @Composable () -> Unit) {
+    val full = prefs.b(PreferenceKeys.FULLSCREEN, true)
+    val ins = if (full) WindowInsets.displayCutout else WindowInsets.displayCutout.union(WindowInsets.systemBars)
+    androidx.compose.foundation.layout.Box(
+        Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black).windowInsetsPadding(ins),
+    ) { content() }
 }
