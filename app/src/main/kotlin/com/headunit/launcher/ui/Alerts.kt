@@ -47,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
@@ -271,7 +272,7 @@ fun SpeedLimitSign(engine: NavEngine, size: Dp, modifier: Modifier = Modifier, o
     val board = engine.limitSignStyle
     // fork FR : signaler une limitation fausse : appui long sur le téléphone, deux touches sur l'écran de la voiture
     val modifier = if (engine.isCar) modifier.carTap("limit-sign") { engine.reportLimitTap() }
-        else modifier.pointerInput(onClick) { androidx.compose.foundation.gestures.detectTapGestures(onLongPress = { engine.reportLimit() }, onTap = { onClick?.invoke() }) }
+        else modifier.pointerInput(onClick) { detectTapGestures(onLongPress = { engine.reportLimit() }, onTap = { onClick?.invoke() }) }
     if (board != "round") { LimitBoard(n, board == "ca", over, engine.limitEstimated, size, sc, modifier, null); return }
     Box(
         modifier.graphicsLayer { scaleX = sc; scaleY = sc; alpha = if (engine.limitEstimated) 0.62f else 1f }.size(size).shadow(10.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
