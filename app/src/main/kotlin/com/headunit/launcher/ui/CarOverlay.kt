@@ -193,7 +193,10 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
         }
         val rightTop = insR + if (portrait) edge else controlsGap
         // Android Auto's zoom and re-centre buttons, bottom right; reserve less space on smaller displays.
-        val rightBottom = insR + if (portrait) 64.dp else controlsGap
+        // fork FR : boutons d'Android Auto cachés (après quelques secondes sans toucher l'écran) : le compteur va dans le coin
+        val ctlShown = com.headunit.launcher.car.CarLayout.controlsShown
+        val rightBottomTarget = if (portrait) insR + 64.dp else if (ctlShown) insR + controlsGap else (if (insR > 60.dp) 0.dp else insR) + edge
+        val rightBottom by androidx.compose.animation.core.animateDpAsState(rightBottomTarget, tween(300), label = "carRB")
         val bottom = insB + edge
         val previewing = engine.previewing
         val guiding = engine.route != null && !previewing
@@ -391,7 +394,7 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
                 // right up against the edge of the clear map: Android Auto reports the part of the screen its own buttons leave free,
                 // which shrinks while its zoom and re-centre buttons are showing, so the sign sits just beside them then and slides
                 // into the corner when they hide (it used to keep a fixed 92dp gap as well, so it sat well in from either)
-                val speedEnd by androidx.compose.animation.core.animateDpAsState(insR + 6.dp, tween(280), label = "speedEnd")
+                val speedEnd by androidx.compose.animation.core.animateDpAsState((if (!ctlShown && !portrait && insR > 60.dp) 0.dp else insR) + 6.dp, tween(280), label = "speedEnd")
                 // (Settings > Android Auto > Speed position on the car screen: bottom as always, or up the side, clear of the cards on
                 // the left; at the top it sits below Android Auto's own buttons in the top corner)
                 val carSpeedPos = engine.prefs.s(PreferenceKeys.SPEED_POS_CAR, "bottom")

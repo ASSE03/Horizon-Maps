@@ -80,6 +80,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Android Auto, boutons cachés : quand Android Auto cache ses boutons (zoom, recentrer…) après quelques secondes sans toucher l'écran, le compteur et le logo Mapbox se rangent dans le coin en bas à droite, et reviennent à côté des boutons dès que vous touchez l'écran.
 - 50 en agglomération : l'appli repère les panneaux d'entrée et de sortie d'agglomération relevés dans OpenStreetMap (avec le village qu'ils nomment devant ou derrière vous). Entre les deux, une limite à 80 ou 90 lue sur la carte, presque toujours une erreur (comme à Silon), est ramenée à 50, avec l'annonce. Réglages › Alertes › Vitesse › 50 en agglomération ; le diagnostic indique si vous êtes en agglomération.
 - Recherche plus rapide : les résultats s'affichent dès qu'une source répond (adresses de la BAN, TomTom, Mapbox, lieux enregistrés) puis se complètent, au lieu d'attendre la plus lente ; TomTom et Mapbox sont interrogés en même temps ; la recherche part 0,3 s après la dernière lettre tapée (au lieu de 0,5 s).
 - Résultats de recherche : le nom et l'adresse s'affichent sur deux lignes chacun, pour voir l'adresse complète avec la ville au lieu d'une adresse coupée.

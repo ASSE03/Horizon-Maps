@@ -86,7 +86,25 @@ class CarNavService : CarAppService() {
 
 /** The engine and map for one connection to the car. */
 /** The car screen's map area is short (an 800 x 480 unit, or a split-screen tile): Android Auto's buttons go icon-only (#67). */
-object CarLayout { @Volatile var short = false }
+object CarLayout {
+    @Volatile var short = false
+    /**
+     * Fork FR : les boutons d'Android Auto (zoom, recentrer, Signaler, Lieux…) sont-ils affichés ? Android Auto les cache après quelques
+     * secondes sans toucher l'écran, sans le dire à l'appli : on suit donc les appuis, et le compteur et le logo Mapbox se rangent
+     * dans le coin quand ils sont cachés.
+     */
+    var controlsShown by androidx.compose.runtime.mutableStateOf(true)
+    @Volatile var touchAt = System.currentTimeMillis()
+    private val h = android.os.Handler(android.os.Looper.getMainLooper())
+    private val hide = Runnable { controlsShown = false; onChange?.invoke() }
+    var onChange: (() -> Unit)? = null
+    fun touched() {
+        touchAt = System.currentTimeMillis()
+        h.removeCallbacks(hide)
+        if (!controlsShown) { controlsShown = true; onChange?.invoke() }
+        h.postDelayed(hide, 10_000L)
+    }
+}
 
 class CarHolder(val carContext: CarContext) {
     var engine: NavEngine? = null
@@ -398,6 +416,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
             // drawn straight to its own surface (no extra copy each frame, which a texture view would cost)
             val m = MapBinding(p.context, true, 1f, ratio)
             m.onCar = true; m.placeBranding(null)
+            CarLayout.onChange = { try { placeCarBranding() } catch (e: Exception) { } }; CarLayout.touched()
             // Android Auto: keep street-lamp models and their light pools off to reduce visual clutter
             // and rendering work on the car display. This is scoped to the car map; the phone app's
             // Street lamps preference remains unchanged.
@@ -453,7 +472,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
             m.viewInset = Rect(visibleArea.left.coerceAtLeast(0), visibleArea.top.coerceAtLeast(0),
                 (width - visibleArea.right).coerceAtLeast(0), (height - visibleArea.bottom).coerceAtLeast(0))
             // Mapbox's logo and credits stay inside the part of the screen you can see
-            m.placeBranding(m.viewInset)
+            placeCarBranding()
             // (the cards along the bottom of a tall screen are kept clear by the engine, which the overlay tells where they are)
             m.maxTopFrac = 1.0
         }
@@ -461,7 +480,16 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
 
     override fun onStableAreaChanged(stableArea: Rect) {}
 
+    /** Fork FR : le logo Mapbox dans le coin quand les boutons d'Android Auto sont cachés, à côté d'eux sinon. */
+    private fun placeCarBranding() {
+        val m = map ?: return
+        val r = m.viewInset ?: return
+        val d = carContext.resources.displayMetrics.density
+        m.placeBranding(if (!CarLayout.controlsShown && r.right > 60 * d) Rect(r.left, r.top, 0, r.bottom) else r)
+    }
+
     override fun onScroll(distanceX: Float, distanceY: Float) {
+        CarLayout.touched()
         val m = map ?: return
         m.onUserGesture?.invoke()
         try { m.panBy(distanceX, distanceY) } catch (e: Exception) { }
@@ -471,6 +499,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
 
     // a tap on the car screen (newer cars): the app's own cards and buttons react, as in the app
     override fun onClick(x: Float, y: Float) {
+        CarLayout.touched()
         try {
             // the app's cards and buttons first, then the map itself (alternative route cards and lines, skipping the fly-through)
             if (!com.headunit.launcher.ui.CarTaps.hit(x, y)) map?.tapAt(android.graphics.PointF(x, y))
@@ -478,6 +507,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
     }
 
     override fun onScale(focusX: Float, focusY: Float, scaleFactor: Float) {
+        CarLayout.touched()
         val m = map ?: return
         m.onUserGesture?.invoke()
         // a double tap comes as a negative factor: zoom in one step
