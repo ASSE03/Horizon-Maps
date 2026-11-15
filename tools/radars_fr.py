@@ -55,19 +55,21 @@ def lufop(refs):
     import os
     key = os.environ.get("LUFOP_KEY", "").strip()
     if not key: print("Lufop : pas de clé (secret LUFOP_KEY)"); return [], "pas de clé"
-    seen = {}; calls = [0]
+    seen = {}; calls = [0]; blocked = [False]
 
     def ask(lat, lon, km):
-        if calls[0] >= 185: return None
-        calls[0] += 1
+        # quota du jour atteint (ou clé refusée) : plus aucune requête, chaque appel en trop compte quand même chez Lufop
+        if blocked[0] or calls[0] >= 185: return None
         q = urllib.parse.urlencode({"key": key, "format": "json", "pays": "FR", "nbr": "200", "q": f"{lat:.4f},{lon:.4f}", "m": str(int(math.ceil(km * 10)))})
         for attempt in range(2):
+            if calls[0] >= 185: return None
+            calls[0] += 1   # chaque essai est une requête comptée sur le quota
             try:
                 time.sleep(6.5)
                 d = json.loads(get(f"{LUFOP}?{q}", timeout=60))
                 if d is None: return []
                 if isinstance(d, list): return d
-                print("Lufop : réponse", str(d)[:200]); return None
+                print("Lufop : réponse", str(d)[:200]); blocked[0] = True; return None
             except Exception as ex:
                 print(f"Lufop : {ex}"); time.sleep(10)
         return None
@@ -97,7 +99,7 @@ def lufop(refs):
     cells = sorted({(int((p[0] - 41.0) // 1.0), int((p[1] + 5.5) // 1.3)) for p in refs}, key=lambda c: cache.get(f"{c[0]},{c[1]}", {}).get("t", 0))
     fresh = 0
     for cy, cx in cells:
-        if calls[0] >= 180: break
+        if calls[0] >= 180 or blocked[0]: break
         cur.clear()
         cover(41.0 + cy + 0.5, -5.5 + cx * 1.3 + 0.65, 80.0, 0)
         if cur.get("fail") and not cur.get("r"): continue
