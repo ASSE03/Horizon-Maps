@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Signaler une limitation fausse en roulant : appui long sur le panneau de limitation du téléphone, ou deux touches sur celui de l'écran de la voiture. Un diagnostic part aussitôt avec la position, le cap, la limite affichée et sa source, et le journal des limitations le note.
 - Excès de vitesse au choix : dans Comment être prévenu, la ligne « Excès de vitesse » a aussi ses choix Écran (le compteur passe au rouge), Bip et Voix (« Attention, limitation à 90 », au dépassement puis toutes les 30 s tant qu'il dure).
 - Comment être prévenu, alerte par alerte : dans Réglages › Alertes, chaque type d'alerte (radars, changement de limitation, virages dangereux, stops, ralentisseurs, écoles, passages à niveau et gués, incidents, zones à faibles émissions, contresens, pluie, pause, trajets planifiés) a ses trois choix Écran, Bip et Voix, à activer ou couper séparément. Les anciens réglages de la limitation (bannière, « Comment ») sont repris.
 - Virages dangereux : les virages où il faut ralentir sont rayés de jaune avec des chevrons noirs sur l'itinéraire, et environ 9 secondes avant chacun un panneau jaune dit « Virage dangereux · à prendre à 40 km/h » avec un bip (seulement si vous roulez plus vite). Calculé d'après la forme de la route ; les virages aux carrefours ne comptent pas. Réglages › Alertes › Virages dangereux.
@@ -80,6 +81,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Petits tronçons mal renseignés : une limite plus haute n'est prise qu'après 200 m dessus ; un tronçon court plus rapide que ceux d'avant et d'après (un 90 entre un 50 et un 70, comme à Silon) n'est ni affiché ni annoncé. Les baisses sont prises tout de suite. Réglages › Alertes › Vitesse › Ignorer les hausses sur un petit tronçon.
 - Android Auto, boutons cachés : quand Android Auto cache ses boutons (zoom, recentrer…) après quelques secondes sans toucher l'écran, le compteur et le logo Mapbox se rangent dans le coin en bas à droite (et pendant le guidage, la bulle de température remonte dans le coin en haut à droite), et reviennent à côté des boutons dès que vous touchez l'écran.
 - 50 en agglomération : l'appli repère les panneaux d'entrée et de sortie d'agglomération relevés dans OpenStreetMap (avec le village qu'ils nomment devant ou derrière vous). Entre les deux, une limite à 80 ou 90 lue sur la carte, presque toujours une erreur (comme à Silon), est ramenée à 50, avec l'annonce. Réglages › Alertes › Vitesse › 50 en agglomération ; le diagnostic indique si vous êtes en agglomération.
 - Recherche plus rapide : les résultats s'affichent dès qu'une source répond (adresses de la BAN, TomTom, Mapbox, lieux enregistrés) puis se complètent, au lieu d'attendre la plus lente ; TomTom et Mapbox sont interrogés en même temps ; la recherche part 0,3 s après la dernière lettre tapée (au lieu de 0,5 s).

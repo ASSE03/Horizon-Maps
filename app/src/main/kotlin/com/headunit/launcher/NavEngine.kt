@@ -96,7 +96,24 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** m/s. Fork FR : plafonnée à 50 dans une agglomération (entre ses panneaux d'entrée et de sortie, d'après OpenStreetMap). */
     var speedLimit: Double?
         get() = speedLimitRaw?.let { townCap(it) }
-        set(v) { speedLimitRaw = v }
+        set(v) {
+            // fork FR : une limite plus haute n'est prise qu'après 200 m dessus : un petit tronçon mal renseigné, plus rapide que ceux
+            // d'avant et d'après (le 90 entre un 50 et un 70, comme à Silon), n'est alors jamais affiché ni annoncé. Une baisse est
+            // prise tout de suite.
+            val cur = speedLimitRaw
+            if (v != null && cur != null && v > cur + 0.5 && prefs.b("limithold", true)) {
+                val h = holdUp
+                if (h == null || abs(h - v) > 0.5) { holdUp = v; holdOdo = odoM }
+                if (odoM - holdOdo >= 200.0) { speedLimitRaw = v; holdUp = null }
+                return
+            }
+            holdUp = null; speedLimitRaw = v
+        }
+    private var holdUp: Double? = null
+    private var holdOdo = 0.0
+    /** Fork FR : distance parcourue depuis le démarrage (m), pour la règle des 200 m. */
+    private var odoM = 0.0
+    private var odoPrev: LL? = null
     /** Fork FR : vrai entre le panneau d'entrée d'une agglomération et son panneau de sortie. */
     var inTown by mutableStateOf(false)
         private set
@@ -1410,6 +1427,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     private fun checkLimitChange(newMs0: Double, estimated: Boolean) {
+        // (une hausse pas encore confirmée par 200 m de route n'est pas annoncée ; elle le sera une fois prise)
+        val raw = speedLimitRaw
+        if (raw != null && newMs0 > raw + 0.5) return
         val newMs = townCap(newMs0)
         if (!prefs.b(PreferenceKeys.LIMITCHANGE, true) || estimated) return
         val k = if (imperial) 2.23694 else 3.6
@@ -1519,6 +1539,36 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     // ---- feedback ----
     /** Everything useful for a bug report, with your own words first: the app and unit, the main settings, the areas and the last crash. */
+    /**
+     * Fork FR : signaler une limitation fausse sans s'arrêter (appui long sur le panneau du téléphone, ou deux touches sur celui de la
+     * voiture) : un diagnostic part avec la position, la limite affichée et sa source.
+     */
+    fun reportLimit() {
+        val p = fix?.pos
+        val k = if (imperial) 2.23694 else 3.6
+        val shown = speedLimit?.let { Math.round(it * k / 5.0) * 5 }
+        val note = "Limitation signalée comme fausse : affichée ${shown ?: "aucune"} " + (if (imperial) "mph" else "km/h") +
+            (if (limitEstimated) " (estimée)" else "") + " · source ${prefs.s("limitsrc", "mg4")}" +
+            (if (inTown) " · en agglomération ($townName)" else "") +
+            " · position ${p?.let { String.format(java.util.Locale.US, "%.5f,%.5f", it.lat, it.lon) } ?: "inconnue"}" +
+            " · cap ${Math.round(fix?.heading ?: 0.0)}° · vitesse ${Math.round((fix?.speed ?: 0.0) * 3.6)} km/h"
+        LimitLog.add(ctx, "signalement : ${shown ?: "-"} @ ${LimitLog.pos(p)}")
+        val report = feedbackReport(note)
+        if (!DiagUpload.hasToken(ctx)) { toast("Limitation notée dans le journal (pas d'envoi automatique configuré)", 3500); return }
+        toast("Signalement de la limitation envoyé…", 2500)
+        Thread {
+            val msg = try { DiagUpload.send(ctx, "limite-${DiagUpload.stamp()}.txt", report); "Limitation signalée, merci" } catch (e: Exception) { "Envoi impossible : ${e.message}" }
+            android.os.Handler(android.os.Looper.getMainLooper()).post { toast(msg, 3500) }
+        }.start()
+    }
+    private var limitTapAt = 0L
+    /** Sur l'écran de la voiture : une première touche demande confirmation, la seconde (dans les 4 s) signale. */
+    fun reportLimitTap() {
+        val now = System.currentTimeMillis()
+        if (now - limitTapAt < 4000L) { limitTapAt = 0L; reportLimit() }
+        else { limitTapAt = now; toast("Touchez encore le panneau pour signaler une limitation fausse", 3500) }
+    }
+
     fun feedbackReport(note: String): String {
         val dm = ctx.resources.displayMetrics
         val crash = try { java.io.File(ctx.filesDir, "lastcrash.txt").takeIf { it.exists() }?.readText()?.take(2500) } catch (e: Exception) { null }
@@ -2967,6 +3017,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             lastSpd = p.speed; lastSpdAt = now
         }
         // fork FR : à pied, ni limitation ni alerte de vitesse
+        odoPrev?.let { val d = Geo.dist(it, p.pos); if (d < 300.0) odoM += d }
+        odoPrev = p.pos
         if (!walking && prefs.b("towncap", true)) try { townCheck(p) } catch (e: Exception) { }
         if (walking) { if (speedLimit != null) speedLimit = null; overLimit = false }
         else if (mgLimits()) try { applyMgLimit(p) } catch (e: Exception) { }
