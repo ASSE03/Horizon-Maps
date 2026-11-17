@@ -159,12 +159,6 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
     // fork FR : pendant l'ajout d'une étape (liste des bornes, stations… sur le trajet), le panneau des options se retire : la liste
     // passait dessous et se lisait mal. Il revient en fermant la liste (×) ou en choisissant une étape
     if (engine.nearbyKind != null && engine.stopMode) return
-    // fork FR : pendant le survol, le panneau se replie pour laisser voir la carte ; il revient à la fin (ou en arrêtant)
-    if (engine.flyingOver) {
-        Row(Modifier.align(Alignment.BottomCenter).padding(12.dp).floating(50.dp).padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Survol de l'itinéraire…", color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Pill("Arrêter", false, { engine.stopFlyOver() })
     val conf = androidx.compose.ui.platform.LocalConfiguration.current
     // a phone held sideways: too short for the panel across the bottom (it covered nearly all the map, GitHub), so it becomes a
     // column down the left with the route fitted beside it. (Head units are wider than 1000, so they keep the usual layout.)

@@ -232,7 +232,6 @@ class CarNavSession : Session() {
 
     private fun applyTheme() {
         val d = carDark()
-        themeApplied = d
         holder.engine?.applyStyle(d)
         if (::surface.isInitialized) surface.dark.value = d
     }

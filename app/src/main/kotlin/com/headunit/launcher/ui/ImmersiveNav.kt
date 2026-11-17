@@ -253,7 +253,6 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         val screenH = maxHeight
         // fork FR : en paysage aussi, quand la carte de trajet est large (voiture électrique : six chiffres et la barre du trajet),
         // la flèche est remontée au-dessus d'elle au lieu de passer dessous
-        var tripWPx by remember { mutableStateOf(0) }
         val wideTrip = !narrow && tripPx > 0 && with(dens) { tripWPx.toDp() } > maxWidth * 0.45f
         LaunchedEffect(narrow, tripPx, screenH, wideTrip) { engine.bottomCover = if ((narrow || wideTrip) && tripPx > 0) (tripH / screenH).coerceIn(0f, 0.5f).toDouble() else 0.0 }
         // left-hand drive: everything swaps sides (cards on the right, round buttons on the left). Settings > Screen and sizes >
