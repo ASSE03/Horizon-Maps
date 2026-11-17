@@ -975,7 +975,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         if (tapSelect != tapSelectOn) { tapSelectOn = tapSelect; if (!tapSelect) clearSelection() }
         main0.post {
             setBase("show3dFacades", Value.valueOf(facadesOn && buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
-            setBase("show3dLandmarks", Value.valueOf(landmarksOn && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
+            setBase("show3dLandmarks", Value.valueOf(landmarksOn && buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
             setBase("showPedestrianRoads", Value.valueOf(pathsOn))
             if (rebuild && style != null) reinstall()
         }
@@ -1205,59 +1205,102 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private var beamScale = -1.0
 
     private fun pushBeam() {
-        val st = style ?: return
-        if (!st.styleLayerExists("dl-beam-l")) return
-        val p = me
-        val night = lightPreset == "night" || lightPreset == "dusk"
-        if (p == null || !beamOn || !night || satellite) {
-            if (beamShown) { st.setStyleLayerProperty("dl-beam-l", "visibility", Value.valueOf("none")); beamShown = false }
-            return
-        }
-        // a little longer the faster you go (up to about 70 mph), in steps so the size isn't reset on every fix
-        val sc = Math.round((0.8 + (beamSpeed.coerceIn(0.0, 31.0) / 31.0) * 0.5) * 10.0) / 10.0
-        if (sc != beamScale) {
-            beamScale = sc
-            Value.fromJson("[\"interpolate\",[\"linear\"],[\"zoom\"],13,${0.35 * sc},16,${0.75 * sc},18,${1.3 * sc},20,${2.2 * sc}]").value
-                ?.let { st.setStyleLayerProperty("dl-beam-l", "bearing-image-size", it) }
-        }
-        // the cone starts at the arrow's nose, not its middle: the arrow is a picture over the map, so a cone starting at the
-        // car's spot was hidden under it, which read as light under the arrow (GitHub). Moved ahead by the arrow's front half.
-        val a = beamAhead(p)
-        val q = if (a > 0.0) Furniture.offset(p, meHeading, a) else p
-        // only when it has really moved or turned (the arrow is moved up to 15 times a second)
-        val moved = Math.abs(q.lat - beamLat) > 1.5e-6 || Math.abs(q.lon - beamLon) > 1.5e-6
-        var dh = Math.abs(meHeading - beamHead) % 360.0; if (dh > 180.0) dh = 360.0 - dh
-        if (moved || dh > 0.4 || !beamShown) {
-            beamLat = q.lat; beamLon = q.lon; beamHead = meHeading
-            Value.fromJson("[${q.lat},${q.lon},0]").value?.let { st.setStyleLayerProperty("dl-beam-l", "location", it) }
-            st.setStyleLayerProperty("dl-beam-l", "bearing", Value.valueOf(meHeading))
-        }
-        if (!beamShown) { st.setStyleLayerProperty("dl-beam-l", "visibility", Value.valueOf("visible")); beamShown = true }
+        // the old map-layer beam is kept hidden: the map engine placed its picture a cone-length behind the car, so the light
+        // seemed to come from nowhere and shine back over the arrow or car (GitHub). The beam is now drawn by beamView instead.
+        val st = style
+        if (beamShown && st != null && st.styleLayerExists("dl-beam-l")) { st.setStyleLayerProperty("dl-beam-l", "visibility", Value.valueOf("none")); beamShown = false }
+        placeBeam()
     }
 
     /**
-     * How far ahead of the car's spot (in metres) the arrow's nose is on the map at the current zoom and tilt: the arrow's
-     * front reach on screen, turned into metres along the way you're heading. 0 if it can't be worked out.
+     * The headlight beam, drawn just above the map and under the arrow / car, from the same spot on screen the arrow or car is
+     * drawn at. Its corners are real places on the road ahead turned into screen points, so it lies flat on the road with the
+     * map's tilt and turn, and moves with every camera move (placeLocator calls this).
      */
-    private fun beamAhead(p: LL): Double {
-        return try {
-            val tilt = try { mbMap.cameraState.pitch } catch (e: Throwable) { tiltNow }
-            val cosT = Math.cos(Math.toRadians(tilt)).coerceAtLeast(0.2)
-            val bmp = spriteBmp
-            // the arrow's front reach in screen pixels (3D arrow / car pictures stand up on screen; the flat arrow lies on the map)
-            val reachPx: Double = when {
-                modelOn -> modelPxPerUnit() * (if (carLike) 2.3 else 0.85) * cosT
-                locatorStyle != "flat" && bmp != null -> drawnRadius(bmp) * spriteSize() * 0.8
-                else -> (flatArrow?.let { drawnRadius(it) * (if (theme == "immersive") 0.25f else 0.625f) * arrowScale } ?: 0f) * cosT
+    val beamView: BeamView by lazy { BeamView(ctx) }
+
+    class BeamView(c: android.content.Context) : android.view.View(c) {
+        /** Screen points: nose, outer left, outer tip, outer right, inner left, inner tip, inner right, nose left, nose right, far middle. */
+        val pts = FloatArray(20)
+        var on = false
+        private val path = android.graphics.Path()
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        private var gx0 = 0f; private var gy0 = 0f; private var gx1 = 0f; private var gy1 = 0f
+        init { isClickable = false; isFocusable = false; setWillNotDraw(false) }
+        fun clear() { if (on) { on = false; invalidate() } }
+        fun show() { on = true; invalidate() }
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            if (!on) return
+            val p = pts
+            // the warm light fades from the nose to the far end (only rebuilt when the beam has moved on screen). One cone, about half
+            // as bright as before: the second, wider cone for soft edges read as two beams on top of each other (liamstears)
+            if (p[0] != gx0 || p[1] != gy0 || p[18] != gx1 || p[19] != gy1) {
+                gx0 = p[0]; gy0 = p[1]; gx1 = p[18]; gy1 = p[19]
+                paint.shader = android.graphics.LinearGradient(gx0, gy0, gx1, gy1,
+                    intArrayOf(0x8CFFF4D6.toInt(), 0x40FFF4D6, 0x00FFF4D6), floatArrayOf(0f, 0.55f, 1f), android.graphics.Shader.TileMode.CLAMP)
             }
-            if (reachPx <= 0.0) return 0.0
-            // screen pixels per metre straight ahead (shrinks with the tilt, as the screen sees the road at a slant)
-            val a = mbMap.pixelForCoordinate(Point.fromLngLat(p.lon, p.lat))
-            val f = Furniture.offset(p, meHeading, 20.0)
-            val b = mbMap.pixelForCoordinate(Point.fromLngLat(f.lon, f.lat))
-            val pxPerM = Math.hypot(b.x - a.x, b.y - a.y) / 20.0
-            if (pxPerM < 1e-3) 0.0 else (reachPx / pxPerM).coerceIn(0.0, 60.0)
-        } catch (e: Throwable) { 0.0 }
+            path.reset()
+            path.moveTo(p[14], p[15]); path.lineTo(p[8], p[9]); path.quadTo(p[10], p[11], p[12], p[13]); path.lineTo(p[16], p[17]); path.close()
+            canvas.drawPath(path, paint)
+        }
+    }
+
+    private fun placeBeam() {
+        val bv = beamView
+        val p = me
+        val night = lightPreset == "night" || lightPreset == "dusk"
+        if (p == null || !beamOn || !night || satellite || bv.parent == null) { bv.clear(); return }
+        try {
+            val g = beamGeom(p) ?: run { bv.clear(); return }
+            val (ahead, len) = g
+            val h = meHeading
+            // The car pictures and the 3D arrow are drawn on top of the beam: there the beam starts under the car, near its middle, so
+            // the car itself hides where it begins and the light seems to come out of the headlights whatever the car's shape (it
+            // used to start at the windscreen, liamstears). The flat arrow and the real 3D model are part of the map, under the beam,
+            // so there it still starts at the nose.
+            val carOnTop = locatorStyle != "flat" && !modelOn && locatorView.visibility == android.view.View.VISIBLE
+            val start = if (carOnTop) ahead * 0.15 else ahead
+            val nose = if (start > 0.0) Furniture.offset(p, h, start) else p
+            // a little longer the faster you go (up to about 70 mph); measured from the nose, so starting further back doesn't shorten it
+            val sc = 0.8 + (beamSpeed.coerceIn(0.0, 31.0) / 31.0) * 0.5
+            val l = len * sc + (ahead - start)
+            val far = Furniture.offset(nose, h, l * 0.88)
+            val tipO = Furniture.offset(nose, h, l * 1.05); val tipI = Furniture.offset(nose, h, l)
+            val wO = l * 0.42; val wI = l * 0.34
+            val places = arrayOf(nose, Furniture.offset(far, h - 90.0, wO), tipO, Furniture.offset(far, h + 90.0, wO),
+                Furniture.offset(far, h - 90.0, wI), tipI, Furniture.offset(far, h + 90.0, wI),
+                Furniture.offset(nose, h - 90.0, l * 0.025), Furniture.offset(nose, h + 90.0, l * 0.025), Furniture.offset(nose, h, l))
+            val out = bv.pts
+            for ((i, q) in places.withIndex()) {
+                val px = mbMap.pixelForCoordinate(Point.fromLngLat(q.lon, q.lat))
+                out[i * 2] = px.x.toFloat(); out[i * 2 + 1] = px.y.toFloat()
+            }
+            bv.show()
+        } catch (e: Throwable) { bv.clear() }
+    }
+
+    /**
+     * Where the beam starts (metres ahead of the car's spot: the arrow's or car's nose) and how long it is (metres, about three and
+     * a half times the arrow's or car's length on screen, so it looks the same at any zoom). Null if it can't be worked out.
+     */
+    private fun beamGeom(p: LL): Pair<Double, Double>? {
+        val tilt = try { mbMap.cameraState.pitch } catch (e: Throwable) { tiltNow }
+        val cosT = Math.cos(Math.toRadians(tilt)).coerceAtLeast(0.2)
+        val bmp = spriteBmp
+        val reachPx: Double = when {
+            modelOn -> modelPxPerUnit() * (if (carLike) 2.3 else 0.85) * cosT
+            locatorStyle != "flat" && bmp != null -> (drawnRadius(bmp) * spriteSize() * 0.8).toDouble()
+            else -> ((flatArrow?.let { drawnRadius(it) * (if (theme == "immersive") 0.25f else 0.625f) * arrowScale } ?: 0f) * cosT)
+        }
+        val a = mbMap.pixelForCoordinate(Point.fromLngLat(p.lon, p.lat))
+        val f = Furniture.offset(p, meHeading, 20.0)
+        val b = mbMap.pixelForCoordinate(Point.fromLngLat(f.lon, f.lat))
+        val pxPerM = Math.hypot(b.x - a.x, b.y - a.y) / 20.0
+        if (pxPerM < 1e-3) return null
+        val ahead = if (reachPx > 0.0) (reachPx / pxPerM).coerceIn(0.0, 60.0) else 0.0
+        // the cone's length on screen: 3.5 times the arrow's or car's length, at least 120 px (the drawn arrow can be tiny)
+        val lenPx = maxOf(120.0 * mapView.resources.displayMetrics.density / 2.0, reachPx * 2.0 * 3.5)
+        return ahead to (lenPx / pxPerM).coerceIn(8.0, 400.0)
     }
 
     /** How far from the centre a picture's drawing really reaches (its empty margin left out), in its own pixels. */
@@ -2230,7 +2273,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             setBase("showHdRoads", Value.valueOf(hdRoadsOn && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
             // detailed building fronts, landmark buildings, footpaths (Settings > Map)
             setBase("show3dFacades", Value.valueOf(facadesOn && buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
-            setBase("show3dLandmarks", Value.valueOf(landmarksOn && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
+            setBase("show3dLandmarks", Value.valueOf(landmarksOn && buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
             setBase("showPedestrianRoads", Value.valueOf(pathsOn))
             // your destination's building is lit up in the app's blue as you get close
             setBase("colorBuildingHighlight", Value.valueOf("#7FB3FF"))
@@ -2303,6 +2346,13 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         addL(st, SymbolLayer("dl-beacon", "dl-beacons").inSlot(TOP).iconImage("dl-beacon").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconAnchor(IconAnchor.BOTTOM).iconPitchAlignment(IconPitchAlignment.VIEWPORT)
             .iconSize(zoomed(1.6, 16 to 0.32, 20 to 0.9)).iconEmissiveStrength(1.0).minZoom(16.0))
+        // a GPX track you're looking at or driving (GitHub #153): pink, under the routes, with its start (green) and end (red)
+        addS(st, GeoJsonSource.Builder("dl-track").featureCollection(trackFeatures()).build())
+        addL(st, ln("dl-track-line", "dl-track").filter(Expression.eq(Expression.geometryType(), Expression.literal("LineString")))
+            .lineColor("#D4537E").lineWidth(zoomed(1.5, 8 to 3.0, 14 to 6.0, 18 to 12.0)).lineOpacity(if (trackFaint) 0.45 else 0.9))
+        addL(st, CircleLayer("dl-track-ends", "dl-track").inSlot(MID).filter(Expression.eq(Expression.geometryType(), Expression.literal("Point")))
+            .circleRadius(7.0).circleStrokeWidth(2.0).circleStrokeColor("#FFFFFF").circleEmissiveStrength(1.0)
+            .circleColor(Expression.fromRaw("[\"case\",[\"==\",[\"get\",\"end\"],1],\"#E24B4A\",\"#1D9E75\"]")))
         addL(st, ln("dl-alts-line", "dl-alts").lineColor(prefs.s(PreferenceKeys.ALT_ROUTE_COLOUR, "#C4D9E6")).lineWidth(if (im) 8.0 else 7.0).lineOpacity(0.92))
         // other ways to go while driving: grey, under the route
         addL(st, ln("dl-live-alts-line", "dl-live-alts").lineColor(prefs.s(PreferenceKeys.ALT_ROUTE_COLOUR, "#C4D9E6")).lineWidth(routeW(0.75f)).lineOpacity(0.92))
@@ -2536,6 +2586,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         pushOrtho(st)
     }
 
+    /** Just the 3D buildings setting, keeping the map as it is otherwise (the car screen, which has no satellite choice). */
+    fun setBuildings3d(b3d: Boolean) = setView(satellite, b3d)
+
     fun setView(sat: Boolean, b3d: Boolean) {
         val satChanged = sat != satellite
         satellite = sat
@@ -2544,7 +2597,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // fork FR : photos de l'IGN (même carte de base) : posées ou retirées sans recharger la carte
         if (satChanged && satIgn) style?.let { pushOrtho(it) }
         if (satChanged && wantedStyle != null) { val r = onRestyle; if (r != null) r() else setStyleUrl(baseStyle()) }
-        else if (!sat && slotsOn) setBase("show3dObjects", Value.valueOf(buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
+        else if (!sat && slotsOn) {
+            setBase("show3dObjects", Value.valueOf(buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
+            // (landmarks and building fronts are buildings too: with 3D buildings off they went on showing, GitHub)
+            setBase("show3dLandmarks", Value.valueOf(landmarksOn && buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
+            setBase("show3dFacades", Value.valueOf(facadesOn && buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
+        }
         else if (!sat) style?.let { st ->
             // the Horizon colours' own 3D buildings
             try {
@@ -2734,6 +2792,30 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
      *  line looked thin there against the buildings. Set straight after creating the map, before its style is built. */
     var routeBoost = 1f
     private val ROUTE_K: Float get() = routeBoost * customRouteK
+
+    // ---- the GPX track (GitHub #153) ----
+    private var trackPts: List<LL> = emptyList()
+    /** Fainter while you drive it, so your route line on top reads first. */
+    private var trackFaint = false
+
+    private fun trackFeatures(): FeatureCollection {
+        val p = trackPts
+        if (p.size < 2) return empty()
+        val a = Feature.fromGeometry(Point.fromLngLat(p.first().lon, p.first().lat)).apply { addNumberProperty("end", 0) }
+        val b = Feature.fromGeometry(Point.fromLngLat(p.last().lon, p.last().lat)).apply { addNumberProperty("end", 1) }
+        return FeatureCollection.fromFeatures(listOf(line(p), a, b))
+    }
+
+    /** Shows a GPX track on the map (empty to take it away); [faint] while it's being driven. */
+    fun setTrack(pts: List<LL>, faint: Boolean = false) {
+        main0.post {
+            try {
+                trackPts = pts; trackFaint = faint
+                src("dl-track")?.featureCollection(trackFeatures())
+                style?.let { st -> if (st.styleLayerExists("dl-track-line")) st.setStyleLayerProperty("dl-track-line", "line-opacity", Value.valueOf(if (faint) 0.45 else 0.9)) }
+            } catch (e: Throwable) { }
+        }
+    }
 
     private fun line(p: List<LL>): Feature =
         Feature.fromGeometry(LineString.fromLngLats(p.map { Point.fromLngLat(it.lon, it.lat) }))
@@ -3424,6 +3506,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** Stops a fly-through without running its ending. */
     fun stopFly() { flyToken++; flyDone = null }
 
+    /** Ends a route fly-over now, as a tap on the map does (its finish runs: back to the overview). */
+    fun endFly() { flyDone?.let { d -> flyDone = null; flyToken++; try { mapView.camera.cancelAllAnimators() } catch (e: Throwable) { }; d() } }
+
+    /** The part of the map's width the route panel covers down the left (a phone held sideways), so the route fits beside it. */
+    @Volatile var previewSide = 0.0
+
     // ---- flowing light along the route ----
     private var flowOn = false
     private var flowWanted = true
@@ -4066,6 +4154,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
 
     /** Puts the locator view on the car's spot on screen (called after every camera move and every move of the car). */
     fun placeLocator() {
+        try { placeBeam() } catch (e: Throwable) { }
         val v = locatorView
         val p = me
         val bmp = spriteBmp
@@ -4570,20 +4659,26 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /**
      * Moves a GPS position onto the nearest drawn road that runs the way you are heading, or returns null when none is close enough.
      * It never waits on the map: it uses the roads the map last reported (the engine tries the speed-limit roads first anyway).
+     * A one-way road (each side of a divided road is drawn as one) only counts going its own way, so on a dual carriageway the arrow
+     * stays on your side even when the GPS drifts towards the middle (GitHub #150). As with the speed-limit roads, your side is
+     * looked for up to 45 m off when the nearer line is the other side's; with only the other side close, the GPS position is kept.
      */
     /** Fork FR : la direction de la route au dernier recalage réussi (dans le sens de la marche), -1 sinon. */
     @Volatile var lastSnapBearing = -1.0
 
     fun snapToRoad(p: LL, heading: Double, maxAngle: Double = 35.0, maxDist: Double = 24.0): LL? {
-        val segs = roadSegs
-        if (segs.isEmpty() || android.os.SystemClock.uptimeMillis() - roadSegsAt > 20_000L) return null
+        val list = roadInfo
+        if (list.isEmpty() || android.os.SystemClock.uptimeMillis() - roadSegsAt > 20_000L) return null
         return try {
             val k = Math.cos(Math.toRadians(p.lat)) * 111320.0
             val k2 = 110574.0
             var best: LL? = null
-            var bd = maxDist
+            var bd = maxOf(45.0, maxDist)
             var bestB = -1.0
-            for (pts in segs) {
+            var againstNear = false
+            for (rp in list) {
+                val pts = rp.pts
+                val oneway = rp.oneway == true
                 for (i in 0 until pts.size - 1) {
                     val ax = (pts[i].longitude() - p.lon) * k; val ay = (pts[i].latitude() - p.lat) * k2
                     val bx = (pts[i + 1].longitude() - p.lon) * k; val by = (pts[i + 1].latitude() - p.lat) * k2
@@ -4594,15 +4689,22 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                     val t = (-(ax * dx + ay * dy) / l2).coerceIn(0.0, 1.0)
                     val d = Math.hypot(ax + dx * t, ay + dy * t)
                     if (d >= bd) continue
-                    // only roads that run the way you are heading (either direction), so a parallel street or a crossing road is not chosen
+                    // only roads that run the way you are heading (a two-way road either way along its line), so a parallel street
+                    // or a crossing road is not chosen
                     val segB = (Math.toDegrees(Math.atan2(dx, dy)) + 360.0) % 360.0
                     var diff = Math.abs(segB - heading) % 360.0
                     if (diff > 180.0) diff = 360.0 - diff
                     if (diff > maxAngle && diff < 180.0 - maxAngle) continue
+                    // a one-way line drawn against you is the other carriageway (or a one-way street you shouldn't be on)
+                    if (oneway && diff >= 180.0 - maxAngle) { if (d < maxDist) againstNear = true; continue }
                     bd = d
                     best = LL(p.lat + (ay + dy * t) / k2, p.lon + (ax + dx * t) / k)
                     bestB = if (diff > 90.0) (segB + 180.0) % 360.0 else segB
                 }
+            }
+            if (bd > maxDist) {
+                if (best == null) { lastSnapBearing = -1.0; return if (againstNear) p else null }
+                if (!againstNear) { lastSnapBearing = -1.0; return null }
             }
             lastSnapBearing = if (best != null) bestB else -1.0
             best
@@ -4881,7 +4983,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** Smoothly zooms out (flat, north-up) so every point sits in the area above the route-preview panel. */
     /** [panel]: the bottom of the screen is covered by the route preview panel (false: only the turn card and trip card are in the way). */
     fun fit(points: List<LL>, panel: Boolean = true) =
-        fitFrac(points, 0.07, if (panel) 0.10 else 0.16, 0.07, if (panel) 0.60 else 0.20)
+        if (panel && previewSide > 0.0) fitFrac(points, previewSide + 0.05, 0.12, 0.10, 0.12)
+        else fitFrac(points, 0.07, if (panel) 0.10 else 0.16, 0.07, if (panel) 0.60 else 0.20)
 
     /** Fits [points] into the map with these parts of it (fractions of its width and height) kept clear on each side. */
     fun fitFrac(points: List<LL>, plF: Double, ptF: Double, prF: Double, pbF: Double) {

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -91,6 +92,20 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
             whatsNewVisible = true
             val previousVersion = prefs.s(PreferenceKeys.WHATS_NEW_SEEN_VERSION, "")
             whatsNewNotes = try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.headunit.launcher.Updater.installedReleaseNotes(installedVersion, previousVersion, appCtx) } } catch (_: Exception) { "" }
+            if (whatsNewNotes.isNotBlank()) prefs.put(PreferenceKeys.WHATS_NEW_LAST_NOTES, whatsNewNotes)
+        }
+    }
+    // Settings › Horizon Nav › Version › What's new: the card again, with the notes it showed last (every version since the one before,
+    // after a jump of several), or this version's own notes when it hasn't shown any yet (GitHub #149)
+    LaunchedEffect(WhatsNewCard.reopen) {
+        if (!WhatsNewCard.reopen) return@LaunchedEffect
+        WhatsNewCard.reopen = false
+        val saved = prefs.s(PreferenceKeys.WHATS_NEW_LAST_NOTES, "")
+        whatsNewNotes = saved
+        whatsNewVisible = true
+        if (saved.isBlank()) {
+            val prev = installedVersion.substringAfterLast('.').toIntOrNull()?.let { "1.0.${it - 1}" } ?: ""
+            whatsNewNotes = try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.headunit.launcher.Updater.installedReleaseNotes(installedVersion, prev, appCtx) } } catch (_: Exception) { "" }
         }
     }
     LaunchedEffect(Unit) { while (true) { delay(60_000); nowMs = System.currentTimeMillis() } }
@@ -98,7 +113,8 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
     // waits until you've stopped), and not over the What's new card. (The car screen never shows it.)
     var donateVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        if (prefs.b(PreferenceKeys.DONATE_SHOWN, false)) return@LaunchedEffect
+        // (never in the Google Play edition: Play doesn't allow donations through PayPal)
+        if (prefs.b(PreferenceKeys.DONATE_SHOWN, false) || com.headunit.launcher.BuildConfig.STORE == "play") return@LaunchedEffect
         val installed = try { appCtx.packageManager.getPackageInfo(appCtx.packageName, 0).firstInstallTime } catch (e: Exception) { 0L }
         if (installed <= 0L || System.currentTimeMillis() - installed < 24L * 3600_000L) return@LaunchedEffect
         delay(20_000)   // let the map settle first
@@ -108,9 +124,17 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
         }
     }
     // the head unit has switched to its night mode at least once (so it links night mode to the headlights): noted for "Headlights"
-    val sysDark = rememberSystemNight(useLamps = prefs.s(PreferenceKeys.THEME, "auto") == "lights")
+    val sysDarkRaw = rememberSystemNight(useLamps = prefs.s(PreferenceKeys.THEME, "auto") == "lights")
+    // On a phone, Auto follows the phone's own light / dark setting exactly (Sun times is there for sunrise and sunset). Head units
+    // still follow their own night mode once it's been seen switching, with sunrise and sunset until then.
+    val phoneLike = remember {
+        try { appCtx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEPHONY) && appCtx.resources.configuration.smallestScreenWidthDp < 600 } catch (e: Exception) { false }
+    }
+    val sysDark = sysDarkRaw
     LaunchedEffect(sysDark) { if (sysDark && !prefs.b(PreferenceKeys.SYSDARKSEEN, false)) prefs.put(PreferenceKeys.SYSDARKSEEN, true) }
-    val dark = resolveDark(prefs.s(PreferenceKeys.THEME, "auto"), prefs.s(PreferenceKeys.LASTLAT, "").toDoubleOrNull(), prefs.s(PreferenceKeys.LASTLON, "").toDoubleOrNull(), nowMs, prefs.b(PreferenceKeys.SYSDARKSEEN, false), sysDark,
+    val dark = if (phoneLike && prefs.s(PreferenceKeys.THEME, "auto") == "auto") sysDark
+    else resolveDark(prefs.s(PreferenceKeys.THEME, "auto"), prefs.s(PreferenceKeys.LASTLAT, "").toDoubleOrNull(), prefs.s(PreferenceKeys.LASTLON, "").toDoubleOrNull(), nowMs,
+        prefs.b(PreferenceKeys.SYSDARKSEEN, false), sysDark,
         prefs.s(PreferenceKeys.NIGHT_FROM, "19:00"), prefs.s(PreferenceKeys.DAY_FROM, "07:00"))
     val hostCtx = androidx.compose.ui.platform.LocalContext.current
 
@@ -285,11 +309,13 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
                         SettingsScreen(prefs, engine, onClose = { settings = false })
                     }
                 } else {
-                    MapHost(map, Modifier.fillMaxSize())
+                    // (in full screen the map reaches right up round the camera, while the cards and buttons stay clear of it, GitHub)
+                    val bleed = prefs.b(PreferenceKeys.FULLSCREEN, true)
+                    MapHost(map, Modifier.fillMaxSize().bleedCutout(bleed))
                     // at night in 3D, stars and the real moon phase in the sky above the horizon
                     if (c.dark && engine.tilt3d && !sat && prefs.b(PreferenceKeys.NIGHTSKY, true)) NightSky(Modifier.fillMaxWidth().fillMaxHeight(0.2f))
                     // in a tunnel (no GPS) the map is dimmed a little, as the car's own screen would be
-                    if (engine.deadReckoning && !c.dark && prefs.b(PreferenceKeys.TUNNELDIM, true)) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
+                    if (engine.deadReckoning && !c.dark && prefs.b(PreferenceKeys.TUNNELDIM, true)) Box(Modifier.fillMaxSize().bleedCutout(bleed).background(Color.Black.copy(alpha = 0.35f)))
                     val wxCode = engine.weather?.code
                     // rain, snow or fog over the map to match the real weather where you are
                     // (the map draws rain and snow itself now; the screen overlay is kept for fog, and for when the map can't)
@@ -298,14 +324,19 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
                     if (prefs.b(PreferenceKeys.PERFORMANCE_METER, false) && engine.perfLine.isNotEmpty()) Text(engine.perfLine, color = Color.White, fontSize = 12.sp,
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
                     if (engine.deadReckoning) DeadReckoningChip(Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp))
-                    else if (engine.cruising && engine.following && prefs.b(PreferenceKeys.CRUISE, true)) CruisePill(engine, Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp))
+                    // (with the heading switched off and no road name known, there's nothing to show)
+                    val cruiseShows = engine.cruising && engine.following && prefs.b(PreferenceKeys.CRUISE, true) &&
+                        (prefs.b(PreferenceKeys.CRUISE_HEADING, true) || engine.roadNow.isNotBlank())
+                    // (above the media bar when that's showing at the bottom)
+                    val mediaUp = prefs.b(PreferenceKeys.MEDIA_BAR, true) && com.headunit.launcher.MediaNow.showing()
+                    if (!engine.deadReckoning && cruiseShows) CruisePill(engine, Modifier.align(Alignment.BottomCenter).padding(bottom = if (mediaUp) 84.dp else 18.dp))
                     // that pill has the road name, so the one under your arrow steps aside while it's up (they overlapped)
-                    val cruisePillUp = !engine.deadReckoning && engine.cruising && engine.following && prefs.b(PreferenceKeys.CRUISE, true)
+                    val cruisePillUp = !engine.deadReckoning && cruiseShows
                     LaunchedEffect(cruisePillUp) { map.setRoadNameHidden(cruisePillUp) }
                     // coming back from the settings, the map fades up from the background instead of flashing in
                     val back = remember { androidx.compose.animation.core.Animatable(1f) }
                     LaunchedEffect(Unit) { back.animateTo(0f, androidx.compose.animation.core.tween(320)) }
-                    if (back.value > 0.01f) Box(Modifier.fillMaxSize().graphicsLayer { alpha = back.value }.background(c.bg))
+                    if (back.value > 0.01f) Box(Modifier.fillMaxSize().bleedCutout(prefs.b(PreferenceKeys.FULLSCREEN, true)).graphicsLayer { alpha = back.value }.background(c.bg))
                 }
                 // once, after updating from the old map: what the Mapbox key adds, and where to paste it
                 // ...and any time the map can't show for want of a working key (missing, half pasted, or turned down by Mapbox): the blank
@@ -464,9 +495,33 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
  */
 @Composable
 internal fun SafeArea(prefs: Prefs, content: @Composable () -> Unit) {
+    // (the cards, buttons and screens stay clear of the camera; the map itself reaches round it in full screen: see bleedCutout)
     val full = prefs.b(PreferenceKeys.FULLSCREEN, true)
     val ins = if (full) WindowInsets.displayCutout else WindowInsets.displayCutout.union(WindowInsets.systemBars)
     androidx.compose.foundation.layout.Box(
         Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black).windowInsetsPadding(ins),
     ) { content() }
+}
+
+
+/**
+ * Lets the map run under the camera notch in full screen: the screen's contents are kept clear of the notch, and this stretches the
+ * map back out over that strip, so the camera sits on the map rather than in a black band (Samsung S24 Ultra, GitHub).
+ */
+@Composable
+internal fun Modifier.bleedCutout(on: Boolean): Modifier {
+    if (!on) return this
+    val ins = WindowInsets.displayCutout
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    val dir = androidx.compose.ui.platform.LocalLayoutDirection.current
+    val l = ins.getLeft(d, dir); val t = ins.getTop(d); val rr = ins.getRight(d, dir); val b = ins.getBottom(d)
+    if (l == 0 && t == 0 && rr == 0 && b == 0) return this
+    return this.layout { m, c ->
+        if (!c.hasBoundedWidth || !c.hasBoundedHeight) {
+            val p = m.measure(c); layout(p.width, p.height) { p.place(0, 0) }
+        } else {
+            val p = m.measure(androidx.compose.ui.unit.Constraints.fixed(c.maxWidth + l + rr, c.maxHeight + t + b))
+            layout(c.maxWidth, c.maxHeight) { p.place(-l, -t) }
+        }
+    }
 }

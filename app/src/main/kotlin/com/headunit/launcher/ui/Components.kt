@@ -220,12 +220,34 @@ fun MapHost(map: MapBinding, modifier: Modifier = Modifier, cornerDp: Int = 0) {
                 }
                 (map.mapView.parent as? ViewGroup)?.removeView(map.mapView)
                 addView(map.mapView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                // the 3D locator sits just above the map (it's moved to the car's spot on screen as the camera moves)
+                // the headlight beam, then the 3D locator, sit just above the map (moved to the car's spot on screen as the camera moves)
+                (map.beamView.parent as? ViewGroup)?.removeView(map.beamView)
+                addView(map.beamView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                 (map.roadView.parent as? ViewGroup)?.removeView(map.roadView)
                 addView(map.roadView, FrameLayout.LayoutParams(1, 1))
                 (map.locatorView.parent as? ViewGroup)?.removeView(map.locatorView)
                 addView(map.locatorView, FrameLayout.LayoutParams(1, 1))
                 post { map.placeLocator() }
+                // The map is moved between this screen and the small preview in Settings. Now and then the map engine missed the
+                // new size while it was being moved and kept drawing at the old one: only the top of the screen showed the map,
+                // the rest stayed black until the app was restarted (GitHub). So once the move has settled, and whenever this
+                // frame changes size, the map is given its size again: one pixel shorter for a moment, then back.
+                val frame = this
+                val nudge = Runnable {
+                    val mv = map.mapView
+                    if (mv.parent !== frame || frame.width < 2 || frame.height < 2) return@Runnable
+                    mv.layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, frame.height - 1)
+                    frame.post {
+                        if (mv.parent === frame) mv.layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    }
+                }
+                addOnLayoutChangeListener { _, l, t, r, b, ol, ot, oR, ob ->
+                    if (r - l != oR - ol || b - t != ob - ot) { removeCallbacks(nudge); postDelayed(nudge, 350L) }
+                }
+                addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: android.view.View) { removeCallbacks(nudge); postDelayed(nudge, 350L) }
+                    override fun onViewDetachedFromWindow(v: android.view.View) { removeCallbacks(nudge) }
+                })
             }
         },
         update = { it.invalidateOutline() },

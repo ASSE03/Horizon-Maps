@@ -43,6 +43,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     var dest by mutableStateOf<Place?>(null)
     var turn by mutableStateOf<TurnInfo?>(null)
     var eta by mutableStateOf<EtaInfo?>(null)
+    /** When you get to each stop on the way (the ones still ahead), worked out with the time left. */
+    var stopEtas by mutableStateOf<List<StopEta>>(emptyList())
+    /** A place picked while a route is being driven: asked about first (Add as a stop / Go here instead). */
+    var choose by mutableStateOf<Place?>(null)
     var following by mutableStateOf(true)
     // (remembered: it used to start in 3D every time, even if you'd left it in 2D)
     var tilt3d by mutableStateOf(prefs.b(PreferenceKeys.VIEW_3D, true))
@@ -231,11 +235,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         map.flyRoute(r.pts, r.cum, r.len, 62.0, full = true) { flyingOver = false; if (previewing) map.fit(allPts) }
     }
 
-    /** Fork FR : arrête le survol et revient à la vue d'ensemble des itinéraires. */
-    fun stopFlyOver() {
-        if (!flyingOver) return
-        map.stopFly(); flyingOver = false
-        if (previewing) map.fit(routes.take(3).flatMap { x -> x.pts.filterIndexed { i, _ -> i % 8 == 0 } + x.pts.last() })
+    /** Stops the fly-over and goes back to the route overview. */
+    fun stopFlyOver() { if (flyingOver) map.endFly() }
+
+    /** Fits the route choices on screen again (after the route panel changes shape). */
+    fun refitPreview() {
+        if (!previewing || flyingOver) return
+        val allPts = routes.take(3).flatMap { x -> x.pts.filterIndexed { i, _ -> i % 8 == 0 } + x.pts.last() }
+        if (allPts.size >= 2) map.fit(allPts)
     }
 
     /** The way back to where this trip started (home when it started near home). */
@@ -339,6 +346,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var hzBusy = false
     private var hzRetryAt = 0L
     private var hzLastAt = 0L
+    // average speed checks: looked up on their own (see RouteExtras.avgZones), with a shorter wait before trying again
+    private var avgWinEnd = -1.0
+    private var avgWinRoute: Route? = null
+    private var avgBusy = false
+    private var avgRetryAt = 0L
+    private var avgLastAt = 0L
+    private var avgCacheFor: Route? = null
     private var placed: Placed? = null
     private var placing = false
     private var placedSig = 0
@@ -765,9 +779,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             if (status == TextToSpeech.SUCCESS) {
                 ttsReady = true
-                // French build: always speak French (many head units are left in English), the system language next, English last
-                var r = tts?.setLanguage(Locale.FRANCE)
-                if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) r = tts?.setLanguage(Locale.getDefault())
+                val r = setVoiceLanguage()
                 if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
                     val r2 = tts?.setLanguage(Locale.UK)
                     if (r2 == TextToSpeech.LANG_MISSING_DATA || r2 == TextToSpeech.LANG_NOT_SUPPORTED)
@@ -893,7 +905,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     fun toast(msg: String, ms: Long = 4000) {
-        message = msg
+        message = L.branded(msg)
         msgAction = null
         val token = ++msgToken
         scope.launch { delay(ms); if (token == msgToken) { message = null; msgAction = null } }
@@ -1136,6 +1148,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (!isCar && theme == "day") return "day"
         if (!isCar && theme == "night") return "night"
         if (theme == "times") return if (dark) "night" else "day"
+        // (on a phone, Auto is the phone's own light / dark setting, so the map simply matches it)
+        if (!isCar && theme == "auto" && onPhone()) return if (dark) "night" else "day"
         // Headlights (and the car screen following the car): only the lights decide, so a tunnel at midday goes properly dark and
         // coming out goes straight back to day. The sun's dawn and dusk light is left out, as it would tint the map whatever the
         // lights say. (Until the head unit has been seen switching with the lights, sun times stand in, so dark already follows them.)
@@ -1526,9 +1540,30 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         startRoute(d, departMin, true, startNow = route != null && !previewing)
     }
 
-    fun addStop(p: Place) {
+    /** A route is being driven (not just looked at): a place picked now can be a stop on the way, or where to go instead. */
+    fun driving(): Boolean = route != null && !previewing && dest != null
+
+    /** A place picked from a search or a list: while driving it's asked about first, otherwise the route to it starts. */
+    fun goOrAsk(p: Place, ask: Boolean = true) {
+        // (a GPX track from the search is driven, not offered as a stop: its start would be a strange place to stop)
+        if (ask && driving() && !p.web.startsWith("gpx:")) choose = p else startRoute(p)
+    }
+    fun chooseStop() { val p = choose ?: return; choose = null; addStop(p) }
+    fun chooseGo() { val p = choose ?: return; choose = null; startRoute(p) }
+
+    /** "Add a stop at …" by voice, with only a name or address to go on: the best match is added (or gone to, with no route). */
+    fun addStopByQuery(q: String) {
+        scope.launch {
+            val p = try { findPlaces(q).firstOrNull() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+            if (p == null) toast("Impossible de trouver $q", 4000)
+            else if (driving()) addStop(p, next = true) else startRoute(p)
+        }
+    }
+
+    /** [next]: the stop comes before the ones already there (asked for by voice: "add a stop at …" is where to go next). */
+    fun addStop(p: Place, next: Boolean = false) {
         val d = dest ?: return
-        via = via + p
+        via = if (next) listOf(p) + via else via + p
         stopMode = false
         clearNearby()
         toast("Étape ajoutée : ${p.name}", 2500)
@@ -1982,6 +2017,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val job = coroutineContext[kotlinx.coroutines.Job]
         val alive = { job?.isActive != false }
         try {
+            // your GPX tracks whose name matches (GitHub #162), as places at their start, marked so a tap shows the track
+            val qt = q.trim()
+            val gpx = if (qt.length < 2) emptyList() else GpxStore.tracksNow(ctx).filter { it.start != null && it.name.contains(qt, ignoreCase = true) }.take(5).map { t ->
+                Place(t.name, "Trace GPX" + " · " + Geo.fmtDist(t.len, imperial), t.start!!, "gpx:" + t.id)
+            }
             val own = places.searchLocal(q, near)
             val addr = OfflineRouter.searchAddresses(ctx, q, near, alive).filter { t -> own.none { Geo.dist(it.pos, t.pos) < 30 } }
             val pack = (if (q.trim().length >= 3) {
@@ -1995,7 +2035,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 }
             } else emptyList()).filter { t -> own.none { Geo.dist(it.pos, t.pos) < 150 } }
             val towns = OfflinePlaces.search(ctx, q, near).filter { t -> own.none { Geo.dist(it.pos, t.pos) < 400 } && pack.none { Geo.dist(it.pos, t.pos) < 1500 && it.name.equals(t.name, true) } }
-            own + addr + pack + towns
+            gpx + own + addr + pack + towns
         } catch (e: Throwable) { emptyList() }
     }
 
@@ -2006,7 +2046,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val full = q.trim().lowercase()
         val all = ArrayList<Pair<Place, Int>>()
         net.forEachIndexed { i, p -> all += p to i }
-        extra.forEachIndexed { i, p -> if (all.none { it.first.name.equals(p.name, true) && Geo.dist(it.first.pos, p.pos) < 300 || Geo.dist(it.first.pos, p.pos) < 40 }) all += p to (1000 + i) }
+        // (a GPX track is always kept, even where a search result sits near its start)
+        extra.forEachIndexed { i, p -> if (p.web.startsWith("gpx:") || all.none { it.first.name.equals(p.name, true) && Geo.dist(it.first.pos, p.pos) < 300 || Geo.dist(it.first.pos, p.pos) < 40 }) all += p to (1000 + i) }
         fun strong(p: Place) = p.name.lowercase().let { it == full || it.startsWith(full) }
         fun d(p: Place) = if (near != null) Geo.dist(near, p.pos) else 0.0
         val top = all.filter { strong(it.first) }.sortedBy { d(it.first) }
@@ -2364,6 +2405,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     fun pickPlace(p: Place) {
+        // a GPX track found by the search (GitHub #162): shown on the map with its card
+        if (p.web.startsWith("gpx:")) { results = emptyList(); showTrack(p.web.removePrefix("gpx:")); return }
         val slot = pendingSave
         if (slot != null) {
             places.setSlot(slot, p)
@@ -2435,7 +2478,70 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             else prefs.s(PreferenceKeys.AVOID_TOLL_COUNTRIES, "").split(',').map { it.trim().uppercase() }.filter { it.length == 2 }.toSet()
     }
 
-    fun startRoute(to0: Place, departInMin: Int = 0, keepVia: Boolean = false, startNow: Boolean = false, preferVia: String = "") {
+    // ---- GPX tracks (GitHub #153) ----
+    /** The track shown on the map (Settings › Places & trips › GPX tracks › Show), with its card. */
+    var shownTrack by mutableStateOf<GpxTrack?>(null)
+    /** The track being driven. */
+    var drivingTrack by mutableStateOf<GpxTrack?>(null)
+    /** Points along the track the route goes through (silently), and how many of them you've been past. */
+    private var trackVia: List<LL> = emptyList()
+    private var trackPassed = 0
+
+    /** Your stops, then the track's points still ahead: what every route request goes through. */
+    fun routeVia(): List<LL> = via.map { it.pos } + trackVia.drop(trackPassed.coerceAtMost(trackVia.size))
+
+    fun showTrack(id: String) {
+        scope.launch {
+            val t = withContext(Dispatchers.IO) { GpxStore.read(ctx, id) }
+            if (t == null || t.pts.size < 2) { toast("Impossible de lire cette trace", 3500); return@launch }
+            shownTrack = t
+            map.setTrack(t.pts)
+            following = false
+            map.fit(t.pts, panel = false)
+        }
+    }
+
+    fun closeTrack() {
+        shownTrack = null
+        map.setTrack(drivingTrack?.pts ?: emptyList(), faint = drivingTrack != null)
+        if (route == null) recenter()
+    }
+
+    /**
+     * Drives a GPX track: a route to its end that goes through points along it, with the usual spoken turns. Started on the
+     * track (within 300 m of it) it carries on from there; away from it, it goes to the track's start first.
+     */
+    fun driveTrack(id: String) {
+        scope.launch {
+            val t = withContext(Dispatchers.IO) { GpxStore.read(ctx, id) } ?: shownTrack?.takeIf { it.id == id }
+            if (t == null || t.pts.size < 2) { toast("Impossible de lire cette trace", 3500); return@launch }
+            val here = fix?.pos ?: map.center()
+            var pts = GpxStore.viaPoints(t.pts)
+            if (here != null) {
+                var bi = 0; var bd = Double.MAX_VALUE
+                for ((i, q) in t.pts.withIndex()) { val d = Geo.dist(q, here); if (d < bd) { bd = d; bi = i } }
+                pts = if (bd < 300.0) pts.filter { v -> t.pts.indexOf(v) > bi + 3 }
+                else if (Geo.dist(t.pts.first(), here) > 300.0) listOf(t.pts.first()) + pts else pts
+            }
+            via = emptyList()
+            trackVia = pts; trackPassed = 0
+            drivingTrack = t; shownTrack = null
+            map.setTrack(t.pts, faint = true)
+            startRoute(Place(t.name, "Fin de la trace", t.pts.last()), fromTrack = true)
+        }
+    }
+
+    private fun stopTrackDrive() {
+        if (drivingTrack == null && trackVia.isEmpty()) return
+        drivingTrack = null; trackVia = emptyList(); trackPassed = 0
+        map.setTrack(shownTrack?.pts ?: emptyList())
+    }
+
+    fun startRoute(to0: Place, departInMin: Int = 0, keepVia: Boolean = false, startNow: Boolean = false, preferVia: String = "", fromTrack: Boolean = false) {
+        // a GPX track picked from the search (on the car screen, say): drive it rather than to its start
+        if (to0.web.startsWith("gpx:")) { driveTrack(to0.web.removePrefix("gpx:")); return }
+        // (a new destination ends driving a GPX track; re-planning the same trip keeps it)
+        if (!fromTrack && !keepVia) stopTrackDrive()
         var to = to0
         walking = walkNext; walkNext = false; MapboxRest.walkProfile = walking
         // fork FR : choix du départ de la démo : le lieu cherché (ou posé d'un appui long) devient le départ, la destination reste
@@ -2458,10 +2564,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 var usedOffline = false
                 val rs = withContext(Dispatchers.IO) {
                     val haveOffline = OfflineRouter.installed(ctx)
-                    if (haveOffline && !walking && (!hasOnline || !online())) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, via.map { it.pos }) }
-                    else try { netRoutes(from, to.pos, true, departMs, via.map { it.pos }, askBoth = true, simple = true) }
+                    if (haveOffline && !walking && (!hasOnline || !online())) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, routeVia()) }
+                    else try { netRoutes(from, to.pos, true, departMs, routeVia(), askBoth = true, simple = true) }
                     catch (e: Exception) {
-                        if (haveOffline && !walking && NavigationFallbackPolicy.shouldUseOffline(e)) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, via.map { it.pos }) } else throw e
+                        if (haveOffline && !walking && NavigationFallbackPolicy.shouldUseOffline(e)) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, routeVia()) } else throw e
                     }
                 }
                 if (rs.isEmpty()) throw IllegalStateException("aucun itinéraire trouvé")
@@ -2691,6 +2797,57 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         reroute()
     }
 
+    /**
+     * A new route from [from] for rerouting. Online, with both a TomTom key and a Mapbox token, both are asked at once and the first
+     * answer is used: a missed turn used to wait 6 to 8 seconds for one service (GitHub #147). Returns the routes, and whether they
+     * came from the downloaded map.
+     */
+    private suspend fun fetchReroute(from: LL, to: LL, viaPts: List<LL>, hd: Double): Pair<List<Route>, Boolean> = withContext(Dispatchers.IO) {
+        val haveOffline = OfflineRouter.installed(ctx)
+        if (haveOffline && (!hasOnline || !online())) return@withContext OfflineRouter.routes(ctx, from, to, viaPts, hd) to true
+        val now = System.currentTimeMillis()
+        val race = hasKey && hasMapbox && refusedKey != apiKey && prefs.s(PreferenceKeys.DATAPROV, "auto") == "auto" && !Vehicle.lorry &&
+            !prefs.b(PreferenceKeys.ROUTE_ECO, false) && now >= ttDownUntil && now >= mbDownUntil
+        if (race) {
+            val ch = kotlinx.coroutines.channels.Channel<Pair<String, List<Route>>>(2)
+            val jobs = listOf("tomtom", "mapbox").map { p ->
+                launch {
+                    val rs = try { routesFrom(p, from, to, false, 0L, viaPts, hd, true) } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; emptyList() }
+                    ch.trySend(p to rs)
+                }
+            }
+            var got: Pair<String, List<Route>>? = null
+            repeat(2) { if (got == null) { val a = ch.receive(); if (a.second.isNotEmpty()) got = a } }
+            jobs.forEach { it.cancel() }
+            val g = got
+            if (g != null) { lastRouteProvider = g.first; return@withContext g.second to false }
+        }
+        try { netRoutes(from, to, false, 0L, viaPts, hd, true) to false }
+        catch (e: Exception) {
+            if (haveOffline && NavigationFallbackPolicy.shouldUseOffline(e)) OfflineRouter.routes(ctx, from, to, viaPts, hd) to true else throw e
+        }
+    }
+
+    // A reroute asked for as soon as you start to leave the route, before it's certain you have: when it is, the new route is
+    // usually already here, so it shows at once. Forgotten if you stay on the route.
+    private var preReroute: kotlinx.coroutines.Deferred<Pair<List<Route>, Boolean>>? = null
+    private var preRerouteAt = 0L
+    private var preRerouteFrom: LL? = null
+    private fun startPreReroute() {
+        val d = dest ?: return
+        val f = fix ?: return
+        val now = System.currentTimeMillis()
+        // (one asked for in the last few seconds from about here is still good; an older one, or one from further back, would
+        // give a route that starts behind you, so a new one is asked for)
+        val pf = preRerouteFrom
+        if (rerouting || simMode != 0 || (preReroute != null && now - preRerouteAt < 6_000L && pf != null && Geo.dist(pf, f.pos) < 60.0)) return
+        preReroute?.cancel()
+        preRerouteAt = now; preRerouteFrom = f.pos
+        val hd = if (f.speed > 2.0) f.heading else -1.0
+        val viaPts = routeVia()
+        preReroute = scope.async { try { fetchReroute(f.pos, d.pos, viaPts, hd) } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; emptyList<Route>() to false } }
+    }
+
     private fun reroute() {
         val d = dest ?: return
         if (rerouting || fix == null) return
@@ -2701,6 +2858,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // the new route's alternatives are looked for half a minute after it's found, not the usual couple of minutes
         lastFasterCheck = System.currentTimeMillis() - 90_000L
         toast("Recalcul…", 2500)
+        // the one asked for a moment ago, as you started to leave the route, if it's recent and from near here
+        val pre = preReroute?.takeIf { System.currentTimeMillis() - preRerouteAt < 10_000L && preRerouteFrom?.let { p -> fix?.let { Geo.dist(p, it.pos) < 120.0 } } == true }
+        if (pre == null) preReroute?.cancel()
+        preReroute = null
         scope.launch {
             var err: String? = null
             try {
@@ -2708,15 +2869,23 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     val f = fix ?: break
                     try {
                         val hd = if (f.speed > 2.0) f.heading else -1.0
-                        var offlineNow = false
-                        val rs = withContext(Dispatchers.IO) {
-                            val haveOffline = OfflineRouter.installed(ctx)
-                            if (haveOffline && !walking && (!hasOnline || !online())) { offlineNow = true; OfflineRouter.routes(ctx, f.pos, d.pos, via.map { it.pos }, hd) }
-                            else try { netRoutes(f.pos, d.pos, false, 0L, via.map { it.pos }, hd, true) }
-                            catch (e: Exception) {
-                                if (haveOffline && !walking && NavigationFallbackPolicy.shouldUseOffline(e)) { offlineNow = true; OfflineRouter.routes(ctx, f.pos, d.pos, via.map { it.pos }, hd) } else throw e
+                        // the early one (if still coming) and a fresh one from here race: whichever brings a route first is used, so a
+                        // slow early request no longer holds the new route up for seconds (GitHub, karthikeyansr-lgtm)
+                        val (rs, offlineNow) = if (attempt == 1 && pre != null) {
+                            val done = if (pre.isCompleted && !pre.isCancelled) (try { pre.await() } catch (e: Throwable) { null }) else null
+                            if (done != null && done.first.isNotEmpty()) done
+                            else kotlinx.coroutines.coroutineScope {
+                                val fresh = async { try { fetchReroute(f.pos, d.pos, routeVia(), hd) } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; emptyList<Route>() to false } }
+                                val ch = kotlinx.coroutines.channels.Channel<Pair<List<Route>, Boolean>>(2)
+                                // (each always sends, even if its request was cancelled or failed, so the wait below always ends)
+                                val a = launch { ch.send(try { pre.await() } catch (e: Throwable) { emptyList<Route>() to false }) }
+                                val b = launch { ch.send(try { fresh.await() } catch (e: Throwable) { emptyList<Route>() to false }) }
+                                var res: Pair<List<Route>, Boolean> = emptyList<Route>() to false
+                                for (i in 0 until 2) { val x = ch.receive(); if (x.first.isNotEmpty()) { res = x; break } }
+                                a.cancel(); b.cancel(); fresh.cancel()
+                                res
                             }
-                        }
+                        } else fetchReroute(f.pos, d.pos, routeVia(), hd)
                         if (rs.isNotEmpty()) shortRoute = offlineNow && OfflineRouter.endsShort
                         if (rs.isNotEmpty()) { routes = rs; active = 0; said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0; clearLiveAlts(); drawRoutes(); cardsForStartAlts(); err = null; break }
                         err = "aucun itinéraire trouvé"
@@ -2744,6 +2913,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun endRoute() {
         if (walking) { walking = false; MapboxRest.walkProfile = false }
+        stopTrackDrive()
         shortRoute = false
         // fork FR : le départ de démo ne sert qu'à ce trajet (le suivant repart de votre position)
         demoFrom = null; pickDemoStart = false
@@ -2756,7 +2926,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         faster = null; resume = null; prefs.put(PreferenceKeys.RESUME, "{}")
         incMatches = emptyList(); incidentAhead = null; incAt = 0L; incAlerted.clear()
         routeCams = emptyList(); camsRoute = null; camsAt = 0L; camsCount = -1; hazardSig = 0; policeSig = 0; map.setHazards(emptyList())
-        via = emptyList(); stopMode = false; destRain = null; routeWx = emptyList()
+        via = emptyList(); stopMode = false; destRain = null; routeWx = emptyList(); stopEtas = emptyList(); choose = null
         routes = emptyList(); active = 0; dest = null; turn = null; eta = null; lastIdx = 0; previewing = false; routeFrac = 0f; onRoad = ""
         try { refreshRoad() } catch (e: Exception) { }
         departMin = 0; departAtMs = 0L
@@ -2765,7 +2935,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         clearLiveAlts(); liveSaid.clear(); radar = emptyList(); radarSig = 0; bendsFor = null; bends = emptyList()
         flushRoads()
         sessionAvoid.clear(); closuresAvoided.clear(); altListOpen = false; nextLimit = null; routeZones = emptyList(); avgInfo = null; avgIn = null; servicesAhead = emptyList(); barEvents = emptyList()
-        rawServices = emptyList(); servicesFor = null; rawHz = emptyList(); rawAvg = emptyList(); hzWinRoute = null; hzWinEnd = -1.0
+        rawServices = emptyList(); servicesFor = null; rawHz = emptyList(); rawAvg = emptyList(); hzWinRoute = null; hzWinEnd = -1.0; avgWinRoute = null; avgWinEnd = -1.0; avgCacheFor = null
         placed = null; placedSig = 0; avgAlerted.clear(); hzAlerted.clear(); zoneAlerted.clear(); stopsEditor = false
         map.setVias(emptyList()); chargeVias = emptyList()
         jamSig = 0; map.showJams(emptyList())
@@ -3611,10 +3781,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val p = t.pos
         if (p != null) {
             val pl = Place(t.name, "Partagé depuis une autre appli", p)
+            // "add a stop at …" while driving: the next stop, keeping where you're going
+            if (t.addStop && driving()) { addStop(pl, next = true); return }
             startRoute(pl)
             try { RouteSync.offerToCar(this, pl) } catch (e: Exception) { }
         }
-        else if (!t.query.isNullOrBlank()) externalQuery = t.query
+        else if (!t.query.isNullOrBlank()) { if (t.addStop && driving()) addStopByQuery(t.query) else externalQuery = t.query }
     }
 
     // ---- guidance ----
@@ -4087,16 +4259,21 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         if (previewing) return
         if (r == null || r.pts.size < 2 || s == null) return
+        // driving a GPX track: the track's points you've been past are dropped, so a reroute carries on along the track from here
+        // rather than send you back to one behind you
+        if (newFix && trackPassed < trackVia.size) {
+            for (i in trackPassed until min(trackVia.size, trackPassed + 3)) if (Geo.dist(trackVia[i], p.pos) < 150.0) trackPassed = i + 1
+        }
         if (gpsReliableForReroute && (s.dist > offLim || jump)) {
             if (newFix) {
                 // well off the route counts double, so a wrong turn is noticed in about two seconds instead of four or more
                 offCount += NavigationPolicy.offRouteStrikeCount(jump, s.dist, offLim)
-                if (offCount >= 3) reroute()
+                if (offCount >= 3) reroute() else startPreReroute()
             }
         } else if (headingOff && newFix) {
             // past the turn and going another way: two strikes a fix, so two fixes in a row reroute
             offCount += 2
-            if (offCount >= 3) reroute()
+            if (offCount >= 3) reroute() else startPreReroute()
         } else if (gpsReliableForReroute && newFix) {
             // Still close to the route, but a vehicle moving away from its direction can indicate a wrong turn.
             val seg = Geo.bearing(r.pts[s.segmentIndex], r.pts[min(s.segmentIndex + 1, r.pts.size - 1)])
@@ -4153,6 +4330,15 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun autoZoom(sp: Double, navigating: Boolean): Double {
         if (sp > 1.5) hasDetectedMovement = true
         val now = android.os.SystemClock.uptimeMillis()
+        // Auto zoom off (Settings › Map style, GitHub #154): one steady zoom, the one auto zoom uses at about 30 mph, which + and −
+        // and your default zoom still move. (Eased to, so switching it off doesn't jump.)
+        if (!prefs.b(PreferenceKeys.AUTO_ZOOM, true)) {
+            val fixed = (if (navigating) navZoom(13.4) - 0.45 else speedZoom(13.4) - 0.15 - 0.4).coerceIn(if (navigating) 13.5 else 14.6, 18.7)
+            val dt0 = if (smoothZAt == 0L) 1.0 else ((now - smoothZAt) / 1000.0).coerceIn(0.05, 2.0)
+            smoothZAt = now
+            smoothZ = NavigationPolicy.smoothZoom(smoothZ, fixed, maxStep = 0.6 * dt0)
+            return smoothZ
+        }
         speedLog.addLast(now to sp)
         while (speedLog.isNotEmpty() && now - speedLog.first().first > 8000L) speedLog.removeFirst()
         var z = if (navigating) navZoom(sp) else speedZoom(sp)
@@ -5179,6 +5365,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (previewing || simMode != 0 || faster != null || !prefs.b(PreferenceKeys.FASTER_ROUTE, true) || shadow() || altBusy) return
             if (remainingSecs < (if (live) 300 else 900) || now - lastFasterCheck < (if (live) 120_000L else 240_000L)) return
         }
+        // (driving a GPX track: a "faster" way would leave the track, so none is offered)
+        if (trackVia.isNotEmpty()) return
         lastFasterCheck = now
         altBusy = true
         val ahead = cur.pts.drop(lastIdx.coerceIn(0, max(0, cur.pts.size - 2))).filterIndexed { i, _ -> i % 3 == 0 }
@@ -5289,7 +5477,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (now - lastTrafficAt < (if (f.speed < 4.0) 120_000L else 180_000L)) return
         lastTrafficAt = now
         trafficBusy = true
-        val viaPts = via.map { it.pos }
+        val viaPts = routeVia()
         val at = curProgress
         scope.launch {
             try {
@@ -5450,13 +5638,54 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    // where each stop is along the route (m from its start), and how far from the route it is: worked out when the route or
+    // the stops change
+    private var stopOffs = DoubleArray(0)
+    private var stopNear = DoubleArray(0)
+    private var stopOffsRoute: Route? = null
+    private var stopOffsVia: List<Place>? = null
+
+    private fun stopOffsFor(r: Route, progress: Double): DoubleArray {
+        if (stopOffsRoute === r && stopOffsVia === via) return stopOffs
+        val n = minOf(r.pts.size, r.cum.size)
+        val offs = DoubleArray(via.size); val nearD = DoubleArray(via.size)
+        // (in order along the route from where you are, so a road that passes a later stop on the way to an earlier one
+        // doesn't put them the wrong way round)
+        var from = 0
+        while (from < n - 1 && r.cum[from] < progress - 50.0) from++
+        for ((k, v) in via.withIndex()) {
+            var best = from; var bd = Double.MAX_VALUE
+            for (i in from until n) { val d = Geo.dist(r.pts[i], v.pos); if (d < bd) { bd = d; best = i } }
+            offs[k] = if (n > 0) r.cum[best] else 0.0; nearD[k] = bd; from = best
+        }
+        stopOffsRoute = r; stopOffsVia = via; stopOffs = offs; stopNear = nearD
+        return offs
+    }
+
+    /** The time the route takes from [p] metres along it to its end: the road with no traffic, plus the delays still ahead. */
+    private fun remainFrom(r: Route, p: Double): Double {
+        val frac = if (r.len > 0) max(0.0, r.len - p) / r.len else 0.0
+        val ahead = if (r.delays.isEmpty()) r.delay * frac else r.delays.sumOf { d ->
+            val span = max(1.0, d.end - d.off)
+            d.secs * ((d.end - max(p, d.off)) / span).coerceIn(0.0, 1.0)
+        }
+        return r.freeFlow * frac + ahead
+    }
+
     private fun updateGuidance(progress: Double, light: Boolean = false) {
         val r = route ?: return
         val rem = max(0.0, r.len - progress)
         val frac = if (r.len > 0) rem / r.len else 0.0
         if (!light) {
             try { checkIncidents(r, progress) } catch (e: Exception) { }
-            fix?.let { f -> if (via.isNotEmpty() && Geo.dist(f.pos, via[0].pos) < 80) { toast("Étape atteinte : ${via[0].name}", 3000); via = via.drop(1) } }
+            // a stop is reached within 80 m of it, or once you're past the point on the route nearest to it: a stop set back from
+            // the road (a pin in the middle of a car park) was never within 80 m, stayed on the list, and the next time the route
+            // was worked out again it went back there
+            if (via.isNotEmpty()) {
+                val near = fix?.let { f -> Geo.dist(f.pos, via[0].pos) < 80 } == true
+                val passed = !busy && stopOffsFor(r, progress).let { o -> o.isNotEmpty() && stopNear.getOrElse(0) { 1e9 } < 400.0 && progress > o[0] + 25.0 }
+                if (near || passed) { toast("Étape atteinte : ${via[0].name}", 3000); via = via.drop(1) }
+            }
             if (via.isEmpty()) checkParking(r, rem)
             curProgress = progress
             // time left = what the rest of the road takes with no traffic + the delays that are still ahead of you
@@ -5483,6 +5712,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             val arrive = Clock.hm(System.currentTimeMillis() + (secs * 1000).toLong())
             eta = EtaInfo(arrive, rem, secs, delayMin)
+            // each stop's share of the time left (the same sums, up to where the stop is on the route). While a changed route is
+            // being worked out the last ones stay
+            if (via.isEmpty()) { if (stopEtas.isNotEmpty()) stopEtas = emptyList() }
+            else if (!busy) {
+                val offs = stopOffsFor(r, progress)
+                val base = remainFrom(r, progress)
+                val now = System.currentTimeMillis()
+                stopEtas = via.mapIndexed { n, v ->
+                    val o = offs.getOrElse(n) { r.len }
+                    val s = if (base > 0) secs * (1.0 - remainFrom(r, o) / base).coerceIn(0.0, 1.0) else 0.0
+                    StopEta(v, Clock.hm(now + (s * 1000).toLong()), max(0.0, o - progress), s)
+                }
+            }
             routeFrac = (1.0 - frac).toFloat().coerceIn(0f, 1f)
             pruneLiveAlts(progress)
             saveResumeBeat()
@@ -6003,7 +6245,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val d = dest ?: return
         val from = fix?.pos ?: map.center() ?: return
         val r = route
-        val viaPts = via.map { it.pos }
+        val viaPts = routeVia()
         scope.launch {
             val leave = withContext(Dispatchers.IO) {
                 try { if (hasKey && online()) TomTomRest.departureFor(apiKey, from, d.pos, viaPts, arriveMs) else null } catch (e: Exception) { null }
@@ -6492,12 +6734,36 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val line = RouteExtras.line(r, progress - 300.0, to, 250.0, 90)
             scope.launch {
                 try {
-                    val (p, a) = withContext(Dispatchers.IO) { RouteExtras.hazards(line) }
+                    val (p, _) = withContext(Dispatchers.IO) { RouteExtras.hazards(line) }
                     rawHz = (rawHz + p).distinctBy { "${it.kind}${Math.round(it.pos.lat * 1e5)},${Math.round(it.pos.lon * 1e5)}" }.takeLast(1500)
-                    rawAvg = (rawAvg + a).distinctBy { it.id }.takeLast(60)
                     hzWinRoute = r; hzWinEnd = to
                 } catch (e: Exception) { hzRetryAt = System.currentTimeMillis() + 60_000L }
                 finally { hzBusy = false }
+            }
+        }
+        // average speed checks: first the ones kept from earlier drives along this route (shown straight away, signal or not), then
+        // a lookup of the next 30 km of their own, tried again after 20 seconds if the server is busy
+        if (prefs.b(PreferenceKeys.AVGZONES, true)) {
+            if (avgCacheFor !== r) {
+                avgCacheFor = r
+                val whole = RouteExtras.line(r, progress, progress + 400_000.0, 2000.0, 220)
+                scope.launch {
+                    val kept = withContext(Dispatchers.IO) { AvgCache.load(ctx); AvgCache.near(whole) }
+                    if (kept.isNotEmpty()) rawAvg = (rawAvg + kept).distinctBy { it.id }.takeLast(120)
+                }
+            }
+            if (!avgBusy && (progress + 8000.0 > avgWinEnd || (avgWinRoute !== r && now - avgLastAt > 45_000L)) && now > avgRetryAt && online()) {
+                avgBusy = true; avgLastAt = now
+                val to = progress + 30_000.0
+                val line = RouteExtras.line(r, progress - 300.0, to, 250.0, 90)
+                scope.launch {
+                    try {
+                        val a = withContext(Dispatchers.IO) { RouteExtras.avgZones(line).also { AvgCache.put(ctx, line, it) } }
+                        rawAvg = (rawAvg + a).distinctBy { it.id }.takeLast(120)
+                        avgWinRoute = r; avgWinEnd = to
+                    } catch (e: Exception) { avgRetryAt = System.currentTimeMillis() + 20_000L }
+                    finally { avgBusy = false }
+                }
             }
         }
         // place everything on this route (in the background) whenever the route or what was found changes
@@ -6755,11 +7021,25 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         try { applyStyle(lastDark) } catch (e: Exception) { }
     }
 
+    /**
+     * Gives the speech engine the language's voice: the first of [L.voiceLocales] it has (for Hong Kong, Cantonese before
+     * Mandarin). The answer for the last one tried if none is there.
+     */
+    private fun setVoiceLanguage(): Int? {
+        val t = tts ?: return null
+        var r: Int? = null
+        for (loc in L.voiceLocales) {
+            r = try { t.setLanguage(loc) } catch (e: Exception) { TextToSpeech.LANG_NOT_SUPPORTED }
+            if (r != null && r >= TextToSpeech.LANG_AVAILABLE) return r
+        }
+        return r
+    }
+
     /** The language setting changed: the directions and the voice switch to it (the voice says so if it has no voice for it). */
     fun setLanguage(setting: String) {
         if (!L.set(setting)) return
         said.clear()
-        val r = try { tts?.setLanguage(L.locale) } catch (e: Exception) { null }
+        val r = try { setVoiceLanguage() } catch (e: Exception) { null }
         if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED)
             toast("La voix du téléphone n'a pas de ${L.locale.getDisplayLanguage(L.locale)} installé : ajoutez-le dans Réglages > Son et voix > Voix et langue", 8000)
     }

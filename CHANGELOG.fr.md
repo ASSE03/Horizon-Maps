@@ -5,6 +5,16 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Traces GPX : Réglages › Lieux et trajets › Traces GPX importe un fichier .gpx, l'affiche sur la carte et le fait suivre comme itinéraire (aussi depuis la recherche), avec des groupes pour les ranger.
+- Étapes sur Android Auto : la liste des étapes se modifie sur l'écran de la voiture (ajouter, monter, descendre, retirer), avec l'heure d'arrivée à chacune.
+- Recherche et réglages sur Android Auto : une carte de recherche et une carte de réglages s'ouvrent sur l'écran de la voiture, et se font défiler du doigt.
+- Lieu choisi en roulant : en plein guidage, un lieu cherché propose « Ajouter une étape » ou « Y aller » ; « Ajoute une étape à… » de l'Assistant ajoute la prochaine étape au lieu de changer la destination.
+- Commandes multimédia : précédent, lecture / pause et suivant en bas de l'écran quand de la musique joue sur l'appareil (Réglages › Écran › En conduisant).
+- Vitesse maximale du véhicule : pour des heures d'arrivée justes avec un utilitaire, un camping-car ou une remorque (Réglages › Véhicule).
+- Tous vos lieux dans la rangée : les lieux enregistrés et favoris sont dans la rangée de tuiles sous la recherche, qui finit par « Ajouter un lieu » ; Domicile et Travail peuvent être masqués.
+- Panneau d'itinéraires sur le côté : un téléphone en paysage affiche les choix d'itinéraire dans une colonne à gauche.
+- Inclure les clés API dans la sauvegarde : interrupteur dans Réglages › Sauvegarde.
+- Direction à côté du nom de la route : désactivable seule en conduite libre.
 - Repères dans les indications : quand un virage est à des feux ou à un stop, la carte de direction dit « Aux feux » et la voix « Aux feux, tournez à droite sur… » (ou « Aux deuxièmes feux »). Réglages › Son et voix › Repères dans les indications.
 - Votre propre modèle 3D : Réglages › Votre flèche › Vrai modèle 3D › Votre modèle charge un fichier .glb (8 Mo au plus) comme flèche, mis à la taille de la voiture intégrée, avec Rotation pour l'orienter. Aussi sur Android Auto.
 - Compteur compact sur Android Auto : une petite pastille sombre avec le panneau de limitation et votre vitesse côte à côte (Réglages › Android Auto › Style du compteur), assez petite pour se placer en haut à droite même sur un écran bas.
@@ -86,6 +96,12 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Recalcul plus rapide : une demande anticipée et une nouvelle demande partent en même temps, la première arrivée est utilisée.
+- Flèche sur la bonne voie des routes à chaussées séparées : la flèche ne saute plus sur l'autre sens quand le GPS dérive vers le milieu.
+- Étape atteinte même sans passer à 80 m : une étape un peu à l'écart de la route (au milieu d'un parking) est validée une fois dépassée.
+- Radars tronçon : cherchés dans une demande à part, ils ne disparaissent plus quand la grosse recherche échoue.
+- Android Auto : mêmes couleurs et panneaux en verre que sur le téléphone, et l'alerte ne chevauche plus la carte de direction.
+- Bâtiments 3D : l'interrupteur masque aussi les façades et monuments, et l'écran de la voiture le suit.
 - Bouton Son : pendant le guidage, le son est un grand bouton en haut à droite ; la voix et les étapes passent dans Options de la carte › Ce trajet, et la carte de trajet ne garde que Fin (et les bornes en électrique).
 - Android Auto suit vos réglages tout de suite (thème, couleurs, niveau de détail, flèche ou voiture, tailles, extras 3D, lumière), sans reconnecter.
 - Position du compteur sur Android Auto : Coin inférieur, Sous la carte de direction ou En haut à droite, chacun calé contre une carte ou un coin.

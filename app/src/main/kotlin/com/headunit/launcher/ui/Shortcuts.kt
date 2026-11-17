@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.EvStation
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ZoomOutMap
 import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.VolumeUp
@@ -63,10 +64,17 @@ internal fun allShortcuts(engine: NavEngine): List<Shortcut> {
     )
 }
 
+/** Saved in place of a list when every shortcut has been taken off. */
+internal const val SHORTCUTS_NONE = "none"
+
 /** The ones picked (Settings › Places & trips), or as before when none are picked: Fuel first, or Charging and Toilets for an electric car. */
 internal fun chosenShortcuts(engine: NavEngine): List<Shortcut> {
     val all = allShortcuts(engine)
-    val picked = engine.prefs.s(PreferenceKeys.SHORTCUTS, "").split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    val raw = engine.prefs.s(PreferenceKeys.SHORTCUTS, "")
+    // "none": every one taken off on purpose. (Taking off the last one used to save an empty list, which reads as "never
+    // picked" and brought the five standard ones straight back, so they couldn't all be turned off: Reddit)
+    if (raw.trim() == SHORTCUTS_NONE) return emptyList()
+    val picked = raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
     val ids = picked.ifEmpty {
         if (engine.hideFuel) listOf("charging", "food", "coffee", "parking", "toilets") else listOf("fuel", "charging", "food", "coffee", "parking")
     }
@@ -80,7 +88,7 @@ internal fun ShortcutsGroup(engine: NavEngine) {
     val c = LocalVw.current
     val prefs = engine.prefs
     val order = chosenShortcuts(engine).map { it.id }
-    fun save(ids: List<String>) = prefs.put(PreferenceKeys.SHORTCUTS, ids.joinToString(","))
+    fun save(ids: List<String>) = prefs.put(PreferenceKeys.SHORTCUTS, if (ids.isEmpty()) SHORTCUTS_NONE else ids.joinToString(","))
     SGroup("Raccourcis sous la barre de recherche", footer = "Choisissez-en jusqu'à 5. Ils s'affichent dans cet ordre. Touchez pour ajouter ou retirer") {
         // (they wrap onto as many lines as the screen needs: in fixed rows of four, a phone squeezed the last one into a
         // column of single letters, GitHub #121)
@@ -150,13 +158,17 @@ internal val carTripButtons: List<Triple<String, String, Pair<ImageVector, Color
     Triple("overview", "Overview", Icons.Rounded.ZoomOutMap to Color(0xFF4C8DFF)),
     Triple("routes", "Other routes", Icons.Rounded.AltRoute to Color(0xFF4C8DFF)),
     Triple("sound", "Sound", Icons.Rounded.VolumeUp to Color(0xFF4C8DFF)),
+    Triple("search", "Search", Icons.Rounded.Search to Color(0xFF4C8DFF)),
     Triple("end", "End", Icons.Rounded.Close to Color(0xFFE5484D)),
 )
 
 /** Which trip card buttons are switched on (all of them unless changed). */
 internal fun carTripButtonsOn(prefs: com.headunit.launcher.Prefs): Set<String> {
     val raw = prefs.s(PreferenceKeys.CAR_TRIP_BTNS, "*")
-    return if (raw == "*") carTripButtons.map { it.first }.toSet() else raw.split(',').filter { it.isNotBlank() }.toSet()
+    // (unless picked otherwise, just the button that ends the route: Overview and Other routes are among Android Auto's own round
+    // buttons in the top corner while navigating, which fold away, so the trip card stays small)
+    // (and Search: a stop on the way, or somewhere else to go, while navigating)
+    return if (raw == "*") setOf("search", "end") else raw.split(',').filter { it.isNotBlank() }.toSet()
 }
 
 /** Settings > Android Auto: which buttons the trip card has, and how big they are (a narrower card leaves more of the map clear). */

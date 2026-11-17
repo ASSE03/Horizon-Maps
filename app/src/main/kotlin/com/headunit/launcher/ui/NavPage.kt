@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -164,15 +165,35 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Survol de l'itinéraire…", color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Pill("Arrêter", false, { engine.stopFlyOver() })
+    val conf = androidx.compose.ui.platform.LocalConfiguration.current
+    // a phone held sideways: too short for the panel across the bottom (it covered nearly all the map, GitHub), so it becomes a
+    // column down the left with the route fitted beside it. (Head units are wider than 1000, so they keep the usual layout.)
+    val sideways = conf.screenHeightDp < 480 && conf.screenWidthDp < 1000 && conf.screenWidthDp > conf.screenHeightDp
+    val sideW = minOf(400, conf.screenWidthDp / 2)
+    LaunchedEffect(sideways, sideW, conf.screenWidthDp) {
+        val f = if (sideways) sideW.toDouble() / conf.screenWidthDp.coerceAtLeast(1) else 0.0
+        if (f != engine.map.previewSide) { engine.map.previewSide = f; engine.refitPreview() }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { engine.map.previewSide = 0.0 } }
+    // flying over the route: the panel steps aside so the flight can be seen, leaving one small pill to stop it
+    if (engine.flyingOver) {
+        Row(
+            Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp).floating(28.dp).padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Survol…", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Pill("Arrêter", true, { engine.stopFlyOver() })
         }
         return
     }
     val fmt = com.headunit.launcher.Clock.format()
     val baseMs = if (engine.departAtMs > 0) engine.departAtMs else System.currentTimeMillis()
-    // fork FR : en paysage sur téléphone (peu de hauteur), le panneau défile au lieu de couper les cartes d'itinéraire et Démarrer
-    // (reverseScrolling : il reste calé en bas, sur les itinéraires et le bouton)
-    Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().verticalScroll(rememberScrollState(), reverseScrolling = true)
-        .padding(horizontal = 10.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        (if (sideways) Modifier.align(Alignment.BottomStart).padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 4.dp).width(sideW.dp)
+            .verticalScroll(rememberScrollState(), reverseScrolling = true)
+        else Modifier.align(Alignment.BottomCenter).fillMaxWidth().verticalScroll(rememberScrollState(), reverseScrolling = true).padding(horizontal = 10.dp, vertical = 4.dp)),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
     val selRoute = rs.getOrNull(engine.active)
     // fuel estimate from the economy and pump price set in Settings > Driving (blank = not shown)
     val ev = engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV"
@@ -200,10 +221,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
             }
         }
     }
-    Row(
-        Modifier.floating(50.dp).horizontalScroll(rememberScrollState()).padding(6.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    val stopsPart: @Composable () -> Unit = {
         Text("Étapes", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 10.dp))
         Pill("+ Carburant", engine.stopMode && engine.nearbyKind == "fuel", { engine.stopMode = true; engine.loadNearby("fuel", false) })
         Pill("+ Borne", engine.stopMode && engine.nearbyKind == "charging", { engine.stopMode = true; engine.loadNearby("charging", false) })
@@ -230,15 +248,27 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         Text("Vitesse", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 14.dp, end = 4.dp))
         for (x in listOf(1, 2, 4, 8)) Pill("×$x", engine.demoSpeed == x, { engine.chooseDemoSpeed(x) })
     }
-    Row(
-        Modifier.floating(50.dp).horizontalScroll(rememberScrollState()).padding(6.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    val leavePart: @Composable () -> Unit = {
         Text("Départ", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 10.dp))
         for ((label, m) in listOf("Maintenant" to 0, "+15 min" to 15, "+30 min" to 30, "+1 h" to 60, "+2 h" to 120)) {
             Pill(label, engine.departMin == m, { if (engine.departMin != m) engine.setDeparture(m) })
         }
         Pill("Arriver avant…", hold, { arriveBy = true })
+    }
+    // (sideways on a phone the two share one row that scrolls across, to leave more of the map showing)
+    if (sideways) Row(
+        Modifier.floating(50.dp).horizontalScroll(rememberScrollState()).padding(6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) { stopsPart(); Spacer(Modifier.width(8.dp)); leavePart() }
+    else {
+        Row(
+            Modifier.floating(50.dp).horizontalScroll(rememberScrollState()).padding(6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) { stopsPart() }
+        Row(
+            Modifier.floating(50.dp).horizontalScroll(rememberScrollState()).padding(6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) { leavePart() }
     }
     // electric: the battery now, the least you want to arrive with, and the eco route; a charging stop is then suggested
     // below if the trip needs one
@@ -269,7 +299,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
     }
     FuelSuggestionRow(engine)
     // landscape: everything in one row. Portrait (narrow): destination on top, the route choices across, Start underneath.
-    val narrowP = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 720
+    val narrowP = conf.screenWidthDp < 720 || sideways
     val destPart: @Composable (Modifier) -> Unit = { m ->
         Column(m) {
             Text("Destination", color = c.sub, fontSize = 12.sp)
@@ -416,28 +446,40 @@ private fun ArrivalStat(value: String, label: String) {
 
 /** Shown for a few seconds after arriving, with how the trip went and a button to save the place. */
 @Composable
-internal fun ArrivalCard(engine: NavEngine, a: ArrivalInfo, modifier: Modifier = Modifier) {
+internal fun ArrivalCard(engine: NavEngine, a: ArrivalInfo, modifier: Modifier = Modifier, compact: Boolean = false) {
     val c = LocalVw.current
     val imp = engine.imperial
     val k = if (imp) 2.23694 else 3.6
+    // on the car screen taps come through Android Auto (see CarTaps), not as touches on the card
+    val car = engine.isCar
+    // ([compact]: a short car screen. The tick sits beside "You've arrived" and the gaps are tighter, so the card is lower)
     Column(
-        modifier.widthIn(min = 380.dp, max = 460.dp).floating(28.dp).padding(22.dp),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier.widthIn(min = 380.dp, max = 460.dp).floating(28.dp).padding(if (compact) 14.dp else 22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp),
     ) {
-        Box(Modifier.size(64.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Good.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Check, null, tint = Good, modifier = Modifier.size(38.dp))
+        if (compact) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Good.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Check, null, tint = Good, modifier = Modifier.size(20.dp))
+            }
+            Text("Vous êtes arrivé", color = c.sub, fontSize = 14.sp)
+        } else {
+            Box(Modifier.size(64.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Good.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Check, null, tint = Good, modifier = Modifier.size(38.dp))
+            }
+            Text("Vous êtes arrivé", color = c.sub, fontSize = 14.sp)
         }
-        Text("Vous êtes arrivé", color = c.sub, fontSize = 14.sp)
         Text(a.name, color = c.text, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (a.side.isNotEmpty()) Text("${com.headunit.launcher.Geo.sideFr(a.side).replaceFirstChar { it.uppercase() }}", color = c.accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        Row(Modifier.fillMaxWidth().padding(vertical = if (compact) 0.dp else 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             ArrivalStat(Geo.fmtDist(a.dist, imp), "distance")
             ArrivalStat(Geo.fmtDur(a.secs), "time")
             ArrivalStat("${Math.round(a.avgMs * k)} ${if (imp) "mph" else "km/h"}", "moyenne")
         }
         engine.arrivalParking?.let { pk ->
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.tile).clickable { engine.dismissArrival(); engine.startRoute(pk.place) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.tile).clickable { engine.dismissArrival(); engine.startRoute(pk.place) }
+                    .then(if (car) Modifier.carTap("arr-park") { engine.dismissArrival(); engine.startRoute(pk.place) } else Modifier)
+                    .padding(horizontal = 14.dp, vertical = if (compact) 6.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Rounded.LocalParking, null, tint = Color(0xFF4C8DFF), modifier = Modifier.size(26.dp))
@@ -452,11 +494,13 @@ internal fun ArrivalCard(engine: NavEngine, a: ArrivalInfo, modifier: Modifier =
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             a.place?.let { p ->
                 var fav by remember { mutableStateOf(engine.places.isFavourite(p)) }
-                Pill(if (fav) "Enregistré" else "Enregistrer le lieu", fav, { fav = engine.places.toggleFavourite(p) })
+                Pill(if (fav) "Enregistré" else "Enregistrer le lieu", fav, { fav = engine.places.toggleFavourite(p) },
+                    if (car) Modifier.carTap("arr-save") { fav = engine.places.toggleFavourite(p) } else Modifier)
             }
             // the way back to where this trip started (home, if it started there)
-            if (engine.tripFrom != null && engine.prefs.b(PreferenceKeys.ROUTEBACK, true)) Pill("Itinéraire retour", false, { engine.routeBack() })
-            Pill("Terminé", true, { engine.dismissArrival() })
+            if (engine.tripFrom != null && engine.prefs.b(PreferenceKeys.ROUTEBACK, true)) Pill("Itinéraire retour", false, { engine.routeBack() },
+                if (car) Modifier.carTap("arr-back") { engine.routeBack() } else Modifier)
+            Pill("Terminé", true, { engine.dismissArrival() }, if (car) Modifier.carTap("arr-done") { engine.dismissArrival() } else Modifier)
         }
     }
 }

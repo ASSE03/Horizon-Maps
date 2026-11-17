@@ -12,10 +12,10 @@ import java.util.Locale
 object L {
     val supported = listOf("en" to "English", "nl" to "Nederlands", "de" to "Deutsch", "fr" to "Français", "es" to "Español",
         "it" to "Italiano", "pt" to "Português", "pl" to "Polski", "th" to "ไทย", "ja" to "日本語", "id" to "Bahasa Indonesia", "bg" to "Български", "sl" to "Slovenščina",
-        "ro" to "Română", "eu" to "Euskara", "zh" to "繁體中文",
+        "ro" to "Română", "eu" to "Euskara", "zh" to "繁體中文", "zhhk" to "繁體中文（香港・粵語）",
         "el" to "Ελληνικά", "cs" to "Čeština", "fi" to "Suomi",
         "zhs" to "简体中文", "sk" to "Slovenčina", "da" to "Dansk", "hr" to "Hrvatski", "ms" to "Bahasa Melayu", "hu" to "Magyar",
-        "tr" to "Türkçe", "sr" to "Srpski", "ar" to "العربية", "he" to "עברית", "ur" to "اردو")
+        "tr" to "Türkçe", "sr" to "Srpski", "ar" to "العربية", "he" to "עברית", "ur" to "اردو", "sv" to "Svenska", "bs" to "Bosanski", "kn" to "ಕನ್ನಡ", "mr" to "मराठी", "nb" to "Norsk bokmål", "esar" to "Español (Argentina)")
 
     /** Arabic, Hebrew and Urdu read right to left: the cards and settings are laid out that way round. */
     val rtl: Boolean get() = lang == "ar" || lang == "he" || lang == "ur"
@@ -32,12 +32,13 @@ object L {
         "bg" -> Locale("bg", "BG"); "sl" -> Locale("sl", "SI"); "ro" -> Locale("ro", "RO"); "eu" -> Locale("eu", "ES")
         "el" -> Locale("el", "GR"); "cs" -> Locale("cs", "CZ"); "fi" -> Locale("fi", "FI")
         "zhs" -> Locale("zh", "CN"); "sk" -> Locale("sk", "SK"); "da" -> Locale("da", "DK"); "hr" -> Locale("hr", "HR"); "ms" -> Locale("ms", "MY"); "hu" -> Locale("hu", "HU")
-        "tr" -> Locale("tr", "TR"); "sr" -> Locale("sr", "RS")
+        "tr" -> Locale("tr", "TR"); "sr" -> Locale("sr", "RS"); "sv" -> Locale("sv", "SE"); "bs" -> Locale("bs", "BA"); "kn" -> Locale("kn", "IN"); "mr" -> Locale("mr", "IN"); "nb" -> Locale("nb", "NO"); "esar" -> Locale("es", "AR")
         "he" -> Locale("he", "IL"); "ur" -> Locale("ur", "PK")
         // (Arabic: the phone's own country when it's set to Arabic, Saudi Arabia otherwise)
         "ar" -> Locale.getDefault().takeIf { it.language == "ar" } ?: Locale("ar", "SA")
         // (Traditional Chinese: a Cantonese voice on a Hong Kong or Macau phone, Taiwan's Mandarin otherwise)
         "zh" -> if (Locale.getDefault().country in setOf("HK", "MO")) Locale("zh", "HK") else Locale("zh", "TW")
+        "zhhk" -> Locale("zh", "HK")
         // (Brazilian Portuguese on a Brazilian phone, Portugal's otherwise)
         "pt" -> Locale.getDefault().takeIf { it.language == "pt" } ?: Locale("pt", "PT")
         else -> Locale.getDefault().takeIf { it.language == "en" } ?: Locale.UK
@@ -60,10 +61,27 @@ object L {
     val en: Boolean get() = lang == "en"
 
     /** The language code Mapbox's search takes (Chinese in the right script). */
-    val mapboxLang: String get() = when (lang) { "zh" -> "zh-Hant"; "zhs" -> "zh-Hans"; "ur" -> "en"; else -> lang }
+    /**
+     * The voices to try for the spoken directions, best first. Cantonese is kept by Google's speech engine under its own language
+     * code (yue): asking for Chinese (Hong Kong) gets Mandarin, so for Hong Kong Cantonese is asked for first (GitHub #83).
+     */
+    val voiceLocales: List<Locale> get() = if (lang == "zhhk") listOf(Locale("yue", "HK"), Locale.forLanguageTag("yue-Hant-HK"), Locale("zh", "HK")) else listOf(locale)
+
+    val mapboxLang: String get() = when (lang) { "zh", "zhhk" -> "zh-Hant"; "zhs" -> "zh-Hans"; "ur", "kn", "mr" -> "en"; "esar" -> "es"; else -> lang }
+
+    /** The Google Play edition is called Horizon Maps, so it can be told apart from the GitHub one (Horizon Nav). */
+    private val playName = BuildConfig.STORE == "play"
+
+    /** The app's name in this edition. */
+    val appName: String get() = if (playName) "Horizon Maps" else "Horizon Nav"
+
+    /** [text] with the app's name as this edition's (for the few messages that don't go through [t]). */
+    fun branded(text: String): String = if (playName && text.contains("Horizon Nav")) text.replace("Horizon Nav", "Horizon Maps") else text
 
     fun t(text: String, vararg args: Any?): String {
-        val s = if (lang == "en") text else (table[lang]?.get(text) ?: text)
+        val s0 = if (lang == "en") text else (table[lang]?.get(text) ?: text)
+        // (every message that names the app, in every language, says Horizon Maps in the Play edition)
+        val s = if (playName && s0.contains("Horizon Nav")) s0.replace("Horizon Nav", "Horizon Maps") else s0
         if (args.isEmpty()) return s
         var out = s
         for (i in args.indices) out = out.replace("{$i}", args[i]?.toString() ?: "")
@@ -75,7 +93,8 @@ object L {
      * look for ("naar huis" becomes "go home", "nächste Tankstelle" becomes "find fuel"). English is returned as it is.
      */
     fun voiceToEnglish(text: String): String {
-        val rules = voiceRules[lang] ?: return text
+        // (Bosnian voice commands are close enough to Croatian to share its words)
+        val rules = voiceRules[when (lang) { "bs" -> "hr"; "esar" -> "es"; "zhhk" -> "zh"; else -> lang }] ?: return text
         // (a capital İ made lower-case the English way leaves a stray dot mark, so "İşe" wouldn't match "işe")
         var t = " " + text.lowercase(locale).replace("\u0307", "").trim() + " "
         // Japanese puts the place first ("渋谷駅に行って"): the place is what comes before "…に行って" / "…までナビ"
@@ -91,6 +110,16 @@ object L {
         }
         // Urdu puts the place first as well: "لاہور چلو", "لاہور لے چلو"
         if (lang == "ur") Regex("^\\s*(.+?)(\\s+(کو|کی طرف|تک))?\\s+(چلو|چلیں|لے چلو|لے چلیں|جانا ہے|جاؤ|راستہ دکھاؤ|نیویگیٹ کرو)\\s*$").find(t.trim())?.let { m ->
+            val place = m.groupValues[1].trim()
+            if (place.isNotEmpty() && !Regex(rules[0].first).containsMatchIn(t) && !Regex(rules[1].first).containsMatchIn(t)) return "go to $place"
+        }
+        // Kannada puts the place first as well: "ಮೈಸೂರಿಗೆ ಹೋಗು", "ಮೈಸೂರು ಗೆ ಕರೆದುಕೊಂಡು ಹೋಗು"
+        if (lang == "kn") Regex("^\\s*(.+?)\\s*(ಗೆ|ಕ್ಕೆ|ಕಡೆಗೆ|ವರೆಗೆ)?\\s+(ಹೋಗು|ಹೋಗಿ|ಹೋಗೋಣ|ಕರೆದುಕೊಂಡು ಹೋಗು|ಕರೆದೊಯ್ಯಿ|ದಾರಿ ತೋರಿಸು|ನ್ಯಾವಿಗೇಟ್ ಮಾಡು|ನ್ಯಾವಿಗೇಟ್ ಮಾಡಿ)\\s*$").find(t.trim())?.let { m ->
+            val place = m.groupValues[1].trim()
+            if (place.isNotEmpty() && !Regex(rules[0].first).containsMatchIn(t) && !Regex(rules[1].first).containsMatchIn(t)) return "go to $place"
+        }
+        // Marathi puts the place first as well: "पुण्याला जा", "पुणे ला घेऊन चल"
+        if (lang == "mr") Regex("^\\s*(.+?)\\s*(ला|कडे|पर्यंत)?\\s+(जा|चल|चला|जायचे आहे|घेऊन चल|घेऊन जा|रस्ता दाखव|मार्ग दाखव|नेव्हिगेट कर)\\s*$").find(t.trim())?.let { m ->
             val place = m.groupValues[1].trim()
             if (place.isNotEmpty() && !Regex(rules[0].first).containsMatchIn(t) && !Regex(rules[1].first).containsMatchIn(t)) return "go to $place"
         }
@@ -460,6 +489,19 @@ object L {
                 "povećaj|približi" to "zoom in", "smanji|udalji" to "zoom out", "sjever gore" to "north up", "koliko je sati" to "what time",
                 "^\\s*(vozi me do|vozi me u|navigiraj do|idi do|idemo u|idemo do|do)\\s" to "go to",
             ),
+            "nb" to r(
+                "\\s(hjem|kjør hjem|ta meg hjem)\\s" to "go home", "\\s(på jobb|til jobben|til jobb|til kontoret)\\s" to "go to work",
+                "^\\s*(meld fra|rapporter|meld)\\s" to "report", "ulykke|kollisjon" to "accident", "politi|politiet|politikontroll" to "police", "motorstopp|havari|stanset bil" to "breakdown", "fotoboks|fartskamera|kamera|fartskontroll" to "camera",
+                "bensinstasjon|bensin|drivstoff|tanke|diesel" to "fuel", "ladestasjon|lading|lader|ladepunkt" to "charging", "toalett|do|wc" to "toilet", "kaffe|kafé" to "coffee",
+                "\\smat\\s|restaurant|spise" to "food", "rasteplass|veikro" to "services", "parkering|parkeringsplass|parkere" to "parking",
+                "\\s(finn|søk|søk etter|nærmeste|hvor er|jeg trenger)\\s" to "find", "billigste|billig" to "cheap",
+                "unngå bomveier|uten bomveier|unngå bompenger" to "avoid toll", "unngå motorveier|uten motorvei" to "avoid motorway",
+                "unngå denne veien" to "avoid this road", "når er jeg fremme|hvor lang tid|hvor langt" to "eta", "\\s(del|send) (min |ankomst)" to "share",
+                "stemme på|slå på stemmen|tale på" to "voice on", "bare varsler|kun varsler" to "alerts only", "demp|stille|slå av stemmen|tale av" to "mute",
+                "(avslutt|stopp|avbryt) (ruten|navigasjonen|navigasjon)" to "end route", "oversikt|hele ruten" to "overview",
+                "zoom inn" to "zoom in", "zoom ut" to "zoom out", "nord opp" to "north up", "hva er klokka|hva er klokken" to "what time",
+                "^\\s*(naviger til|kjør til|ta meg til|før meg til|til)\\s" to "go to",
+            ),
             "da" to r(
                 "\\s(hjem|kør hjem|tag mig hjem)\\s" to "go home", "\\s(på arbejde|til arbejde|til kontoret)\\s" to "go to work",
                 "^\\s*(rapportér|rapporter|meld)\\s" to "report", "ulykke|uheld" to "accident", "politi|politiet" to "police", "i stykker|motorstop|nedbrud" to "breakdown", "fartkamera|kamera|fotovogn" to "camera",
@@ -472,6 +514,45 @@ object L {
                 "(afslut|stop|annuller) (ruten|navigationen|navigation)" to "end route", "oversigt|hele ruten" to "overview",
                 "zoom ind" to "zoom in", "zoom ud" to "zoom out", "nord op" to "north up", "hvad er klokken" to "what time",
                 "^\\s*(naviger til|kør til|tag mig til|før mig til|til)\\s" to "go to",
+            ),
+            "kn" to r(
+                "\\s(ಮನೆಗೆ|ಮನೆಗೆ ಹೋಗು|ಮನೆಗೆ ಕರೆದುಕೊಂಡು ಹೋಗು)\\s" to "go home", "\\s(ಕೆಲಸಕ್ಕೆ|ಆಫೀಸಿಗೆ|ಕಚೇರಿಗೆ)\\s" to "go to work",
+                "^\\s*(ವರದಿ ಮಾಡು|ವರದಿ)\\s" to "report", "ಅಪಘಾತ|ಆಕ್ಸಿಡೆಂಟ್" to "accident", "ಪೊಲೀಸ್" to "police", "ಕೆಟ್ಟು ನಿಂತ|ಬ್ರೇಕ್ ಡೌನ್" to "breakdown", "ಕ್ಯಾಮೆರಾ|ಸ್ಪೀಡ್ ಕ್ಯಾಮೆರಾ" to "camera",
+                "ಪೆಟ್ರೋಲ್ ಬಂಕ್|ಪೆಟ್ರೋಲ್|ಡೀಸೆಲ್|ಇಂಧನ" to "fuel", "ಚಾರ್ಜಿಂಗ್|ಚಾರ್ಜರ್" to "charging", "ಶೌಚಾಲಯ|ಟಾಯ್ಲೆಟ್" to "toilet", "ಕಾಫಿ|ಟೀ" to "coffee",
+                "ಊಟ|ಆಹಾರ|ಹೋಟೆಲ್|ರೆಸ್ಟೋರೆಂಟ್" to "food", "ಸೇವಾ ಕೇಂದ್ರ" to "services", "ಪಾರ್ಕಿಂಗ್" to "parking",
+                "\\s(ಹುಡುಕು|ಹತ್ತಿರದ|ಎಲ್ಲಿದೆ|ಬೇಕು)\\s" to "find", "ಅಗ್ಗದ" to "cheap",
+                "ಟೋಲ್ ತಪ್ಪಿಸು|ಟೋಲ್ ಇಲ್ಲದೆ" to "avoid toll", "ಎಕ್ಸ್‌ಪ್ರೆಸ್‌ವೇ ತಪ್ಪಿಸು|ಹೆದ್ದಾರಿ ತಪ್ಪಿಸು" to "avoid motorway",
+                "ಈ ರಸ್ತೆ ತಪ್ಪಿಸು" to "avoid this road", "ಯಾವಾಗ ತಲುಪುತ್ತೇನೆ|ಎಷ್ಟು ಸಮಯ|ಎಷ್ಟು ದೂರ" to "eta", "ಹಂಚಿಕೊ|ಕಳುಹಿಸು" to "share",
+                "ಧ್ವನಿ ಆನ್" to "voice on", "ಎಚ್ಚರಿಕೆಗಳು ಮಾತ್ರ" to "alerts only", "ಮ್ಯೂಟ್|ಧ್ವನಿ ಆಫ್" to "mute",
+                "(ಮಾರ್ಗ|ನ್ಯಾವಿಗೇಶನ್) (ನಿಲ್ಲಿಸು|ಮುಗಿಸು|ರದ್ದುಮಾಡು)" to "end route", "ಅವಲೋಕನ|ಪೂರ್ತಿ ಮಾರ್ಗ" to "overview",
+                "ಜೂಮ್ ಇನ್" to "zoom in", "ಜೂಮ್ ಔಟ್" to "zoom out", "ಉತ್ತರ ಮೇಲೆ" to "north up", "ಸಮಯ ಎಷ್ಟು|ಗಂಟೆ ಎಷ್ಟು" to "what time",
+                "^\\s*(ನ್ಯಾವಿಗೇಟ್ ಮಾಡು|ದಾರಿ ತೋರಿಸು)\\s" to "go to",
+            ),
+            "mr" to r(
+                "\\s(घरी|घरी जा|घरी चल|घरी घेऊन चल)\\s" to "go home", "\\s(कामावर|ऑफिसला|कार्यालयात)\\s" to "go to work",
+                "^\\s*(नोंद कर|तक्रार कर|कळव)\\s" to "report", "अपघात|ॲक्सिडेंट" to "accident", "पोलीस|पोलिस" to "police", "बंद पडलेली|ब्रेकडाउन" to "breakdown", "कॅमेरा|स्पीड कॅमेरा" to "camera",
+                "पेट्रोल पंप|पेट्रोल|डिझेल|इंधन" to "fuel", "चार्जिंग|चार्जर" to "charging", "शौचालय|टॉयलेट|स्वच्छतागृह" to "toilet", "कॉफी|चहा" to "coffee",
+                "जेवण|खाणे|हॉटेल|रेस्टॉरंट" to "food", "सेवा केंद्र" to "services", "पार्किंग" to "parking",
+                "\\s(शोध|शोधा|जवळचा|जवळचे|जवळची|कुठे आहे|हवे आहे)\\s" to "find", "स्वस्त" to "cheap",
+                "टोल टाळा|टोलशिवाय" to "avoid toll", "द्रुतगती मार्ग टाळा|हायवे टाळा|एक्सप्रेसवे टाळा" to "avoid motorway",
+                "हा रस्ता टाळा" to "avoid this road", "कधी पोहोचेन|किती वेळ|किती दूर" to "eta", "शेअर कर|पाठव" to "share",
+                "आवाज चालू" to "voice on", "फक्त सूचना" to "alerts only", "म्यूट|आवाज बंद" to "mute",
+                "(मार्ग|नेव्हिगेशन) (थांबव|संपव|रद्द कर)" to "end route", "आढावा|संपूर्ण मार्ग" to "overview",
+                "झूम इन" to "zoom in", "झूम आउट" to "zoom out", "उत्तर वर" to "north up", "किती वाजले|वेळ किती" to "what time",
+                "^\\s*(नेव्हिगेट कर|रस्ता दाखव|मार्ग दाखव)\\s" to "go to",
+            ),
+            "sv" to r(
+                "\\s(hem|kör hem|ta mig hem|åk hem)\\s" to "go home", "\\s(till jobbet|till kontoret|på jobbet)\\s" to "go to work",
+                "^\\s*(rapportera|anmäl)\\s" to "report", "olycka|krock" to "accident", "polis|polisen|poliskontroll" to "police", "motorstopp|trasig bil|haveri" to "breakdown", "fartkamera|kamera|trafiksäkerhetskamera" to "camera",
+                "bensinmack|mack|bensinstation|tankstation|bensin|bränsle|diesel|tanka" to "fuel", "laddstation|laddstolpe|laddning|ladda|laddare" to "charging", "toalett|toa|wc" to "toilet", "kaffe|fika|kafé|café" to "coffee",
+                "\\smat\\s|restaurang|äta" to "food", "rastplats|rastplatsen|vägkrog" to "services", "parkering|parkeringsplats|parkera" to "parking",
+                "\\s(hitta|sök|sök efter|närmaste|var finns|jag behöver)\\s" to "find", "billigaste|billig" to "cheap",
+                "undvik avgiftsvägar|utan avgiftsvägar|undvik (tullar|avgifter|trängselskatt)" to "avoid toll", "undvik motorvägar|utan motorväg" to "avoid motorway",
+                "undvik den här vägen" to "avoid this road", "när är jag framme|hur lång tid|hur långt" to "eta", "\\s(dela|skicka) (min |ankomst)" to "share",
+                "röst på|slå på rösten" to "voice on", "bara varningar" to "alerts only", "tyst|stäng av rösten|röst av" to "mute",
+                "(avsluta|stoppa|avbryt) (rutten|navigeringen|navigering)" to "end route", "översikt|hela rutten" to "overview",
+                "zooma in" to "zoom in", "zooma ut" to "zoom out", "norr uppåt|norr upp" to "north up", "vad är klockan" to "what time",
+                "^\\s*(navigera till|kör till|ta mig till|åk till|vägbeskrivning till|till)\\s" to "go to",
             ),
             "id" to r(
                 "\\s(pulang|ke rumah|pulang ke rumah|antar saya pulang)\\s" to "go home", "\\s(pergi |antar saya )?ke (kantor|tempat kerja)\\s" to "go to work",
@@ -493,18 +574,22 @@ object L {
     fun ordShort(n: Int): String = when (lang) {
         "nl", "fr" -> "${n}e"
         "de", "pl", "sl" -> "$n."
-        "es", "pt" -> "$n.ª"
+        "es", "esar", "pt" -> "$n.ª"
         "it" -> "${n}ª"
         "th" -> "ที่ $n"
         "ja" -> "${n}番目"
         "id", "ms" -> "ke-$n"
         // (with "the": "az" before a vowel sound, "a" otherwise: az 1., a 2., az 5.)
         "hu" -> if (n == 1 || n == 5 || n in 50..59) "az $n." else "a $n."
-        "eu", "cs", "fi", "sk", "da", "hr", "tr", "sr" -> "$n."
+        "eu", "cs", "fi", "sk", "da", "nb", "hr", "tr", "sr", "bs" -> "$n."
+        // (1:a, 2:a, 3:e … but 11:e and 12:e)
+        "sv" -> if (n % 10 in 1..2 && n % 100 !in 11..12) "$n:a" else "$n:e"
         "ar", "he", "ur" -> "$n"
+        "kn" -> "${n}ನೇ"
+        "mr" -> "${n}वा"
         "el" -> "${n}η"
         "ro" -> if (n == 1) "prima" else "a $n-a"
-        "zh" -> "第${n}個"
+        "zh", "zhhk" -> "第${n}個"
         "zhs" -> "第${n}个"
         // 1-ви, 2-ри, 3-ти, 7-ми, 8-ми (11-ти to 13-ти, and the rest -ти)
         "bg" -> when {
@@ -541,7 +626,7 @@ object L {
         "nl" -> "eerste|tweede|derde|vierde|vijfde|zesde|zevende|achtste|negende|tiende"
         "de" -> "erste|zweite|dritte|vierte|fünfte|sechste|siebte|achte|neunte|zehnte"
         "fr" -> "première|deuxième|troisième|quatrième|cinquième|sixième|septième|huitième|neuvième|dixième"
-        "es" -> "primera|segunda|tercera|cuarta|quinta|sexta|séptima|octava|novena|décima"
+        "es", "esar" -> "primera|segunda|tercera|cuarta|quinta|sexta|séptima|octava|novena|décima"
         "it" -> "prima|seconda|terza|quarta|quinta|sesta|settima|ottava|nona|decima"
         "pt" -> "primeira|segunda|terceira|quarta|quinta|sexta|sétima|oitava|nona|décima"
         "pl" -> "pierwszy|drugi|trzeci|czwarty|piąty|szósty|siódmy|ósmy|dziewiąty|dziesiąty"
@@ -557,13 +642,17 @@ object L {
         // (with "the", as the roundabout phrase needs: "hajtson ki a második kijáraton")
         "hu" -> "az első|a második|a harmadik|a negyedik|az ötödik|a hatodik|a hetedik|a nyolcadik|a kilencedik|a tizedik"
         "ms" -> "pertama|kedua|ketiga|keempat|kelima|keenam|ketujuh|kelapan|kesembilan|kesepuluh"
-        "hr", "sr" -> "prvi|drugi|treći|četvrti|peti|šesti|sedmi|osmi|deveti|deseti"
+        "hr", "sr", "bs" -> "prvi|drugi|treći|četvrti|peti|šesti|sedmi|osmi|deveti|deseti"
         "ar" -> "الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر"
         // (with "the" joined on, as the roundabout phrase needs: "ביציאה השנייה")
         "he" -> "ראשונה|שנייה|שלישית|רביעית|חמישית|שישית|שביעית|שמינית|תשיעית|עשירית"
         "ur" -> "پہلا|دوسرا|تیسرا|چوتھا|پانچواں|چھٹا|ساتواں|آٹھواں|نواں|دسواں"
         "tr" -> "birinci|ikinci|üçüncü|dördüncü|beşinci|altıncı|yedinci|sekizinci|dokuzuncu|onuncu"
         "da" -> "første|anden|tredje|fjerde|femte|sjette|syvende|ottende|niende|tiende"
+        "nb" -> "første|andre|tredje|fjerde|femte|sjette|sjuende|åttende|niende|tiende"
+        "kn" -> "ಮೊದಲ|ಎರಡನೇ|ಮೂರನೇ|ನಾಲ್ಕನೇ|ಐದನೇ|ಆರನೇ|ಏಳನೇ|ಎಂಟನೇ|ಒಂಬತ್ತನೇ|ಹತ್ತನೇ"
+        "mr" -> "पहिला|दुसरा|तिसरा|चौथा|पाचवा|सहावा|सातवा|आठवा|नववा|दहावा"
+        "sv" -> "första|andra|tredje|fjärde|femte|sjätte|sjunde|åttonde|nionde|tionde"
         "id" -> "pertama|kedua|ketiga|keempat|kelima|keenam|ketujuh|kedelapan|kesembilan|kesepuluh"
         else -> ""
     }
@@ -587,7 +676,7 @@ object L {
         val keys3 = listOf("th", "ja", "id")
         val keys4 = listOf("bg")
         val keys5 = listOf("sl")
-        val m = (keys + keys2 + keys3 + keys4 + keys5 + listOf("ro", "eu", "zh", "el", "cs", "fi", "zhs", "sk", "da", "hr", "ms", "hu", "tr", "sr", "ar", "he", "ur")).associateWith { HashMap<String, String>() }
+        val m = (keys + keys2 + keys3 + keys4 + keys5 + listOf("ro", "eu", "zh", "el", "cs", "fi", "zhs", "sk", "da", "hr", "ms", "hu", "tr", "sr", "ar", "he", "ur", "sv", "bs", "kn", "mr", "nb", "esar", "zhhk")).associateWith { HashMap<String, String>() }
         for ((en, tr) in rows) for ((i, k) in keys.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows2) for ((i, k) in keys2.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows3) for ((i, k) in keys3.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
@@ -597,6 +686,7 @@ object L {
         addOwn(m, "ro", I18nRo.rows())
         addOwn(m, "eu", I18nEu.rows())
         addOwn(m, "zh", I18nZhHant.rows())
+        addOwn(m, "zhhk", I18nZhHant.rows())
         addOwn(m, "el", I18nEl.rows())
         addOwn(m, "cs", I18nCs.rows())
         addOwn(m, "fi", I18nFi.rows())
@@ -611,6 +701,12 @@ object L {
         addOwn(m, "ar", I18nAr.rows())
         addOwn(m, "he", I18nHe.rows())
         addOwn(m, "ur", I18nUr.rows())
+        addOwn(m, "sv", I18nSv.rows())
+        addOwn(m, "bs", I18nBs.rows())
+        addOwn(m, "kn", I18nKn.rows())
+        addOwn(m, "mr", I18nMr.rows())
+        addOwn(m, "nb", I18nNb.rows())
+        addOwn(m, "esar", I18nEsAr.rows())
         m
     }
 
@@ -1187,7 +1283,7 @@ object L {
         "Offline maps" to listOf("Offline kaarten", "Offline-Karten", "Cartes hors ligne", "Mapas sin conexión"),
         "Maps, routes and town names with no signal" to listOf("Kaarten, routes en plaatsnamen zonder signaal", "Karten, Routen und Ortsnamen ohne Empfang", "Cartes, itinéraires et noms de villes sans réseau", "Mapas, rutas y poblaciones sin señal"),
         "Screen & sizes" to listOf("Scherm en formaten", "Bildschirm und Größen", "Écran et tailles", "Pantalla y tamaños"),
-        "Brightness, sizes, glass, units, while driving" to listOf("Helderheid, formaten, glas, eenheden, tijdens het rijden", "Helligkeit, Größen, Glas, Einheiten, während der Fahrt", "Luminosité, tailles, verre, unités, en conduisant", "Brillo, tamaños, cristal, unidades, al conducir"),
+        "Brightness, sizes, glass, units, while driving" to listOf("Helderheid, formaten, transparantie, eenheden, tijdens het rijden", "Helligkeit, Größen, Glas, Einheiten, während der Fahrt", "Luminosité, tailles, verre, unités, en conduisant", "Brillo, tamaños, cristal, unidades, al conducir"),
         "Android Auto" to listOf("Android Auto", "Android Auto", "Android Auto", "Android Auto"),
         "Car-screen sizes and setting it up" to listOf("Formaten op het autoscherm en instellen", "Größen auf dem Autobildschirm und Einrichtung", "Tailles sur l'écran de la voiture et configuration", "Tamaños en la pantalla del coche y configuración"),
         "Performance" to listOf("Prestaties", "Leistung", "Performances", "Rendimiento"),
@@ -1669,7 +1765,7 @@ object L {
         "100% leaves it to the system" to listOf("100% laat het aan het systeem over", "100 % überlässt es dem System", "100 % laisse faire le système", "100 % lo deja al sistema"),
         "Dim the screen at night" to listOf("Scherm 's nachts dimmen", "Bildschirm nachts dimmen", "Assombrir l'écran la nuit", "Atenuar la pantalla de noche"),
         "Keep the screen on" to listOf("Scherm aan houden", "Bildschirm anlassen", "Garder l'écran allumé", "Mantener la pantalla encendida"),
-        "Glass panels" to listOf("Glazen panelen", "Glasflächen", "Panneaux en verre", "Paneles de cristal"),
+        "Glass panels" to listOf("Transparante panelen", "Glasflächen", "Panneaux en verre", "Paneles de cristal"),
         "See-through cards tinted by the map. Off gives solid cards" to listOf("Doorzichtige kaarten getint door de kaart. Uit geeft effen kaarten", "Durchsichtige, von der Karte getönte Karten. Aus gibt deckende Karten", "Cartes transparentes teintées par la carte. Désactivé donne des cartes opaques", "Tarjetas transparentes teñidas por el mapa. Desactivado da tarjetas sólidas"),
         "Mapbox logo position" to listOf("Positie Mapbox-logo", "Position des Mapbox-Logos", "Position du logo Mapbox", "Posición del logo de Mapbox"),
         "Top left" to listOf("Linksboven", "Oben links", "En haut à gauche", "Arriba a la izquierda"),
@@ -2135,6 +2231,89 @@ object L {
         "Same as the app" to listOf("Zoals in de app", "Wie in der App", "Comme dans l'appli", "Igual que en la app"),
         "Speedometer style" to listOf("Stijl snelheidsmeter", "Tacho-Stil", "Style du compteur", "Estilo del velocímetro"),
         "Speedometer style on the car screen" to listOf("Stijl snelheidsmeter op het autoscherm", "Tacho-Stil auf dem Autobildschirm", "Style du compteur sur l'écran de la voiture", "Estilo del velocímetro en la pantalla del coche"),
+        "Group" to listOf("Groep", "Gruppe", "Groupe", "Grupo"),
+        "New group" to listOf("Nieuwe groep", "Neue Gruppe", "Nouveau groupe", "Nuevo grupo"),
+        "No group" to listOf("Geen groep", "Keine Gruppe", "Aucun groupe", "Sin grupo"),
+        "1 place" to listOf("1 plaats", "1 Ort", "1 lieu", "1 lugar"),
+        "{0} places" to listOf("{0} plaatsen", "{0} Orte", "{0} lieux", "{0} lugares"),
+        "Top speed for arrival times" to listOf("Topsnelheid voor aankomsttijden", "Höchstgeschwindigkeit für Ankunftszeiten", "Vitesse maximale pour les heures d'arrivée", "Velocidad máxima para las horas de llegada"),
+        "Routes are timed no faster than this: for vans, lorries or towing. Off uses normal road speeds" to listOf("Routes worden niet sneller dan dit berekend: voor bestelbussen, vrachtwagens of met aanhanger. Uit gebruikt de normale snelheden", "Routen werden nicht schneller als damit berechnet: für Transporter, Lkw oder mit Anhänger. Aus nutzt die normalen Straßengeschwindigkeiten", "Les itinéraires sont chronométrés sans dépasser cette vitesse : pour les utilitaires, poids lourds ou avec remorque. Désactivé utilise les vitesses normales", "Las rutas se calculan sin superar esta velocidad: para furgonetas, camiones o con remolque. Desactivado usa las velocidades normales"),
+        "Categories" to listOf("Categorieën", "Kategorien", "Catégories", "Categorías"),
+        "Didn't catch that" to listOf("Dat verstond ik niet", "Das habe ich nicht verstanden", "Je n'ai pas compris", "No lo he entendido"),
+        "Display" to listOf("Weergave", "Anzeige", "Affichage", "Pantalla"),
+        "Driving" to listOf("Rijden", "Fahren", "Conduite", "Conducción"),
+        "Home and Work under the search bar" to listOf("Thuis en Werk onder de zoekbalk", "Zuhause und Arbeit unter der Suchleiste", "Domicile et Travail sous la barre de recherche", "Casa y Trabajo bajo la barra de búsqueda"),
+        "Home button" to listOf("Knop Thuis", "Taste Zuhause", "Bouton Domicile", "Botón Casa"),
+        "Include API keys" to listOf("API-sleutels meenemen", "API-Schlüssel einschließen", "Inclure les clés API", "Incluir claves API"),
+        "Includes settings and saved places, not the offline pack. Your API keys are only included with the switch on. A backup from Horizon Launcher can be restored here too." to listOf("Bevat instellingen en opgeslagen plaatsen, niet het offlinepakket. Je API-sleutels gaan alleen mee als de schakelaar aan staat. Een back-up van Horizon Launcher kan hier ook worden teruggezet.", "Enthält Einstellungen und gespeicherte Orte, nicht das Offline-Paket. Deine API-Schlüssel sind nur mit eingeschaltetem Schalter dabei. Eine Sicherung aus Horizon Launcher kann hier ebenfalls wiederhergestellt werden.", "Inclut les réglages et les lieux enregistrés, pas le pack hors ligne. Vos clés API ne sont incluses que si l'interrupteur est activé. Une sauvegarde de Horizon Launcher peut aussi être restaurée ici.", "Incluye los ajustes y los lugares guardados, no el paquete sin conexión. Sus claves API solo se incluyen con el interruptor activado. Aquí también se puede restaurar una copia de Horizon Launcher."),
+        "Larger" to listOf("Groter", "Größer", "Plus grand", "Más grande"),
+        "Listening…" to listOf("Luisteren…", "Ich höre zu…", "Écoute…", "Escuchando…"),
+        "Microphone" to listOf("Microfoon", "Mikrofon", "Microphone", "Micrófono"),
+        "North up" to listOf("Noorden boven", "Norden oben", "Nord en haut", "Norte arriba"),
+        "Not allowed" to listOf("Niet toegestaan", "Nicht erlaubt", "Non autorisé", "No permitido"),
+        "On cars that offer it" to listOf("In auto's die het bieden", "In Autos, die es anbieten", "Sur les voitures qui le proposent", "En los coches que lo ofrecen"),
+        "On this screen and on Android Auto. Your Home and Work places are kept either way." to listOf("Op dit scherm en in Android Auto. Je Thuis- en Werkadres blijven hoe dan ook bewaard.", "Auf diesem Bildschirm und in Android Auto. Deine Orte Zuhause und Arbeit bleiben in jedem Fall gespeichert.", "Sur cet écran et sur Android Auto. Vos lieux Domicile et Travail sont conservés dans tous les cas.", "En esta pantalla y en Android Auto. Sus lugares Casa y Trabajo se conservan en cualquier caso."),
+        "Phone" to listOf("Telefoon", "Telefon", "Téléphone", "Teléfono"),
+        "Puts your TomTom and Mapbox keys in the backup file, so Restore brings them back. The file is plain text: keep it somewhere safe" to listOf("Zet je TomTom- en Mapbox-sleutels in het back-upbestand, zodat Terugzetten ze terugbrengt. Het bestand is platte tekst: bewaar het op een veilige plek", "Legt deine TomTom- und Mapbox-Schlüssel in die Sicherungsdatei, damit Wiederherstellen sie zurückholt. Die Datei ist reiner Text: bewahre sie sicher auf", "Place vos clés TomTom et Mapbox dans le fichier de sauvegarde, pour que Restaurer les remette. Le fichier est en texte brut : gardez-le en lieu sûr", "Guarda sus claves de TomTom y Mapbox en el archivo de copia, para que Restaurar las recupere. El archivo es texto plano: guárdelo en un lugar seguro"),
+        "Recent" to listOf("Recent", "Zuletzt", "Récents", "Recientes"),
+        "Smaller" to listOf("Kleiner", "Kleiner", "Plus petit", "Más pequeño"),
+        "Sun" to listOf("Zon", "Sonne", "Soleil", "Sol"),
+        "To listen straight away, allow the microphone in Horizon Nav on your phone: Settings › Android Auto" to listOf("Sta de microfoon toe in Horizon Nav op je telefoon om meteen te luisteren: Instellingen › Android Auto", "Damit sofort zugehört wird, erlaube das Mikrofon in Horizon Nav auf deinem Handy: Einstellungen › Android Auto", "Pour écouter tout de suite, autorisez le micro dans Horizon Nav sur votre téléphone : Réglages › Android Auto", "Para escuchar al instante, permita el micrófono en Horizon Nav en su teléfono: Ajustes › Android Auto"),
+        "Top right is in the corner itself, and makes way while Android Auto's buttons are showing there" to listOf("Rechtsboven staat in de hoek zelf en wijkt uit zolang de knoppen van Android Auto daar zichtbaar zijn", "Oben rechts sitzt direkt in der Ecke und weicht aus, solange dort die Tasten von Android Auto zu sehen sind", "En haut à droite se place dans le coin même, et s'efface tant que les boutons d'Android Auto y sont affichés", "Arriba a la derecha va en la misma esquina y se aparta mientras los botones de Android Auto están ahí"),
+        "Under the search bar" to listOf("Onder de zoekbalk", "Unter der Suchleiste", "Sous la barre de recherche", "Bajo la barra de búsqueda"),
+        "Under turn" to listOf("Onder afslag", "Unter Abbiegung", "Sous le virage", "Bajo el giro"),
+        "Voice search isn't available on this phone" to listOf("Spraakzoeken is niet beschikbaar op deze telefoon", "Sprachsuche ist auf diesem Handy nicht verfügbar", "La recherche vocale n'est pas disponible sur ce téléphone", "La búsqueda por voz no está disponible en este teléfono"),
+        "Voice search on the car screen" to listOf("Spraakzoeken op het autoscherm", "Sprachsuche auf dem Autobildschirm", "Recherche vocale sur l'écran de la voiture", "Búsqueda por voz en la pantalla del coche"),
+        "With the microphone allowed, the microphone button on the car screen listens straight away. Without it, the button opens Android Auto's search screen, which has a microphone of its own." to listOf("Met de microfoon toegestaan luistert de microfoonknop op het autoscherm meteen. Zonder opent de knop het zoekscherm van Android Auto, dat een eigen microfoon heeft.", "Mit erlaubtem Mikrofon hört die Mikrofontaste auf dem Autobildschirm sofort zu. Ohne öffnet sie den Suchbildschirm von Android Auto, der ein eigenes Mikrofon hat.", "Avec le micro autorisé, le bouton micro de l'écran de la voiture écoute tout de suite. Sinon, il ouvre l'écran de recherche d'Android Auto, qui a son propre micro.", "Con el micrófono permitido, el botón de micrófono de la pantalla del coche escucha al instante. Sin él, el botón abre la pantalla de búsqueda de Android Auto, que tiene su propio micrófono."),
+        "Work button" to listOf("Knop Werk", "Taste Arbeit", "Bouton Travail", "Botón Trabajo"),
+        "No matches. Try adding a town or postcode." to listOf("Geen resultaten. Voeg een plaats of postcode toe.", "Keine Treffer. Füge einen Ort oder eine Postleitzahl hinzu.", "Aucun résultat. Ajoutez une ville ou un code postal.", "Sin resultados. Pruebe a añadir una población o código postal."),
+        "Trip card in split screen" to listOf("Reiskaart in gesplitst scherm", "Fahrtkarte im geteilten Bildschirm", "Carte du trajet en écran partagé", "Tarjeta del viaje en pantalla dividida"),
+        "Bar along the bottom" to listOf("Balk onderaan", "Leiste unten", "Barre en bas", "Barra en la parte inferior"),
+        "Column on the left" to listOf("Kolom links", "Spalte links", "Colonne à gauche", "Columna a la izquierda"),
+        "What's new" to listOf("Wat is er nieuw", "Neuigkeiten", "Nouveautés", "Novedades"),
+        "Media controls" to listOf("Mediabediening", "Mediensteuerung", "Commandes multimédia", "Controles multimedia"),
+        "Back, play / pause and next at the bottom of the screen while music or radio plays on this device, from any app" to listOf("Terug, afspelen / pauzeren en volgende onder in beeld terwijl er muziek of radio speelt op dit apparaat, vanuit elke app", "Zurück, Wiedergabe / Pause und Weiter unten auf dem Bildschirm, während auf diesem Gerät Musik oder Radio läuft, aus jeder App", "Précédent, lecture / pause et suivant en bas de l'écran pendant que de la musique ou la radio joue sur cet appareil, depuis n'importe quelle appli", "Anterior, reproducir / pausa y siguiente en la parte inferior de la pantalla mientras suena música o radio en este dispositivo, desde cualquier app"),
+        "Song and artwork" to listOf("Nummer en albumhoes", "Titel und Cover", "Titre et pochette", "Canción y portada"),
+        "Shows what's playing. Needs notification access, the same as home screen apps use for their media controls" to listOf("Laat zien wat er speelt. Heeft meldingstoegang nodig, net als startscherm-apps voor hun mediabediening", "Zeigt, was gerade läuft. Benötigt Benachrichtigungszugriff, wie ihn Startbildschirm-Apps für ihre Mediensteuerung nutzen", "Affiche ce qui est en cours de lecture. Nécessite l'accès aux notifications, comme les applis d'écran d'accueil pour leurs commandes multimédia", "Muestra lo que suena. Necesita acceso a las notificaciones, igual que las apps de pantalla de inicio para sus controles multimedia"),
+        "Tap to allow song info" to listOf("Tik om nummerinfo toe te staan", "Tippen, um Titelinfos zu erlauben", "Touchez pour autoriser les infos du titre", "Toca para permitir la información de la canción"),
+        "Previous" to listOf("Vorige", "Zurück", "Précédent", "Anterior"),
+        "Play" to listOf("Afspelen", "Wiedergabe", "Lecture", "Reproducir"),
+        "Pause" to listOf("Pauzeren", "Pause", "Pause", "Pausa"),
+        "Auto zoom" to listOf("Automatisch zoomen", "Automatischer Zoom", "Zoom automatique", "Zoom automático"),
+        "Zooms out at speed and in at junctions. Off keeps one steady zoom, which + and − still change" to listOf("Zoomt uit bij snelheid en in bij kruispunten. Uit houdt één vaste zoom aan, die + en − nog steeds veranderen", "Zoomt bei Tempo heraus und an Kreuzungen hinein. Aus hält einen festen Zoom, den + und − weiterhin ändern", "Dézoome à grande vitesse et zoome aux intersections. Désactivé garde un zoom fixe, que + et − modifient toujours", "Aleja el mapa a alta velocidad y lo acerca en los cruces. Desactivado mantiene un zoom fijo, que + y − siguen cambiando"),
+        "Search bar" to listOf("Zoekbalk", "Suchleiste", "Barre de recherche", "Barra de búsqueda"),
+        "Search as a button" to listOf("Zoeken als knop", "Suche als Taste", "Recherche en bouton", "Búsqueda como botón"),
+        "With no route, a round search button in the corner instead of the search bar and its buttons, so the arrow sits in the middle. Tap it to search" to listOf("Zonder route een ronde zoekknop in de hoek in plaats van de zoekbalk en zijn knoppen, zodat de pijl in het midden staat. Tik erop om te zoeken", "Ohne Route eine runde Suchtaste in der Ecke statt der Suchleiste und ihrer Tasten, damit der Pfeil in der Mitte sitzt. Zum Suchen antippen", "Sans itinéraire, un bouton de recherche rond dans le coin au lieu de la barre de recherche et de ses boutons, pour que la flèche soit au centre. Touchez-le pour chercher", "Sin ruta, un botón de búsqueda redondo en la esquina en lugar de la barra de búsqueda y sus botones, para que la flecha quede en el centro. Tócalo para buscar"),
+        "GPX tracks" to listOf("GPX-tracks", "GPX-Tracks", "Traces GPX", "Rutas GPX"),
+        "Tracks from a .gpx file (Komoot, Strava, Garmin…). Drive follows the track with spoken turns." to listOf("Tracks uit een .gpx-bestand (Komoot, Strava, Garmin…). Rijden volgt de track met gesproken afslagen.", "Tracks aus einer .gpx-Datei (Komoot, Strava, Garmin…). Fahren folgt dem Track mit gesprochenen Abbiegehinweisen.", "Traces d'un fichier .gpx (Komoot, Strava, Garmin…). Conduire suit la trace avec les virages annoncés.", "Rutas de un archivo .gpx (Komoot, Strava, Garmin…). Conducir sigue la ruta con giros por voz."),
+        "Drive" to listOf("Rijden", "Fahren", "Conduire", "Conducir"),
+        "Drive this" to listOf("Deze rijden", "Diesen fahren", "Conduire celle-ci", "Conducir esta"),
+        "Import GPX" to listOf("GPX importeren", "GPX importieren", "Importer un GPX", "Importar GPX"),
+        "Importing…" to listOf("Importeren…", "Wird importiert…", "Importation…", "Importando…"),
+        "No tracks yet." to listOf("Nog geen tracks.", "Noch keine Tracks.", "Aucune trace pour l'instant.", "Aún no hay rutas."),
+        "Track imported" to listOf("Track geïmporteerd", "Track importiert", "Trace importée", "Ruta importada"),
+        "That isn't a GPX file" to listOf("Dat is geen GPX-bestand", "Das ist keine GPX-Datei", "Ce n'est pas un fichier GPX", "Eso no es un archivo GPX"),
+        "Couldn't open that file" to listOf("Kon dat bestand niet openen", "Diese Datei ließ sich nicht öffnen", "Impossible d'ouvrir ce fichier", "No se pudo abrir ese archivo"),
+        "That file has no track in it" to listOf("Dat bestand bevat geen track", "Diese Datei enthält keinen Track", "Ce fichier ne contient aucune trace", "Ese archivo no contiene ninguna ruta"),
+        "Couldn't save the track" to listOf("Kon de track niet opslaan", "Der Track ließ sich nicht speichern", "Impossible d'enregistrer la trace", "No se pudo guardar la ruta"),
+        "starts {0} away" to listOf("begint op {0}", "beginnt in {0} Entfernung", "commence à {0}", "empieza a {0}"),
+        "Couldn't read that track" to listOf("Kon die track niet lezen", "Dieser Track ließ sich nicht lesen", "Impossible de lire cette trace", "No se pudo leer esa ruta"),
+        "End of the track" to listOf("Einde van de track", "Ende des Tracks", "Fin de la trace", "Final de la ruta"),
+        "Import a .gpx file, show it on the map or drive it with spoken turns" to listOf("Importeer een .gpx-bestand, toon het op de kaart of rijd het met gesproken afslagen", "Eine .gpx-Datei importieren, auf der Karte zeigen oder mit gesprochenen Hinweisen abfahren", "Importer un fichier .gpx, l'afficher sur la carte ou le suivre avec les virages annoncés", "Importa un archivo .gpx, muéstralo en el mapa o recórrelo con giros por voz"),
+        "1 track" to listOf("1 track", "1 Track", "1 trace", "1 ruta"),
+        "{0} tracks" to listOf("{0} tracks", "{0} Tracks", "{0} traces", "{0} rutas"),
+        "GPX track" to listOf("GPX-track", "GPX-Track", "Trace GPX", "Ruta GPX"),
+        "Road name when driving without a route" to listOf("Wegnaam bij rijden zonder route", "Straßenname beim Fahren ohne Route", "Nom de la route en conduisant sans itinéraire", "Nombre de la vía al conducir sin ruta"),
+        "Heading next to the road name" to listOf("Richting naast de wegnaam", "Richtung neben dem Straßennamen", "Direction à côté du nom de la route", "Dirección junto al nombre de la vía"),
+        "\"Heading E\" after the road. Off shows just the road" to listOf("„Richting O\" na de weg. Uit toont alleen de weg", "„Richtung O\" nach der Straße. Aus zeigt nur die Straße", "« Direction E » après la route. Désactivé n'affiche que la route", "«Dirección E» después de la vía. Desactivado muestra solo la vía"),
+        "Recent places under the search bar" to listOf("Recente plaatsen onder de zoekbalk", "Letzte Orte unter der Suchleiste", "Lieux récents sous la barre de recherche", "Lugares recientes bajo la barra de búsqueda"),
+        "Your saved places are in the row of tiles under the search bar, which ends with Add a place" to listOf("Je opgeslagen plaatsen staan in de rij tegels onder de zoekbalk, die eindigt met Plaats toevoegen", "Ihre gespeicherten Orte stehen in der Kachelreihe unter der Suchleiste, die mit Ort hinzufügen endet", "Vos lieux enregistrés sont dans la rangée de tuiles sous la barre de recherche, qui se termine par Ajouter un lieu", "Tus lugares guardados están en la fila de mosaicos bajo la barra de búsqueda, que termina con Añadir un lugar"),
+        "Places you drive to show up here" to listOf("Plaatsen waar je naartoe rijdt verschijnen hier", "Orte, zu denen Sie fahren, erscheinen hier", "Les lieux où vous allez apparaissent ici", "Los lugares a los que conduces aparecen aquí"),
+        "Save somewhere" to listOf("Sla een plek op", "Einen Ort speichern", "Enregistrer un lieu", "Guardar un lugar"),
+        "Add a stop" to listOf("Tussenstop toevoegen", "Zwischenstopp hinzufügen", "Ajouter un arrêt", "Añadir una parada"),
+        "Couldn't find {0}" to listOf("Kon {0} niet vinden", "{0} wurde nicht gefunden", "Impossible de trouver {0}", "No se encontró {0}"),
+        "No stops yet. Add one and the route goes through it on the way." to listOf("Nog geen tussenstops. Voeg er een toe en de route gaat er onderweg langs.", "Noch keine Zwischenstopps. Fügen Sie einen hinzu, dann führt die Route unterwegs dorthin.", "Aucun arrêt pour l'instant. Ajoutez-en un et l'itinéraire y passera en chemin.", "Aún no hay paradas. Añade una y la ruta pasará por ella."),
+        "Search for a place on the way" to listOf("Zoek een plek onderweg", "Einen Ort auf dem Weg suchen", "Rechercher un lieu sur le chemin", "Buscar un lugar en el camino"),
     )
 
     private fun rowsB0(): List<Pair<String, List<String>>> = listOf(
@@ -3647,5 +3826,88 @@ object L {
         "Same as the app" to listOf("Come nell'app", "Igual à app", "Jak w aplikacji"),
         "Speedometer style" to listOf("Stile del tachimetro", "Estilo do velocímetro", "Styl prędkościomierza"),
         "Speedometer style on the car screen" to listOf("Stile del tachimetro sullo schermo dell'auto", "Estilo do velocímetro no ecrã do carro", "Styl prędkościomierza na ekranie samochodu"),
+        "Group" to listOf("Gruppo", "Grupo", "Grupa"),
+        "New group" to listOf("Nuovo gruppo", "Novo grupo", "Nowa grupa"),
+        "No group" to listOf("Nessun gruppo", "Sem grupo", "Bez grupy"),
+        "1 place" to listOf("1 luogo", "1 local", "1 miejsce"),
+        "{0} places" to listOf("{0} luoghi", "{0} locais", "Miejsca: {0}"),
+        "Top speed for arrival times" to listOf("Velocità massima per gli orari di arrivo", "Velocidade máxima para as horas de chegada", "Prędkość maksymalna do czasu przyjazdu"),
+        "Routes are timed no faster than this: for vans, lorries or towing. Off uses normal road speeds" to listOf("I percorsi sono calcolati senza superare questa velocità: per furgoni, camion o con rimorchio. Spento usa le velocità normali", "As rotas são calculadas sem ultrapassar esta velocidade: para carrinhas, camiões ou com reboque. Desligado usa as velocidades normais", "Czas tras liczony jest nie szybciej niż ta prędkość: dla dostawczaków, ciężarówek lub z przyczepą. Wyłączone używa zwykłych prędkości"),
+        "Categories" to listOf("Categorie", "Categorias", "Kategorie"),
+        "Didn't catch that" to listOf("Non ho capito", "Não percebi", "Nie zrozumiałem"),
+        "Display" to listOf("Schermo", "Ecrã", "Ekran"),
+        "Driving" to listOf("Guida", "Condução", "Jazda"),
+        "Home and Work under the search bar" to listOf("Casa e Lavoro sotto la barra di ricerca", "Casa e Trabalho sob a barra de pesquisa", "Dom i Praca pod paskiem wyszukiwania"),
+        "Home button" to listOf("Pulsante Casa", "Botão Casa", "Przycisk Dom"),
+        "Include API keys" to listOf("Includi chiavi API", "Incluir chaves API", "Dołącz klucze API"),
+        "Includes settings and saved places, not the offline pack. Your API keys are only included with the switch on. A backup from Horizon Launcher can be restored here too." to listOf("Include impostazioni e luoghi salvati, non il pacchetto offline. Le chiavi API sono incluse solo con l'interruttore attivo. Qui si può ripristinare anche un backup di Horizon Launcher.", "Inclui definições e locais guardados, não o pacote offline. As suas chaves API só são incluídas com o interruptor ligado. Também pode restaurar aqui uma cópia do Horizon Launcher.", "Zawiera ustawienia i zapisane miejsca, bez pakietu offline. Klucze API są dołączane tylko po włączeniu przełącznika. Można tu też przywrócić kopię z Horizon Launcher."),
+        "Larger" to listOf("Più grande", "Maior", "Większy"),
+        "Listening…" to listOf("In ascolto…", "A ouvir…", "Słucham…"),
+        "Microphone" to listOf("Microfono", "Microfone", "Mikrofon"),
+        "North up" to listOf("Nord in alto", "Norte para cima", "Północ u góry"),
+        "Not allowed" to listOf("Non consentito", "Não permitido", "Brak zgody"),
+        "On cars that offer it" to listOf("Sulle auto che lo prevedono", "Nos carros que o oferecem", "W autach, które to obsługują"),
+        "On this screen and on Android Auto. Your Home and Work places are kept either way." to listOf("Su questo schermo e su Android Auto. I luoghi Casa e Lavoro vengono comunque conservati.", "Neste ecrã e no Android Auto. Os seus locais Casa e Trabalho são mantidos em qualquer caso.", "Na tym ekranie i w Android Auto. Miejsca Dom i Praca zostają zachowane w obu przypadkach."),
+        "Phone" to listOf("Telefono", "Telefone", "Telefon"),
+        "Puts your TomTom and Mapbox keys in the backup file, so Restore brings them back. The file is plain text: keep it somewhere safe" to listOf("Inserisce le chiavi TomTom e Mapbox nel file di backup, così Ripristina le recupera. Il file è testo semplice: conservalo al sicuro", "Coloca as suas chaves TomTom e Mapbox no ficheiro de cópia, para que Restaurar as recupere. O ficheiro é texto simples: guarde-o num local seguro", "Zapisuje klucze TomTom i Mapbox w pliku kopii, by Przywróć je odzyskało. Plik to zwykły tekst: przechowuj go w bezpiecznym miejscu"),
+        "Recent" to listOf("Recenti", "Recentes", "Ostatnie"),
+        "Smaller" to listOf("Più piccolo", "Menor", "Mniejszy"),
+        "Sun" to listOf("Sole", "Sol", "Słońce"),
+        "To listen straight away, allow the microphone in Horizon Nav on your phone: Settings › Android Auto" to listOf("Per ascoltare subito, consenti il microfono in Horizon Nav sul telefono: Impostazioni › Android Auto", "Para ouvir de imediato, permita o microfone no Horizon Nav no telemóvel: Definições › Android Auto", "Aby słuchać od razu, zezwól na mikrofon w Horizon Nav na telefonie: Ustawienia › Android Auto"),
+        "Top right is in the corner itself, and makes way while Android Auto's buttons are showing there" to listOf("In alto a destra sta proprio nell'angolo e si sposta finché lì ci sono i pulsanti di Android Auto", "Canto superior direito fica no próprio canto e afasta-se enquanto os botões do Android Auto aparecem aí", "Prawy górny róg to sam róg; ustępuje, gdy pokazują się tam przyciski Android Auto"),
+        "Under the search bar" to listOf("Sotto la barra di ricerca", "Sob a barra de pesquisa", "Pod paskiem wyszukiwania"),
+        "Under turn" to listOf("Sotto la svolta", "Sob a manobra", "Pod skrętem"),
+        "Voice search isn't available on this phone" to listOf("La ricerca vocale non è disponibile su questo telefono", "A pesquisa por voz não está disponível neste telemóvel", "Wyszukiwanie głosowe jest niedostępne na tym telefonie"),
+        "Voice search on the car screen" to listOf("Ricerca vocale sullo schermo dell'auto", "Pesquisa por voz no ecrã do carro", "Wyszukiwanie głosowe na ekranie auta"),
+        "With the microphone allowed, the microphone button on the car screen listens straight away. Without it, the button opens Android Auto's search screen, which has a microphone of its own." to listOf("Con il microfono consentito, il pulsante del microfono sullo schermo dell'auto ascolta subito. Senza, il pulsante apre la schermata di ricerca di Android Auto, che ha un suo microfono.", "Com o microfone permitido, o botão do microfone no ecrã do carro ouve de imediato. Sem ele, o botão abre o ecrã de pesquisa do Android Auto, que tem microfone próprio.", "Z dostępem do mikrofonu przycisk mikrofonu na ekranie auta słucha od razu. Bez niego przycisk otwiera ekran wyszukiwania Android Auto z własnym mikrofonem."),
+        "Work button" to listOf("Pulsante Lavoro", "Botão Trabalho", "Przycisk Praca"),
+        "No matches. Try adding a town or postcode." to listOf("Nessun risultato. Prova ad aggiungere una città o un CAP.", "Sem resultados. Experimente adicionar uma localidade ou código postal.", "Brak wyników. Dodaj miejscowość lub kod pocztowy."),
+        "Trip card in split screen" to listOf("Scheda del viaggio a schermo diviso", "Cartão da viagem em ecrã dividido", "Karta podróży na podzielonym ekranie"),
+        "Bar along the bottom" to listOf("Barra in basso", "Barra em baixo", "Pasek na dole"),
+        "Column on the left" to listOf("Colonna a sinistra", "Coluna à esquerda", "Kolumna po lewej"),
+        "What's new" to listOf("Novità", "Novidades", "Co nowego"),
+        "Media controls" to listOf("Controlli multimediali", "Controlos multimédia", "Sterowanie multimediami"),
+        "Back, play / pause and next at the bottom of the screen while music or radio plays on this device, from any app" to listOf("Indietro, riproduci / pausa e avanti in fondo allo schermo mentre su questo dispositivo suona musica o radio, da qualsiasi app", "Anterior, reproduzir / pausa e seguinte no fundo do ecrã enquanto toca música ou rádio neste dispositivo, de qualquer app", "Wstecz, odtwarzaj / pauza i dalej na dole ekranu, gdy na tym urządzeniu gra muzyka lub radio, z dowolnej aplikacji"),
+        "Song and artwork" to listOf("Brano e copertina", "Música e capa", "Utwór i okładka"),
+        "Shows what's playing. Needs notification access, the same as home screen apps use for their media controls" to listOf("Mostra cosa è in riproduzione. Richiede l'accesso alle notifiche, come usano le app della schermata Home per i loro controlli multimediali", "Mostra o que está a tocar. Precisa de acesso às notificações, tal como as apps de ecrã inicial usam para os seus controlos multimédia", "Pokazuje, co gra. Wymaga dostępu do powiadomień, tak jak aplikacje ekranu głównego do sterowania multimediami"),
+        "Tap to allow song info" to listOf("Tocca per consentire le info del brano", "Toque para permitir a informação da música", "Dotknij, aby zezwolić na informacje o utworze"),
+        "Previous" to listOf("Precedente", "Anterior", "Poprzedni"),
+        "Play" to listOf("Riproduci", "Reproduzir", "Odtwarzaj"),
+        "Pause" to listOf("Pausa", "Pausa", "Pauza"),
+        "Auto zoom" to listOf("Zoom automatico", "Zoom automático", "Automatyczne powiększenie"),
+        "Zooms out at speed and in at junctions. Off keeps one steady zoom, which + and − still change" to listOf("Allontana in velocità e avvicina agli incroci. Disattivato mantiene uno zoom fisso, che + e − cambiano comunque", "Afasta a alta velocidade e aproxima nos cruzamentos. Desligado mantém um zoom fixo, que + e − continuam a alterar", "Oddala przy dużej prędkości i przybliża na skrzyżowaniach. Wyłączone utrzymuje stałe powiększenie, które + i − nadal zmieniają"),
+        "Search bar" to listOf("Barra di ricerca", "Barra de pesquisa", "Pasek wyszukiwania"),
+        "Search as a button" to listOf("Ricerca come pulsante", "Pesquisa como botão", "Wyszukiwanie jako przycisk"),
+        "With no route, a round search button in the corner instead of the search bar and its buttons, so the arrow sits in the middle. Tap it to search" to listOf("Senza percorso, un pulsante di ricerca rotondo nell'angolo al posto della barra di ricerca e dei suoi pulsanti, così la freccia sta al centro. Toccalo per cercare", "Sem rota, um botão de pesquisa redondo no canto em vez da barra de pesquisa e dos seus botões, para a seta ficar ao centro. Toque nele para pesquisar", "Bez trasy okrągły przycisk wyszukiwania w rogu zamiast paska wyszukiwania i jego przycisków, więc strzałka jest na środku. Dotknij, aby wyszukać"),
+        "GPX tracks" to listOf("Tracce GPX", "Trilhos GPX", "Ślady GPX"),
+        "Tracks from a .gpx file (Komoot, Strava, Garmin…). Drive follows the track with spoken turns." to listOf("Tracce da un file .gpx (Komoot, Strava, Garmin…). Guida segue la traccia con le svolte a voce.", "Trilhos de um ficheiro .gpx (Komoot, Strava, Garmin…). Conduzir segue o trilho com as viragens faladas.", "Ślady z pliku .gpx (Komoot, Strava, Garmin…). Jedź prowadzi po śladzie z zapowiedziami skrętów."),
+        "Drive" to listOf("Guida", "Conduzir", "Jedź"),
+        "Drive this" to listOf("Guida questa", "Conduzir este", "Jedź tym"),
+        "Import GPX" to listOf("Importa GPX", "Importar GPX", "Importuj GPX"),
+        "Importing…" to listOf("Importazione…", "A importar…", "Importowanie…"),
+        "No tracks yet." to listOf("Ancora nessuna traccia.", "Ainda não há trilhos.", "Brak śladów."),
+        "Track imported" to listOf("Traccia importata", "Trilho importado", "Ślad zaimportowany"),
+        "That isn't a GPX file" to listOf("Quello non è un file GPX", "Isso não é um ficheiro GPX", "To nie jest plik GPX"),
+        "Couldn't open that file" to listOf("Impossibile aprire quel file", "Não foi possível abrir esse ficheiro", "Nie udało się otworzyć tego pliku"),
+        "That file has no track in it" to listOf("Quel file non contiene tracce", "Esse ficheiro não tem nenhum trilho", "Ten plik nie zawiera śladu"),
+        "Couldn't save the track" to listOf("Impossibile salvare la traccia", "Não foi possível guardar o trilho", "Nie udało się zapisać śladu"),
+        "starts {0} away" to listOf("inizia a {0}", "começa a {0}", "zaczyna się {0} stąd"),
+        "Couldn't read that track" to listOf("Impossibile leggere quella traccia", "Não foi possível ler esse trilho", "Nie udało się odczytać tego śladu"),
+        "End of the track" to listOf("Fine della traccia", "Fim do trilho", "Koniec śladu"),
+        "Import a .gpx file, show it on the map or drive it with spoken turns" to listOf("Importa un file .gpx, mostralo sulla mappa o percorrilo con le svolte a voce", "Importe um ficheiro .gpx, mostre-o no mapa ou conduza-o com viragens faladas", "Zaimportuj plik .gpx, pokaż go na mapie lub przejedź z zapowiedziami skrętów"),
+        "1 track" to listOf("1 traccia", "1 trilho", "1 ślad"),
+        "{0} tracks" to listOf("{0} tracce", "{0} trilhos", "Śladów: {0}"),
+        "GPX track" to listOf("Traccia GPX", "Trilho GPX", "Ślad GPX"),
+        "Road name when driving without a route" to listOf("Nome della strada guidando senza percorso", "Nome da estrada ao conduzir sem rota", "Nazwa drogi podczas jazdy bez trasy"),
+        "Heading next to the road name" to listOf("Direzione accanto al nome della strada", "Direção junto ao nome da estrada", "Kierunek obok nazwy drogi"),
+        "\"Heading E\" after the road. Off shows just the road" to listOf("«Direzione E» dopo la strada. Disattivato mostra solo la strada", "«Direção E» depois da estrada. Desligado mostra só a estrada", "„Kierunek E\" po nazwie drogi. Wyłączone pokazuje tylko drogę"),
+        "Recent places under the search bar" to listOf("Luoghi recenti sotto la barra di ricerca", "Locais recentes sob a barra de pesquisa", "Ostatnie miejsca pod paskiem wyszukiwania"),
+        "Your saved places are in the row of tiles under the search bar, which ends with Add a place" to listOf("I tuoi luoghi salvati sono nella fila di riquadri sotto la barra di ricerca, che termina con Aggiungi un luogo", "Os seus locais guardados estão na fila de mosaicos sob a barra de pesquisa, que termina com Adicionar um local", "Zapisane miejsca są w rzędzie kafelków pod paskiem wyszukiwania, który kończy się przyciskiem Dodaj miejsce"),
+        "Places you drive to show up here" to listOf("I luoghi in cui vai compaiono qui", "Os locais para onde conduz aparecem aqui", "Tu pojawią się miejsca, do których jedziesz"),
+        "Save somewhere" to listOf("Salva un luogo", "Guardar um local", "Zapisz miejsce"),
+        "Add a stop" to listOf("Aggiungi una tappa", "Adicionar uma paragem", "Dodaj przystanek"),
+        "Couldn't find {0}" to listOf("Impossibile trovare {0}", "Não foi possível encontrar {0}", "Nie znaleziono: {0}"),
+        "No stops yet. Add one and the route goes through it on the way." to listOf("Ancora nessuna tappa. Aggiungine una e il percorso ci passerà lungo la strada.", "Ainda sem paragens. Adicione uma e a rota passa por ela pelo caminho.", "Brak przystanków. Dodaj jeden, a trasa poprowadzi przez niego po drodze."),
+        "Search for a place on the way" to listOf("Cerca un luogo lungo la strada", "Pesquisar um local pelo caminho", "Szukaj miejsca po drodze"),
     )
 }

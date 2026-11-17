@@ -41,6 +41,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -196,4 +198,9 @@ internal fun notesSummary(notes: String): String {
     val items = parseNotes(notes)
     if (items.isEmpty()) return ""
     return listOf(0, 1, 2).mapNotNull { k -> items.count { it.kind == k }.takeIf { it > 0 }?.let { n -> "$n " + if (n > 1) kindCount[k].second else kindCount[k].first } }.joinToString(" · ")
+}
+
+/** Asks the app to show the What's new card again (from Settings › Horizon Nav › Version, GitHub #149). */
+internal object WhatsNewCard {
+    var reopen by androidx.compose.runtime.mutableStateOf(false)
 }

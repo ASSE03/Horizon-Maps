@@ -79,6 +79,8 @@ import com.headunit.launcher.OwnModel
 import com.headunit.launcher.Place
 import com.headunit.launcher.Prefs
 import com.headunit.launcher.PreferenceKeys
+import com.headunit.launcher.carSpeedSpot
+import com.headunit.launcher.setCarSpeedSpot
 import com.headunit.launcher.mapSource
 import com.headunit.launcher.mapDetail
 import com.headunit.launcher.setApiKey
@@ -243,7 +245,7 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
                         5 -> GuidanceSection(prefs, engine)
                         6 -> AlertsSection(prefs, engine)
                         7 -> SoundSection(prefs, engine)
-                        8 -> { PlacesSection(engine); PhoneLinkGroup(prefs); SharingGroups(prefs) }
+                        8 -> { PlacesSection(engine); GpxGroup(engine, onShown = onClose); PhoneLinkGroup(prefs); SharingGroups(prefs) }
                         9 -> FuelSection(prefs, engine)
                         10 -> { OfflineMapsContent(prefs, engine); OfflinePlacesGroup(engine) }
                         11 -> ScreenSection(prefs, engine)
@@ -534,7 +536,28 @@ private fun VehicleGroup(prefs: Prefs, imperial: Boolean) {
     val lorry = prefs.s(PreferenceKeys.VEHICLE, "car") == "lorry"
     SGroup("Véhicule", footer = if (lorry) "Utilisé par TomTom et les itinéraires hors ligne, et par Mapbox pour la hauteur, la largeur et le poids. Les limites viennent des données de la carte et certaines peuvent manquer : respectez toujours la signalisation." else null) {
         SChoice("Véhicule", listOf("car" to "Voiture", "lorry" to "Poids lourd"), if (lorry) "lorry" else "car",
-            if (lorry) "Les itinéraires évitent les ponts bas, limites de poids et interdictions poids lourds selon votre gabarit" else null) { prefs.put(PreferenceKeys.VEHICLE, it) }
+            if (lorry) "Les itinéraires évitent ponts bas, limites de poids et interdictions poids lourds selon votre gabarit" else null) { prefs.put(PreferenceKeys.VEHICLE, it) }
+        // your top speed for arrival times (vans, lorries, towing), in the units you drive in (GitHub #134)
+        run {
+            val c = LocalVw.current
+            val mph = imperial
+            val steps = if (mph) Vehicle.TOP_MPH else Vehicle.TOP_KMH
+            val savedUnit = prefs.s(PreferenceKeys.TOP_SPEED_UNIT, "mph")
+            val savedV = prefs.i(PreferenceKeys.TOP_SPEED, 0)
+            // a value saved in the other unit is shown at the nearest step of this one
+            val cur = if (savedV <= 0) 0 else {
+                val inUnit = if ((savedUnit == "mph") == mph) savedV.toDouble() else if (mph) savedV / 1.609344 else savedV * 1.609344
+                steps.filter { it > 0 }.minByOrNull { kotlin.math.abs(it - inUnit) } ?: 0
+            }
+            val idx = steps.indexOf(cur).coerceAtLeast(0)
+            fun save(v: Int) { prefs.put(PreferenceKeys.TOP_SPEED_UNIT, if (mph) "mph" else "kmh"); prefs.put(PreferenceKeys.TOP_SPEED, v); Vehicle.load(prefs) }
+            SItem("Vitesse maximale pour les heures d'arrivée", "Les itinéraires sont chronométrés sans dépasser cette vitesse : pour les utilitaires, poids lourds ou avec remorque. Désactivé utilise les vitesses normales") {
+                SButton("−") { save(steps[(idx - 1).coerceAtLeast(0)]) }
+                Text(if (cur == 0) "Désactivé" else "$cur ${if (mph) "mph" else "km/h"}", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.widthIn(min = 92.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                SButton("+") { save(steps[(idx + 1).coerceAtMost(steps.size - 1)]) }
+            }
+        }
         if (lorry) {
             SStep("Hauteur", "Chargement compris. Sert à vérifier les ponts bas", prefs, PreferenceKeys.LORRY_HEIGHT, 400, 200, 500, 5) { Vehicle.heightText(it, imperial) }
             SStep("Largeur", "Sans les rétroviseurs", prefs, PreferenceKeys.LORRY_WIDTH, 255, 180, 300, 5) { String.format(java.util.Locale.US, "%.2f m", it / 100.0) }
@@ -749,6 +772,7 @@ private fun PlaceItem(label: String, p: Place?, onChange: () -> Unit, onClear: (
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun PlacesSection(engine: NavEngine) {
     val pl = engine.places
@@ -765,21 +789,61 @@ private fun PlacesSection(engine: NavEngine) {
     val mine = remember(raw) { pl.customs() }
     var renaming by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
+    // (filed in groups if you like, GitHub #138: a group folds open to its places; each place has a Group button)
+    var grouping by remember { mutableStateOf<String?>(null) }
+    var openGroups by remember { mutableStateOf(setOf<String>()) }
+    var renamingGroup by remember { mutableStateOf<String?>(null) }
+    val groups = remember(raw) { pl.groups() }
     SGroup("Vos lieux", footer = "Affichés en boutons sous la barre de recherche, après Domicile et Travail. Ajoutez-en un avec le + là-bas.") {
         if (mine.isEmpty()) SNote("Pas encore de lieux à vous.")
-        mine.forEachIndexed { i, lp ->
-            if (renaming == lp.label) {
-                var t by remember(lp.label) { mutableStateOf(lp.label) }
-                SItem("Renommer ${lp.label}") {
-                    SField(t, { t = it.take(24) }, width = 220.dp)
-                    SButton("Enregistrer", primary = true) { pl.renameCustom(lp.label, t); renaming = null }
+        @Composable
+        fun placeRow(i: Int, lp: com.headunit.launcher.LabeledPlace, indent: Boolean) {
+            val ind = if (indent) Modifier.padding(start = 18.dp) else Modifier
+            Column(ind) {
+                if (renaming == lp.label) {
+                    var t by remember(lp.label) { mutableStateOf(lp.label) }
+                    SItem("Renommer ${lp.label}") {
+                        SField(t, { t = it.take(24) }, width = 220.dp)
+                        SButton("Enregistrer", primary = true) { pl.renameCustom(lp.label, t); renaming = null }
+                    }
+                } else SItem(lp.label, lp.place.name + if (lp.place.sub.isNotBlank()) ", " + lp.place.sub else "") {
+                    if (i > 0) SButton("↑") { pl.moveCustom(lp.label, -1) }
+                    SButton("Groupe") { grouping = if (grouping == lp.label) null else lp.label }
+                    SButton("Renommer") { renaming = lp.label }
+                    SButton("Supprimer", danger = true) { pl.removeCustom(lp.label) }
                 }
-            } else SItem(lp.label, lp.place.name + if (lp.place.sub.isNotBlank()) ", " + lp.place.sub else "") {
-                if (i > 0) SButton("↑") { pl.moveCustom(lp.label, -1) }
-                SButton("Renommer") { renaming = lp.label }
-                SButton("Retirer", danger = true) { pl.removeCustom(lp.label) }
+                if (grouping == lp.label) {
+                    var newName by remember(lp.label) { mutableStateOf("") }
+                    androidx.compose.foundation.layout.FlowRow(
+                        Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        for (g in groups) if (g != lp.group) SButton(g) { pl.setGroup(lp.label, g); grouping = null; openGroups = openGroups + g }
+                        SField(newName, { newName = it.take(24) }, placeholder = "Nouveau groupe", width = 180.dp)
+                        if (newName.isNotBlank()) SButton("Ajouter", primary = true) { pl.setGroup(lp.label, newName); openGroups = openGroups + newName.trim(); grouping = null }
+                        if (lp.group.isNotBlank()) SButton("Aucun groupe") { pl.setGroup(lp.label, ""); grouping = null }
+                        SButton("Annuler") { grouping = null }
+                    }
+                }
             }
         }
+        // the groups first, each folding open; then the places in no group
+        for (g in groups) {
+            val inG = mine.withIndex().filter { it.value.group == g }
+            val open = g in openGroups
+            if (renamingGroup == g) {
+                var t by remember(g) { mutableStateOf(g) }
+                SItem("Renommer $g") {
+                    SField(t, { t = it.take(24) }, width = 220.dp)
+                    SButton("Enregistrer", primary = true) { pl.renameGroup(g, t); if (open) openGroups = openGroups - g + t.trim(); renamingGroup = null }
+                }
+            } else SItem((if (open) "▾ " else "▸ ") + g, if (inG.size == 1) "1 lieu" else "${inG.size} lieux",
+                onClick = { openGroups = if (open) openGroups - g else openGroups + g }) {
+                SButton("Renommer") { renamingGroup = g }
+            }
+            if (open) for ((i, lp) in inG) placeRow(i, lp, true)
+        }
+        mine.forEachIndexed { i, lp -> if (lp.group.isBlank()) placeRow(i, lp, false) }
         SItem("Ajouter un lieu") { SButton("Ajouter", primary = true) { adding = true } }
     }
     if (adding) AddPlaceDialog(engine, null) { adding = false }
@@ -793,17 +857,17 @@ private fun PlacesSection(engine: NavEngine) {
             when {
                 renamingFav == f -> {
                     var t by remember(f) { mutableStateOf(f.name) }
-                    SItem("Renommer ${f.name}") {
+                    SItemStacked("Renommer ${f.name}") {
                         SField(t, { t = it.take(40) }, width = 220.dp)
                         SButton("Enregistrer", primary = true) { pl.renameFavourite(f, t); renamingFav = null }
                     }
                 }
-                slotFor == f -> SItem("Définir ${f.name} comme…") {
-                    SButton("Maison", primary = true) { pl.setSlot("home", f); slotFor = null; engine.toast("${f.name} est maintenant le domicile", 2500) }
-                    SButton("Travail", primary = true) { pl.setSlot("work", f); slotFor = null; engine.toast("${f.name} est maintenant le travail", 2500) }
+                slotFor == f -> SItemStacked("Définir ${f.name}…") {
+                    SButton("Domicile", primary = true) { pl.setSlot("home", f); slotFor = null; engine.toast("${f.name} est désormais le domicile", 2500) }
+                    SButton("Travail", primary = true) { pl.setSlot("work", f); slotFor = null; engine.toast("${f.name} est désormais le travail", 2500) }
                     SButton("Annuler") { slotFor = null }
                 }
-                else -> SItem(f.name, f.sub) {
+                else -> SItemStacked(f.name, f.sub) {
                     SButton("Renommer") { renamingFav = f }
                     SButton("Définir Domicile / Travail") { slotFor = f }
                     SButton("Retirer", danger = true) { pl.toggleFavourite(f) }
@@ -812,10 +876,19 @@ private fun PlacesSection(engine: NavEngine) {
         }
         if (favs.size > 1) SItem("Supprimer tous les favoris") { SButton("Tout supprimer", danger = true) { pl.clearFavourites() } }
     }
+    // (the Home and Work buttons under the search bar, in the app and on Android Auto: each can be left off)
+    SGroup("Barre de recherche") {
+        SToggle(engine.prefs, "Recherche en bouton", PreferenceKeys.SEARCH_BUTTON, false,
+            "Sans itinéraire, un bouton de recherche rond dans le coin au lieu de la barre de recherche et de ses boutons, pour que la flèche soit au centre. Touchez-le pour chercher")
+    }
+    SGroup("Domicile et Travail sous la barre de recherche", footer = "Sur cet écran et sur Android Auto. Vos lieux Domicile et Travail sont conservés dans tous les cas.") {
+        SToggle(engine.prefs, "Bouton Domicile", PreferenceKeys.HOME_BTN, true)
+        SToggle(engine.prefs, "Bouton Travail", PreferenceKeys.WORK_BTN, true)
+    }
     ShortcutsGroup(engine)
-    SGroup("Historique", footer = "Faites glisser un lieu sur le côté dans la liste Enregistrés et récents pour le retirer.") {
-        SToggle(engine.prefs, "Enregistrés et récents sous la barre de recherche", "quicklist", true, "La liste des favoris et lieux récents sur la carte")
-        SItem("Destinations récentes", "${pl.recents().size} récentes, plus les lieux mémorisés pour chercher sans réseau") {
+    SGroup("Historique", footer = "Faites glisser un lieu sur le côté dans la liste Enregistrés & récents pour le retirer.") {
+        SToggle(engine.prefs, "Lieux récents sous la barre de recherche", "quicklist", true, "Vos lieux enregistrés sont dans la rangée de tuiles sous la barre de recherche, qui se termine par Ajouter un lieu")
+        SItem("Destinations récentes", "${pl.recents().size} récents, plus des lieux mémorisés pour chercher sans réseau") {
             SButton("Effacer", danger = true) { pl.clearHistory(); engine.toast("Historique effacé", 2000) }
         }
     }
@@ -861,6 +934,7 @@ private fun DefaultZoomRow(prefs: Prefs) {
             Text("Plus près", color = c.sub, fontSize = 13.sp)
         }
     }
+    SToggle(prefs, "Zoom automatique", PreferenceKeys.AUTO_ZOOM, true, "Dézoome à grande vitesse et zoome aux intersections. Désactivé garde un zoom fixe, que + et − modifient toujours")
 }
 
 /**
@@ -1085,15 +1159,27 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
         SChoice("Carte de trajet", listOf("auto" to "Sous la carte de direction", "left" to "En bas à gauche", "centre" to "En bas au centre", "right" to "En bas à droite"), prefs.s(PreferenceKeys.TRIP_POS, "auto")) { prefs.put(PreferenceKeys.TRIP_POS, it) }
         SChoice("Compteur", listOf("auto" to "À l'opposé des cartes", "left" to "En bas à gauche", "right" to "En bas à droite"), prefs.s(PreferenceKeys.SPEED_SIDE, "auto")) { prefs.put(PreferenceKeys.SPEED_SIDE, it) }
     }
-    SGroup("En conduite") {
-        SToggle(prefs, "Route et cap en conduite sans itinéraire", "cruise", true)
+    SGroup("En conduisant") {
+        SToggle(prefs, "Nom de la route en conduisant sans itinéraire", "cruise", true)
+        if (prefs.b("cruise", true)) SToggle(prefs, "Direction à côté du nom de la route", PreferenceKeys.CRUISE_HEADING, true, "« Direction E » après la route. Désactivé n'affiche que la route")
         SToggle(prefs, "Garder la flèche sur la route sans itinéraire", "snaproad", true)
         SChoice("Avance de la flèche", listOf("0" to "Aucune", "0.5" to "0,5 s", "1.0" to "1 s", "1.5" to "1,5 s", "2.0" to "2 s"), prefs.s("arrowlead", "1.0"),
             "Compense le retard du GPS : la flèche est placée là où vous serez dans ce délai. Augmentez si elle arrive aux croisements après la voiture, baissez si elle les dépasse avant") { prefs.put("arrowlead", it) }
         SToggle(prefs, "Garder la flèche sur le côté", PreferenceKeys.ARROW_SIDE, false, "Quand les cartes se replient, au lieu de revenir au centre")
         SToggle(prefs, "Assombrir la carte dans les tunnels", "tunneldim", true)
-        SToggle(prefs, "Moins de boutons en conduite", "drivesimple", true)
-        SToggle(prefs, "Bloquer la saisie en conduite", "drivelock", true, "La recherche vocale reste possible")
+        SToggle(prefs, "Moins de boutons en conduisant", "drivesimple", true)
+        SToggle(prefs, "Bloquer la saisie en conduisant", "drivelock", true, "La recherche vocale fonctionne toujours")
+        SToggle(prefs, "Commandes multimédia", PreferenceKeys.MEDIA_BAR, true, "Précédent, lecture / pause et suivant en bas de l'écran pendant que de la musique ou la radio joue sur cet appareil, depuis n'importe quelle appli")
+        if (prefs.b(PreferenceKeys.MEDIA_BAR, true) && com.headunit.launcher.MediaNow.songInfoPossible) {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            // (checked again every couple of seconds while this shows, so it changes when you come back from Android's page)
+            var granted by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.headunit.launcher.MediaNow.accessGranted(ctx)) }
+            androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(2000); granted = com.headunit.launcher.MediaNow.accessGranted(ctx) } }
+            SItem("Titre et pochette", "Affiche ce qui est en cours de lecture. Nécessite l'accès aux notifications, comme les applis d'écran d'accueil pour leurs commandes multimédia",
+                onClick = { com.headunit.launcher.MediaNow.openAccessSettings(ctx) }) {
+                if (granted) Text("Autorisée", color = LocalVw.current.sub, fontSize = 14.sp) else SButton("Autoriser") { com.headunit.launcher.MediaNow.openAccessSettings(ctx) }
+            }
+        }
     }
     SGroup("Unités") {
         SChoice("Distance et vitesse", listOf("mi" to "Miles", "km" to "Kilomètres"), if (engine.imperial) "mi" else "km") { prefs.put(PreferenceKeys.DISTANCE_UNIT, it) }
@@ -1132,10 +1218,28 @@ private fun AndroidAutoSection(prefs: Prefs) {
         } catch (e: Exception) { "Inconnu" }
     }
     CarTripButtonsGroup(prefs)
+    // Voice search from the car screen's microphone button listens through the app, which needs the microphone allowed. Android
+    // only lets an app ask from its own screen (asking from the car screen is refused on newer Android), so it's asked here
+    run {
+        var micOk by remember { mutableStateOf(ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
+        val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> micOk = granted }
+        SGroup("Recherche vocale sur l'écran de la voiture", footer = "Avec le micro autorisé, le bouton micro de l'écran de la voiture écoute tout de suite. Sinon, il ouvre l'écran de recherche d'Android Auto, qui a son propre micro.") {
+            SItem("Microphone", if (micOk) "Autorisée" else "Non autorisé") {
+                if (!micOk) SButton("Autoriser", primary = true) { askMic.launch(android.Manifest.permission.RECORD_AUDIO) }
+            }
+        }
+    }
     SGroup("Position des cartes sur l'écran de la voiture", "La carte de direction reste en haut à gauche dans Android Auto, là où ses propres boutons laissent de la place") {
         CardPositionsPreview(prefs, car = true)
         SChoice("Carte de trajet", listOf("auto" to "Sous la carte de direction", "centre" to "En bas au centre", "right" to "En bas à droite"), prefs.s(PreferenceKeys.CAR_TRIP_POS, "auto")) { prefs.put(PreferenceKeys.CAR_TRIP_POS, it) }
-        SChoice("Compteur", listOf("auto" to "À l'opposé des cartes", "left" to "En bas à gauche", "right" to "En bas à droite"), prefs.s(PreferenceKeys.CAR_SPEED_SIDE, "auto")) { prefs.put(PreferenceKeys.CAR_SPEED_SIDE, it) }
+        // (Android Auto's split screen, the map in a tile beside another app: a bar along the bottom, or a narrow column, GitHub)
+        SChoice("Carte du trajet en écran partagé", listOf("bar" to "Barre en bas", "column" to "Colonne à gauche"), prefs.s(PreferenceKeys.CAR_SPLIT_TRIP, "bar")) { prefs.put(PreferenceKeys.CAR_SPLIT_TRIP, it) }
+        // (one choice for where the speedometer goes: it used to be two, "Speedometer" here for the bottom corner and "Speed
+        // position on the car screen" further down, and the first did nothing unless the second was on Bottom)
+        SChoice("Compteur", listOf("bl" to "En bas à gauche", "br" to "En bas à droite", "middle" to "Sous la carte de direction", "top" to "En haut à droite"), prefs.carSpeedSpot(),
+            "En haut à droite se place dans le coin même, et s'efface tant que les boutons d'Android Auto y sont affichés", wrap = true) { prefs.setCarSpeedSpot(it) }
+        SChoice("Style du compteur sur l'écran de la voiture", listOf("app" to "Comme dans l'appli", "compact" to "Compact"), prefs.s(PreferenceKeys.CAR_SPEED_STYLE, "app"),
+            "Compact est une petite pastille sombre avec la limite et votre vitesse côte à côte") { prefs.put(PreferenceKeys.CAR_SPEED_STYLE, it) }
     }
     SGroup("Jour et nuit sur l'écran de la voiture") {
         SChoice("Jour et nuit", listOf("sun" to "Soleil", "car" to "Voiture", "phone" to "Téléphone", "day" to "Jour", "night" to "Nuit"), prefs.s(PreferenceKeys.CARTHEME, "sun"),
@@ -1144,10 +1248,6 @@ private fun AndroidAutoSection(prefs: Prefs) {
     SGroup("Tailles sur l'écran de la voiture") {
         SSlider("Taille générale sur l'écran de la voiture", prefs.i(PreferenceKeys.CARSCALE, 100).toFloat(), 40f..300f, "%", sub = "Échelle de base pour tout l'affichage", steps = 25, reset = 100f) { prefs.put(PreferenceKeys.CARSCALE, it) }
         SSlider("Taille du compteur et du panneau de limitation", prefs.i(PreferenceKeys.CAR_SPEED_SIZE, 100).toFloat(), 40f..180f, "%", sub = "Rétrécit automatiquement si la zone d'écran disponible est trop petite", reset = 100f) { prefs.put(PreferenceKeys.CAR_SPEED_SIZE, it) }
-        SChoice("Position de la vitesse sur l'écran de la voiture", listOf("bottom" to "Coin inférieur", "middle" to "Sous la carte de direction", "top" to "En haut à droite"), prefs.s(PreferenceKeys.SPEED_POS_CAR, "bottom"),
-            "Coin inférieur utilise le côté choisi dans Position des cartes. Sur un écran de voiture peu haut, En haut à droite demande le style Compact : l'anneau se place alors sous la carte de direction") { prefs.put(PreferenceKeys.SPEED_POS_CAR, it) }
-        SChoice("Style du compteur sur l'écran de la voiture", listOf("app" to "Comme dans l'appli", "compact" to "Compact"), prefs.s(PreferenceKeys.CAR_SPEED_STYLE, "app"),
-            "Compact est une petite pastille sombre avec la limite et votre vitesse côte à côte") { prefs.put(PreferenceKeys.CAR_SPEED_STYLE, it) }
         var carAdvanced by rememberSaveable { mutableStateOf(false) }
         SItem("Tailles avancées pour l'écran de la voiture", "Réglez finement chaque élément") {
             SButton(if (carAdvanced) "Masquer" else "Afficher") { carAdvanced = !carAdvanced }
@@ -1174,9 +1274,9 @@ private fun AndroidAutoSection(prefs: Prefs) {
             SButton("Infos sur l'appli") { openSystemSettings(ctx, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, ghUri) }
         }
         // the most asked question: Android Auto only lists apps from Google Play unless told otherwise
-        if (hasAa) SItem("Absente d'Android Auto ?", "1. Dans les paramètres d'Android Auto, touchez plusieurs fois Version pour débloquer les Paramètres pour les développeurs, puis activez Sources inconnues. " +
-            "2. Forcez l'arrêt d'Android Auto (Infos sur l'appli ci-dessus) et reconnectez. 3. Si elle n'apparaît toujours pas, installez Horizon Nav avec l'appli gratuite AAEnabler, ce dont la plupart des gens ont besoin. " +
-            "Les commandes vocales via le micro d'Android Auto peuvent ne pas atteindre les applis hors Google Play : utilisez plutôt le bouton de recherche de l'appli.") {
+        if (hasAa && BuildConfig.STORE != "play") SItem("Absent d'Android Auto ?", "1. Dans les réglages d'Android Auto, touchez plusieurs fois Version pour débloquer les paramètres pour les développeurs, puis activez Sources inconnues. " +
+            "2. Forcez l'arrêt d'Android Auto (Infos sur l'appli ci-dessus) et reconnectez. 3. S'il n'apparaît toujours pas, installez Horizon Nav avec l'appli gratuite AAEnabler, nécessaire pour la plupart. " +
+            "Les demandes vocales via le micro d'Android Auto peuvent ne pas atteindre les applis hors Google Play : utilisez plutôt le bouton de recherche de l'appli.") {
             SButton("AAEnabler") {
                 try { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/malebuffy/AAEnabler")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 catch (e: Exception) { android.widget.Toast.makeText(ctx, "Pas de navigateur sur cet appareil : cherchez AAEnabler sur GitHub", android.widget.Toast.LENGTH_LONG).show() }
@@ -1256,7 +1356,7 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
     // fork FR : plus de don, et le rapport part directement (sans texte à écrire)
     val ctxR = LocalContext.current
     SGroup("Horizon Nav") {
-        SItem("Version", BuildConfig.VERSION_NAME)
+        SItem("Version", BuildConfig.VERSION_NAME) { SButton("Nouveautés") { WhatsNewCard.reopen = true } }
         if (com.headunit.launcher.Updater.enabled) {
             SItem("Rechercher des mises à jour", engine.updateStatus.ifBlank { null }) {
                 val u = engine.appUpdate
@@ -1286,7 +1386,7 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
             val ok = try {
-                ctx.contentResolver.openOutputStream(uri)?.use { it.write(prefs.exportJson().toByteArray()) }
+                ctx.contentResolver.openOutputStream(uri)?.use { it.write(prefs.exportJson(prefs.b(PreferenceKeys.BACKUP_KEYS, false)).toByteArray()) }
                 true
             } catch (e: Exception) { false }
             android.widget.Toast.makeText(ctx, if (ok) "Sauvegarde enregistrée" else "Impossible d'enregistrer la sauvegarde", android.widget.Toast.LENGTH_SHORT).show()
@@ -1301,7 +1401,8 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
             android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
         }
     }
-    SGroup("Sauvegarde", footer = "Comprend les réglages et lieux enregistrés, pas la clé API ni le pack hors ligne. Une sauvegarde d'Horizon Launcher peut aussi être restaurée ici.") {
+    SGroup("Sauvegarde", footer = "Inclut les réglages et les lieux enregistrés, pas le pack hors ligne. Vos clés API ne sont incluses que si l'interrupteur est activé. Une sauvegarde de Horizon Launcher peut aussi être restaurée ici.") {
+        SToggle(prefs, "Inclure les clés API", PreferenceKeys.BACKUP_KEYS, false, "Place vos clés TomTom et Mapbox dans le fichier de sauvegarde, pour que Restaurer les remette. Le fichier est en texte brut : gardez-le en lieu sûr")
         SItem("Réglages et lieux enregistrés") {
             SButton("Sauvegarder") { exporter.launch("horizon-nav-backup.json") }
             SButton("Restaurer") { importer.launch(arrayOf("application/json", "text/plain", "*/*")) }

@@ -85,6 +85,8 @@ internal object PreferenceKeys {
     const val PLACES_ROUTES = "places_routes"
     const val CAR_TRIP_BTNS = "car_trip_btns"
     const val CAR_TRIP_BTN_SIZE = "car_trip_btn_size"
+    /** Android Auto split screen: the trip card as a "bar" along the bottom or a "column" on the left (GitHub). */
+    const val CAR_SPLIT_TRIP = "car_split_trip"
     const val PLACES_RECENT = "places_recent"
     const val PLACES_SEEN = "places_seen"
     const val PLACE_PARKED = "place_parked"
@@ -98,6 +100,8 @@ internal object PreferenceKeys {
     const val PERFORMANCE_METER = "perfmeter"
     const val UPDATE_LAST_CHECK = "updlast"
     const val WHATS_NEW_SEEN_VERSION = "whatsnew_seen_version"
+    /** The notes the What's new card last showed, so Settings › Version › What's new can bring them back (GitHub #149). */
+    const val WHATS_NEW_LAST_NOTES = "whatsnew_last_notes"
     const val AUTO_START_ROUTE = "autostartroute"
     const val AUTO_START_SECONDS = "autostartseconds"
     // Additional legacy keys centralised without changing their persisted names.
@@ -123,11 +127,15 @@ internal object PreferenceKeys {
     const val COUNTRY = "country"
     const val COUNTRYDETECTED = "countrydetected"
     const val CRUISE = "cruise"
+    /** "Heading E" after the road name in that pill (liamstears: a switch of its own). */
+    const val CRUISE_HEADING = "cruise_heading"
     const val DATAPROV = "dataprov"
     const val DATASNOOZE = "datasnooze"
     const val DEMO = "demo"
     const val DIMNIGHT = "dimnight"
     const val DRIVELOCK = "drivelock"
+    /** The media bar on the driving screen (Reddit, mrEnmi). */
+    const val MEDIA_BAR = "media_bar"
     const val DRIVESIMPLE = "drivesimple"
     const val EVMPK = "evmpk"
     const val EVPPK = "evppk"
@@ -179,6 +187,10 @@ internal object PreferenceKeys {
     const val DONATE_SHOWN = "donateshown"
     /** Your own normal zoom when not on a route, in zoom levels from the standard one (-2 to +2; 0 = standard). */
     const val DEFAULT_ZOOM = "defzoom"
+    /** Off: the zoom stays put instead of following your speed and the junctions (GitHub #154). */
+    const val AUTO_ZOOM = "autozoom"
+    /** With no route, a round search button in the corner instead of the search bar and its buttons (GitHub #154). */
+    const val SEARCH_BUTTON = "search_button"
     /** Clock times: "auto" (the device's own 12 / 24-hour setting), "12" or "24". */
     const val CLOCK = "clock"
     /** The + / - zoom last used when not on a route, kept for next time: on the phone / head unit, and on Android Auto. */
@@ -250,11 +262,20 @@ internal object PreferenceKeys {
     /** Where the speed limit and speedometer sit, on the side away from the cards: "bottom" (as it always was), "middle" or "top". */
     const val SPEED_POS = "speedpos"
     /** The same for the Android Auto screen: "bottom" (the bottom corner), "middle" (under the turn card; the name is from when
-     *  it was the middle of the right-hand side) or "top" (top right, under Android Auto's buttons). */
+     *  it was the middle of the right-hand side) or "top" (top right: in the corner itself while navigating, making way while
+     *  Android Auto's buttons are showing there; under those buttons otherwise). */
     const val SPEED_POS_CAR = "speedposcar"
     /** The speedometer's look on the Android Auto screen: "app" (the same as the app: the ring or the block) or "compact"
      *  (a small dark pill with the limit sign and your speed side by side, easy to tuck into a corner). */
     const val CAR_SPEED_STYLE = "carspeedstyle"
+    /** Set the first time a car passes a tap on its screen to the app (not every car does): only then can the app's own
+     *  buttons stand in for Android Auto's (the trip card's red button for Stop). */
+    const val CAR_TAPS_SEEN = "cartapsseen"
+    /** The Home and Work buttons under the search bar (the app and the Android Auto screen alike): each can be left off. */
+    const val HOME_BTN = "homebtn"
+    const val WORK_BTN = "workbtn"
+    /** Settings > Backup: put the API keys (TomTom, Mapbox) in the backup file too. Off unless switched on: the file is plain text. */
+    const val BACKUP_KEYS = "backupkeys"
     /** Electric car: still show the Fuel (petrol station) button on the map page. */
     const val EV_SHOW_FUEL = "evshowfuel"
     /** While navigating, the notification shows the next turn (arrow, distance, road) for launchers, watches and other screens. */
@@ -262,6 +283,9 @@ internal object PreferenceKeys {
     /** What routes are planned for: "car" or "lorry" (Settings > Routes > Vehicle), and the lorry's measurements:
      *  height, width and length in cm, weight and axle weight in tonnes x 10, and whether it carries hazardous goods. */
     const val VEHICLE = "vehicle"
+    /** Top speed for arrival times (GitHub #134): the number, and whether it's in "mph" or "kmh"; 0 = off. */
+    const val TOP_SPEED = "top_speed"
+    const val TOP_SPEED_UNIT = "top_speed_unit"
     const val LORRY_HEIGHT = "lorryh"
     const val LORRY_WIDTH = "lorryw"
     const val LORRY_LENGTH = "lorryl"
@@ -356,6 +380,8 @@ class Prefs(ctx: Context) {
 
     private companion object {
         val LOCK = Any()
+        /** The API keys: only in a backup when asked for. */
+        val SECRET_KEYS = setOf(PreferenceKeys.API_KEY, PreferenceKeys.MAPBOX_TOKEN, PreferenceKeys.GOOGLE_API_KEY)
         var RAW: HashMap<String, String>? = null
         val STATES = HashMap<String, MutableState<String?>>()
     }
@@ -367,10 +393,13 @@ class Prefs(ctx: Context) {
     fun i(k: String, d: Int) = state(k).value?.toIntOrNull() ?: d
     fun f(k: String, d: Float) = state(k).value?.toFloatOrNull() ?: d
 
-    /** Everything except the API key, as JSON text (settings, saved places, logs...). */
-    fun exportJson(): String = synchronized(LOCK) {
+    /**
+     * Everything as JSON text (settings, saved places, logs...). The API keys go in only with [includeKeys] (Settings > Backup >
+     * Include API keys): the file is plain text, so they're left out unless asked for.
+     */
+    fun exportJson(includeKeys: Boolean = false): String = synchronized(LOCK) {
         val o = JSONObject()
-        raw.forEach { (k, v) -> if (k != PreferenceKeys.API_KEY && k != DiagUpload.TOKEN_KEY && k != HaBattery.TOKEN_KEY) o.put(k, v) }
+        raw.forEach { (k, v) -> if ((includeKeys || k !in SECRET_KEYS) && k != DiagUpload.TOKEN_KEY && k != HaBattery.TOKEN_KEY) o.put(k, v) }
         o.toString(2)
     }
 
@@ -384,10 +413,13 @@ class Prefs(ctx: Context) {
         while (keys.hasNext()) {
             val k = keys.next()
             require(k.isNotBlank() && k.length <= 200) { "Invalid setting name" }
-            if (k == PreferenceKeys.API_KEY) continue // API keys are intentionally never imported from backups.
             val value = o.get(k)
             require(value !is JSONObject && value !is org.json.JSONArray) { "Invalid setting value" }
-            pending[k] = if (value == JSONObject.NULL) "" else value.toString()
+            val text0 = if (value == JSONObject.NULL) "" else value.toString()
+            // API keys are restored when the backup has them (it was made with "Include API keys"); an empty one in the file
+            // never wipes a key that's already set here
+            if (k in SECRET_KEYS && text0.isBlank()) continue
+            pending[k] = text0
         }
         pending.forEach { (k, v) -> put(k, v) }
         return pending.size
@@ -427,6 +459,26 @@ fun Prefs.migrateToMapbox() {
     if (!b(PreferenceKeys.TT_MAP_FIX, false)) {
         if (s(PreferenceKeys.MAP_STYLE, "") == "tomtom") put(PreferenceKeys.MAP_STYLE, "mapbox")
         put(PreferenceKeys.TT_MAP_FIX, true)
+    }
+}
+
+/**
+ * Where the speedometer sits on the Android Auto screen, as one choice: "bl" / "br" (a bottom corner), "middle" (under the turn
+ * card) or "top" (the top right corner). It's kept as two settings (SPEED_POS_CAR, and CAR_SPEED_SIDE for which bottom corner),
+ * which used to be two separate choices in Settings, one of which did nothing unless the other was on Bottom.
+ */
+fun Prefs.carSpeedSpot(): String = when (s(PreferenceKeys.SPEED_POS_CAR, "bottom")) {
+    "middle" -> "middle"
+    "top", "corner" -> "top"
+    // ("auto": away from the trip card, which is on the right only when it's been put there)
+    else -> when (s(PreferenceKeys.CAR_SPEED_SIDE, "auto")) { "left" -> "bl"; "right" -> "br"; else -> if (s(PreferenceKeys.CAR_TRIP_POS, "auto") == "right") "bl" else "br" }
+}
+
+fun Prefs.setCarSpeedSpot(spot: String) {
+    when (spot) {
+        "bl" -> { put(PreferenceKeys.SPEED_POS_CAR, "bottom"); put(PreferenceKeys.CAR_SPEED_SIDE, "left") }
+        "br" -> { put(PreferenceKeys.SPEED_POS_CAR, "bottom"); put(PreferenceKeys.CAR_SPEED_SIDE, "right") }
+        else -> put(PreferenceKeys.SPEED_POS_CAR, spot)
     }
 }
 

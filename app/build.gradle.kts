@@ -77,6 +77,26 @@ android {
             buildConfigField("String", "UPDATE_REPO", "\"ASSE03/Horizon-Maps\"")
             // the APK file the updater looks for in that release
             buildConfigField("String", "UPDATE_APK", "\"HorizonNav-public.apk\"")
+            // the GitHub edition updates itself from GitHub
+            buildConfigField("Boolean", "SELF_UPDATE", "true")
+            buildConfigField("String", "STORE", "\"github\"")
+        }
+        // The Google Play edition: the same app as its own package (com.headunit.nav.play), so it installs beside the GitHub one.
+        // Play only allows apps to update through Play, so it has no updater (and no permission to install apps), no PayPal
+        // donations (Play's payment rules), and no "how to get it into Android Auto" help (Android Auto lists Play apps by itself).
+        // Only built when asked for (-PwithPlay, the build's publish run), so ordinary builds take no longer.
+        create("play") {
+            dimension = "key"
+            applicationIdSuffix = ".play"
+            // called Horizon Maps on the home screen, in Android Auto and in its own messages, so it's easy to tell from the GitHub one
+            resValue("string", "app_name", "Horizon Maps")
+            buildConfigField("String", "TOMTOM_API_KEY", "\"\"")
+            buildConfigField("String", "DEFAULT_MAP", "\"mapbox\"")
+            // (kept for the feedback and issue links, which still go to GitHub)
+            buildConfigField("String", "UPDATE_REPO", "\"benbishop028-arch/Horizon-Maps\"")
+            buildConfigField("String", "UPDATE_APK", "\"\"")
+            buildConfigField("Boolean", "SELF_UPDATE", "false")
+            buildConfigField("String", "STORE", "\"play\"")
         }
     }
     compileOptions {
@@ -88,6 +108,12 @@ android {
         // the Mapbox map and the offline router (Valhalla) both bring the C++ runtime: one copy is kept
         jniLibs.pickFirsts += "**/libc++_shared.so"
     }
+}
+
+// The Play edition is only built when asked for: -PwithPlay (otherwise "assembleRelease" would build it too and the GitHub build would
+// take twice as long)
+androidComponents {
+    beforeVariants { v -> if (v.flavorName == "play" && !project.hasProperty("withPlay")) v.enable = false }
 }
 
 kotlin { jvmToolchain(17) }
@@ -112,6 +138,11 @@ dependencies {
     // Offline routing engine (Valhalla) that runs on downloaded road data, with the libraries it needs at run time
     implementation("io.github.rallista:valhalla-mobile:0.6.4")
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
+
+    // Google Play edition only: Google's billing library, for the Horizon Maps subscription. (It also tells Play Console the app
+    // sells something, which Play needs to see in an uploaded build before a subscription can be set up there.) The GitHub edition
+    // doesn't include it.
+    "playImplementation"("com.android.billingclient:billing:9.1.0")
 
     // Small, fast JVM tests for camera and GPS decision policies; these don't require a device.
     testImplementation("junit:junit:4.13.2")
