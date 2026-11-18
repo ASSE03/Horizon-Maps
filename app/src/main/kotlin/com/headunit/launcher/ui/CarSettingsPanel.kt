@@ -117,6 +117,7 @@ internal fun CarSettingsPanel(engine: NavEngine, actions: CarActions, small: Boo
                         item { SetSwitch("st-mw", "Éviter les autoroutes", "", prefs.b("avoid_motorway", false)) { prefs.put("avoid_motorway", it); reroute() } }
                         item { SetSwitch("st-toll", "Éviter les péages", "", prefs.b("avoid_toll", false)) { prefs.put("avoid_toll", it); reroute() } }
                         item { SetSwitch("st-ferry", "Éviter les ferries", "", prefs.b("avoid_ferry", false)) { prefs.put("avoid_ferry", it); reroute() } }
+                        item { SetSwitch("st-train", "Éviter les trains autos", "", prefs.b(PreferenceKeys.AVOID_TRAIN, false)) { prefs.put(PreferenceKeys.AVOID_TRAIN, it); reroute() } }
                     }
                     // ---- Map: how it's drawn and what's on it
                     1 -> {

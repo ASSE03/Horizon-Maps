@@ -208,7 +208,7 @@ object FuelFinder {
         return when (fuel) {
             "B7" -> m["B7_STANDARD"] ?: m.entries.firstOrNull { it.key.startsWith("B7") && !it.key.contains("PREMIUM") }?.value ?: m.entries.firstOrNull { it.key.contains("DIESEL") }?.value
             "E5" -> m.entries.firstOrNull { it.key.startsWith("E5") }?.value
-            "E85", "EV" -> null
+            "E85", "EV", "LPG" -> null
             else -> m.entries.firstOrNull { it.key.startsWith("E10") }?.value
         }
     }
@@ -225,5 +225,5 @@ object FuelFinder {
         } catch (e: Exception) { "" }
     }
 
-    fun fuelName(fuel: String) = when (fuel) { "E5" -> "SP98"; "B7" -> "Gazole"; "E85" -> "Superéthanol (E85)"; "EV" -> "Électrique"; else -> "SP95-E10" }
+    fun fuelName(fuel: String) = when (fuel) { "E5" -> "SP98"; "B7" -> "Gazole"; "E85" -> "Superéthanol (E85)"; "LPG" -> "GPL"; "EV" -> "Électrique"; else -> "SP95-E10" }
 }

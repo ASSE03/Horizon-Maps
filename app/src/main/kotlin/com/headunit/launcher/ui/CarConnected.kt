@@ -50,7 +50,7 @@ internal fun CarConnectedScreen(engine: NavEngine, onShowMap: () -> Unit, onSett
             Text(if (guiding) "Guidage sur l'écran de la voiture" else "Horizon Nav est sur l'écran de la voiture", color = c.text, fontSize = 24.sp,
                 fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             if (guiding && e != null) {
-                val dc = if (e.delayMin >= 10) Bad else if (e.delayMin >= 1) Warn else Good
+                val dc = delayTint(e.delayMin, c.surface)
                 Column(Modifier.panel(10.dp, RoundedCornerShape(24.dp), c.surface).padding(horizontal = 22.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(engine.dest?.name ?: "Votre destination", color = c.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)

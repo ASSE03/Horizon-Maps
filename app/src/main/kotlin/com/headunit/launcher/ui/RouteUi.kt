@@ -216,8 +216,10 @@ fun AvgSpeedCard(engine: NavEngine, modifier: Modifier = Modifier) {
     val k = if (engine.imperial) 2.23694 else 3.6
     val unit = if (engine.imperial) "mph" else "km/h"
     val shape = RoundedCornerShape(22.dp)
+    // (deeper red, amber and green on a light card, so they read in daylight: magnazan, #177)
+    val red = delayTint(10, c.surface); val amber = delayTint(5, c.surface); val green = delayTint(0, c.surface)
     Row(
-        modifier.fillMaxWidth().panel(8.dp, shape, c.surface).border(2.dp, if (a.over) Bad else Color.Transparent, shape).padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier.fillMaxWidth().panel(8.dp, shape, c.surface).border(2.dp, if (a.over) red else Color.Transparent, shape).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         val lim = a.limitMs?.let { (Math.round(it * k / 5.0) * 5).toInt() }
@@ -236,9 +238,9 @@ fun AvgSpeedCard(engine: NavEngine, modifier: Modifier = Modifier) {
                     val sv = Math.floor(safe * k).toInt()
                     val lv = Math.round(lm * k).toInt()
                     when {
-                        safe <= 0.5 || sv < lv - 25 -> Text("Ralentissez pour repasser sous la limite", color = Bad, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        safe <= 0.5 || sv < lv - 25 -> Text("Ralentissez pour repasser sous la moyenne", color = Bad, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         sv < lv -> Text("Restez sous $sv $unit jusqu'au bout", color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        sv > lv -> Text("Jusqu'à ${minOf(sv, lv + 15)} $unit vous restez dans la limite", color = c.sub, fontSize = 13.sp)
+                        sv > lv -> Text("Jusqu'à ${minOf(sv, lv + 15)} $unit vous restez sous la moyenne", color = c.sub, fontSize = 13.sp)
                         else -> {}
                     }
                 }

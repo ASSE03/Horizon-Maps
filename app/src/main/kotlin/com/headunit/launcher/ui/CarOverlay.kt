@@ -182,7 +182,10 @@ private fun CarLiveSettings(engine: NavEngine, dark: State<Boolean>) {
     val xHd = hdRoadsWanted(prefs, prefs.s(PreferenceKeys.COUNTRYDETECTED, ""))
     OnChange(xHd) { map.setHdRoads(xHd) }
     val b3d = prefs.b(PreferenceKeys.BUILDINGS_3D, true)
-    OnChange(b3d) { map.setBuildings3d(b3d) }
+    // satellite as set on the phone (the car's map always stayed on the drawn map, so with Android Auto it looked as though
+    // satellite didn't work)
+    val satOn = prefs.b(PreferenceKeys.SATELLITE, false)
+    OnChange(b3d, satOn) { map.setView(satOn, b3d) }
     val treesOn = prefs.b(PreferenceKeys.TREES, true)
     OnChange(treesOn) { map.treesEnabled(treesOn) }
     val signalsOn = prefs.b(PreferenceKeys.SIGNALS, true)
@@ -394,7 +397,9 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
         val alert = engine.alert
         val inc = engine.incidentAhead; val cam = engine.cameraDist
         val incShown = inc != null && alert?.kind != "incident"
-        val camShown = cam != null && alert?.kind != "camera"
+        // (while the average speed card shows under the turn card, it takes the speed camera line's place, so the column
+        // doesn't grow too tall on a short car screen: magnazan, #177)
+        val camShown = cam != null && alert?.kind != "camera" && engine.avgInfo == null
         // one slim line while the turn is far off (about 2 km), the full card as it comes up (a little either side, so it can't flicker)
         val slimHold = remember { booleanArrayOf(false) }
         if (t != null) slimHold[0] = if (t.dist > 2100.0) true else if (t.dist < 1900.0) false else slimHold[0]
@@ -443,6 +448,9 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
                 if (!small) engine.advice?.let { AdvicePill(it) }
                 // a low bridge or weight limit the lorry is over: shown even on a small car screen
                 LorryWarnCard(engine)
+                // an average speed check: your average so far, the limit, how far is left and what keeps you under, as on the
+                // phone (it only showed there: magnazan, #177). At the car cards' size, under the turn card
+                CompositionLocalProvider(LocalDensity provides Density(dens.density * cardScale, dens.fontScale)) { AvgSpeedCard(engine) }
               }
                 // sized to the gap down to the trip card (it used to run on underneath it on a short car screen), or left out
                 // when even a small one wouldn't fit: the turn card's lane strip still shows the lanes then
@@ -745,7 +753,7 @@ private fun SoundPill(engine: NavEngine) {
 private fun TripColumn(engine: NavEngine, showEnd: Boolean = true) {
     val e = engine.eta ?: return
     val c = LocalVw.current
-    val dc = if (e.delayMin >= 10) Bad else if (e.delayMin >= 1) Warn else Good
+    val dc = delayTint(e.delayMin, c.surface)
     Column(Modifier.panel(10.dp, RoundedCornerShape(18.dp), c.surface).padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(Geo.fmtDur(e.secs), color = dc, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
         Text(e.arrive, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
@@ -767,7 +775,7 @@ private fun TripColumn(engine: NavEngine, showEnd: Boolean = true) {
 private fun TripCard(engine: NavEngine, actions: CarActions, fill: Boolean, oneLine: Boolean = false, buttonsShown: Boolean = true, docked: Boolean = false, bar: Boolean = false) {
     val e = engine.eta ?: return
     val c = LocalVw.current
-    val dc = if (e.delayMin >= 10) Bad else if (e.delayMin >= 1) Warn else Good
+    val dc = delayTint(e.delayMin, c.surface)
     // the card is as wide as its figures and buttons (at least 400dp), never the whole screen: the figures used to share a row that
     // was told to fill the space, so on a very wide car screen the card stretched right across and its sound and end buttons ended
     // up under Android Auto's own buttons on the right. The route bar is set to the row's measured width (it can't be asked for

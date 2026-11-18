@@ -66,7 +66,7 @@ internal fun SGroup(title: String? = null, footer: String? = null, content: @Com
 internal val LocalSettingHighlight = androidx.compose.runtime.compositionLocalOf<String?> { null }
 
 /** One setting: a title (and an optional line under it) on the left, its control on the right. */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun SItem(title: String, sub: String? = null, onClick: (() -> Unit)? = null, trailing: @Composable () -> Unit = {}) {
     val c = LocalVw.current
@@ -85,35 +85,40 @@ internal fun SItem(title: String, sub: String? = null, onClick: (() -> Unit)? = 
         }
         hlMod = Modifier.bringIntoViewRequester(req).clip(RoundedCornerShape(14.dp)).drawBehind { drawRect(c.accent.copy(alpha = 0.18f * glow.value)) }
     }
-    // fork FR : les boutons français sont plus larges ; quand ils prendraient plus de 45 % de la ligne (téléphone), ils passent
-    // sous le texte, alignés à droite, au lieu d'écraser le titre en colonne d'une syllabe
+    // (fjanakovic: with long words, or buttons, the title was squeezed to one word or letter per line. The buttons now sit beside the
+    // title only while it keeps at least half the width; otherwise they go on their own line under it, wrapping if they need to)
     androidx.compose.ui.layout.Layout(
         content = {
-            Column(Modifier.padding(end = 14.dp)) {
+            Column {
                 Text(title, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 if (!sub.isNullOrBlank()) Text(sub, color = c.sub, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { trailing() }
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) { trailing() }
         },
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).then(hlMod).then(if (onClick != null) Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick) else Modifier).padding(vertical = 8.dp),
     ) { ms, cons ->
         val w = cons.maxWidth
-        val trail = ms[1].measure(androidx.compose.ui.unit.Constraints(maxWidth = w))
-        val minH = cons.minHeight
-        if (trail.width == 0 || trail.width <= w * 0.45f) {
-            val text = ms[0].measure(androidx.compose.ui.unit.Constraints(maxWidth = (w - trail.width).coerceAtLeast(0)))
-            val h = maxOf(text.height, trail.height, minH)
+        val gap = 14.dp.roundToPx()
+        val tr = ms[1].measure(androidx.compose.ui.unit.Constraints(maxWidth = w))
+        val roomLeft = if (tr.width == 0) w else w - tr.width - gap
+        val beside = roomLeft >= minOf(w, maxOf(150.dp.roundToPx(), w / 2))
+        if (beside) {
+            val tx = ms[0].measure(androidx.compose.ui.unit.Constraints(maxWidth = roomLeft.coerceAtLeast(0)))
+            val h = maxOf(tx.height, tr.height, cons.minHeight)
             layout(w, h) {
-                text.placeRelative(0, (h - text.height) / 2)
-                trail.placeRelative(w - trail.width, (h - trail.height) / 2)
+                tx.placeRelative(0, (h - tx.height) / 2)
+                tr.placeRelative(w - tr.width, (h - tr.height) / 2)
             }
         } else {
-            val text = ms[0].measure(androidx.compose.ui.unit.Constraints(maxWidth = w))
-            val gap = 8.dp.roundToPx()
-            val h = maxOf(text.height + gap + trail.height, minH)
+            val tx = ms[0].measure(androidx.compose.ui.unit.Constraints(maxWidth = w))
+            val top = 8.dp.roundToPx()
+            val h = maxOf(tx.height + top + tr.height, cons.minHeight)
             layout(w, h) {
-                text.placeRelative(0, 0)
-                trail.placeRelative(w - trail.width, text.height + gap)
+                tx.placeRelative(0, 0)
+                tr.placeRelative(0, tx.height + top)
             }
         }
     }

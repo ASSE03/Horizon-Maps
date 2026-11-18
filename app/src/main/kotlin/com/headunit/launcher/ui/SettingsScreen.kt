@@ -285,7 +285,12 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
 @Composable
 private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Jour et nuit") {
-        SChoice("Jour et nuit", listOf("auto" to "Auto", "lights" to "Phares", "sun" to "Heures du soleil", "times" to "Mes horaires", "day" to "Jour", "night" to "Nuit"), prefs.s(PreferenceKeys.THEME, "auto"),
+        // on a phone: Auto is sunrise and sunset, and "Phone's dark mode" follows the phone's own setting (lukaszsakul, #181);
+        // Headlights is only for head units
+        if (engine.onPhone()) SChoice("Jour et nuit", listOf("auto" to "Auto", "phone" to "Mode sombre du téléphone", "times" to "Mes horaires", "day" to "Jour", "night" to "Nuit"),
+            prefs.s(PreferenceKeys.THEME, "auto").let { if (it == "sun" || it == "lights") "auto" else it },
+            "Auto bascule au lever et au coucher du soleil, avec la lumière de l’aube et du crépuscule entre les deux. Mode sombre du téléphone suit le réglage clair / sombre de votre téléphone. Mes horaires bascule aux heures que vous choisissez") { prefs.put(PreferenceKeys.THEME, it) }
+        else SChoice("Jour et nuit", listOf("auto" to "Auto", "lights" to "Phares", "sun" to "Heures du soleil", "times" to "Mes horaires", "day" to "Jour", "night" to "Nuit"), prefs.s(PreferenceKeys.THEME, "auto"),
             "Auto suit le mode nuit de l'autoradio dès qu'il y passe, et le lever et coucher du soleil en attendant. Phares suit le mode nuit de l'autoradio quand il change avec vos feux (activez son option phares ou éclairage), avec les heures du soleil en attendant. Heures du soleil change au lever et au coucher du soleil. Mes horaires change aux heures que vous choisissez") { prefs.put(PreferenceKeys.THEME, it) }
         // Headlights: whether this head unit has been seen switching with the lights yet (until then sun times stand in), and what the
         // lights signal says right now, so it's easy to check it works (lights on: it should say on within a couple of seconds)
@@ -530,6 +535,7 @@ private fun RoutesSection(prefs: Prefs, engine: NavEngine) {
         }
         SToggle(prefs, "Éviter les autoroutes", "avoid_motorway", false)
         SToggle(prefs, "Éviter les ferries", "avoid_ferry", false)
+        SToggle(prefs, "Éviter les trains autos", PreferenceKeys.AVOID_TRAIN, false, "Les trains qui transportent votre voiture, comme la navette du tunnel sous la Manche ou les trains des tunnels alpins")
         SToggle(prefs, "Éviter les routes non goudronnées", "avoid_unpaved", true)
         SToggle(prefs, "Éviter les ZFE (zones à faibles émissions)", "avoidzones", false, "Une zone où vous partez ou arrivez ne peut pas être évitée")
         ZonesItem()
@@ -1041,7 +1047,7 @@ private fun FuelSection(prefs: Prefs, engine: NavEngine) {
     val deFuel = engine.detectedCountry.equals("DE", true) || prefs.s(PreferenceKeys.TANKERKOENIG_KEY, "").isNotBlank()
     val auFuel = engine.detectedCountry.equals("AU", true) || prefs.s(PreferenceKeys.NSW_FUEL_KEY, "").isNotBlank()
     SGroup(if (ukFuel) "Prix des carburants" else "Carburant", footer = if (ukFuel) "Au Royaume-Uni, les prix en direct viennent du service gouvernemental Fuel Finder. C'est gratuit : sur gov.uk, cherchez « Fuel Finder », inscrivez-vous comme destinataire d'informations avec un GOV.UK One Login, puis collez ici l'identifiant et le secret client. Sans eux la liste des stations fonctionne, mais sans les prix. (En France, les prix sont automatiques : voir plus bas.)" else if (!deFuel) "Les prix en France et en Autriche s'affichent tout seuls. La clé Tankerkönig (prix en Allemagne) apparaît ici quand vous y êtes." else null) {
-        SChoice("Votre carburant", listOf("E10" to "SP95-E10", "E5" to "SP98", "B7" to "Gazole", "E85" to "Superéthanol (E85)", "EV" to "Électrique"), prefs.s(PreferenceKeys.FUEL_TYPE, "E10")) { prefs.put(PreferenceKeys.FUEL_TYPE, it) }
+        SChoice("Votre carburant", listOf("E10" to "SP95-E10", "E5" to "SP98", "B7" to "Gazole", "E85" to "Superéthanol (E85)", "LPG" to "GPL", "EV" to "Électrique"), prefs.s(PreferenceKeys.FUEL_TYPE, "E10")) { prefs.put(PreferenceKeys.FUEL_TYPE, it) }
         SToggle(prefs, "Proposer un plein sur les longs trajets", "smartfuel", true, if (prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV") (if (mi) "Au-delà d'environ 95 miles" else "Au-delà d'environ 150 km") + ", une borne sur le trajet avec le plus petit détour" else (if (mi) "Au-delà d'environ 95 miles" else "Au-delà d'environ 150 km") + ", la station la moins chère sur le trajet")
         if (ukFuel) {
             SFieldItem("Identifiant client", prefs.s(PreferenceKeys.FFID, "")) { prefs.put(PreferenceKeys.FFID, it.trim()) }
@@ -1215,6 +1221,7 @@ private fun WhileDrivingSection(prefs: Prefs) {
         SToggle(prefs, "Garder la flèche sur le côté", PreferenceKeys.ARROW_SIDE, false, "Quand les cartes se replient, au lieu de revenir au centre")
         SToggle(prefs, "Assombrir la carte dans les tunnels", "tunneldim", true)
         SToggle(prefs, "Moins de boutons en conduisant", "drivesimple", true)
+        SToggle(prefs, "Horloge sur la carte", PreferenceKeys.CLOCK_MAP, false, "L’heure, avec le compteur de vitesse. Pratique quand la barre d’état de l’autoradio est masquée")
         SToggle(prefs, "Bloquer la saisie en conduisant", "drivelock", true, "La recherche vocale fonctionne toujours")
         SToggle(prefs, "Commandes multimédia", PreferenceKeys.MEDIA_BAR, true, "Précédent, lecture / pause et suivant en bas de l'écran pendant que de la musique ou la radio joue sur cet appareil, depuis n'importe quelle appli")
         if (prefs.b(PreferenceKeys.MEDIA_BAR, true) && com.headunit.launcher.MediaNow.songInfoPossible) {
@@ -1418,30 +1425,61 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
         }
         SItem("Services de localisation") { SButton("Ouvrir") { openSystemSettings(ctx, Settings.ACTION_LOCATION_SOURCE_SETTINGS) } }
     }
+    // (with the GPX tracks in it a backup can be a couple of megabytes: written and read off the main thread, so a slow unit
+    // doesn't stall; bijindas)
+    val mainH = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) {
+        if (uri != null) Thread {
             val ok = try {
-                ctx.contentResolver.openOutputStream(uri)?.use { it.write(prefs.exportJson(prefs.b(PreferenceKeys.BACKUP_KEYS, false)).toByteArray()) }
-                true
-            } catch (e: Exception) { false }
-            android.widget.Toast.makeText(ctx, if (ok) "Sauvegarde enregistrée" else "Impossible d'enregistrer la sauvegarde", android.widget.Toast.LENGTH_SHORT).show()
-        }
+                val text = com.headunit.launcher.Backup.export(ctx, prefs)
+                ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } != null
+            } catch (e: Throwable) { false }
+            mainH.post { android.widget.Toast.makeText(ctx, if (ok) "Sauvegarde enregistrée" else "Impossible d'enregistrer la sauvegarde", android.widget.Toast.LENGTH_SHORT).show() }
+        }.start()
     }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
+        if (uri != null) Thread {
             val msg = try {
                 val text = ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                "${prefs.importJson(text)} réglages restaurés"
-            } catch (e: Exception) { "Ce fichier n'est pas une sauvegarde valide" }
-            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+                val (n, t) = com.headunit.launcher.Backup.restore(ctx, prefs, text)
+                "$n réglages restaurés" + (if (t > 0) " · " + "$t traces GPX" else "")
+            } catch (e: Throwable) { "Ce fichier n'est pas une sauvegarde valide" }
+            mainH.post { android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show() }
+        }.start()
+    }
+    // automatic backup: a folder picked once (its permission kept), then a backup there once a day when the app opens
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            try { ctx.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } catch (e: Exception) { }
+            prefs.put(PreferenceKeys.AUTO_BACKUP_DIR, uri.toString())
+            com.headunit.launcher.Backup.maybeRun(ctx, prefs, force = true)
         }
     }
-    SGroup("Sauvegarde", footer = "Inclut les réglages et les lieux enregistrés, pas le pack hors ligne. Vos clés API ne sont incluses que si l'interrupteur est activé. Une sauvegarde de Horizon Launcher peut aussi être restaurée ici.") {
+    SGroup("Sauvegarde", footer = "Comprend les réglages, les lieux enregistrés et les traces GPX, pas le pack hors ligne. Vos clés API n’y sont que si l’interrupteur est activé. Une sauvegarde de Horizon Launcher peut aussi être restaurée ici.") {
         SToggle(prefs, "Inclure les clés API", PreferenceKeys.BACKUP_KEYS, false, "Place vos clés TomTom et Mapbox dans le fichier de sauvegarde, pour que Restaurer les remette. Le fichier est en texte brut : gardez-le en lieu sûr")
-        SItem("Réglages et lieux enregistrés") {
+        SItem("Réglages, lieux et traces") {
             SButton("Sauvegarder") { exporter.launch("horizon-nav-backup.json") }
             SButton("Restaurer") { importer.launch(arrayOf("application/json", "text/plain", "*/*")) }
         }
+        val autoDir = prefs.s(PreferenceKeys.AUTO_BACKUP_DIR, "")
+        val lastAt = prefs.s(PreferenceKeys.AUTO_BACKUP_AT, "0").toLongOrNull() ?: 0L
+        val failAt = prefs.s(PreferenceKeys.AUTO_BACKUP_AT + "fail", "0").toLongOrNull() ?: 0L
+        SItem("Sauvegarde automatique",
+            if (autoDir.isBlank()) "Une fois par jour, dans un dossier de votre choix"
+            else "Une fois par jour, dans ${com.headunit.launcher.Backup.folderName(autoDir)}" +
+                (if (failAt > lastAt) " · " + "la dernière n’a pas pu être enregistrée : choisissez à nouveau le dossier" else if (lastAt > 0) " · " + "dernière ${com.headunit.launcher.Clock.format("EEE d MMM, ").format(java.util.Date(lastAt))}" else "")) {
+            if (autoDir.isBlank()) SButton("Choisir un dossier") {
+                try { folderPicker.launch(null) } catch (e: Exception) { android.widget.Toast.makeText(ctx, "Cet appareil ne peut pas choisir de dossier", android.widget.Toast.LENGTH_LONG).show() }
+            } else {
+                SButton("Modifier") { try { folderPicker.launch(null) } catch (e: Exception) { } }
+                SButton("Désactiver", danger = true) {
+                    try { ctx.contentResolver.releasePersistableUriPermission(android.net.Uri.parse(autoDir), android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } catch (e: Exception) { }
+                    prefs.put(PreferenceKeys.AUTO_BACKUP_DIR, "")
+                }
+            }
+        }
+        if (autoDir.isNotBlank()) SChoice("Fichiers de sauvegarde", listOf("one" to "Remplacer la dernière", "week" to "Garder les 7 dernières"), prefs.s(PreferenceKeys.AUTO_BACKUP_KEEP, "one"),
+            "Remplacer la dernière garde un seul fichier, écrasé chaque jour. Garder les 7 dernières en ajoute une par jour et supprime la plus ancienne") { prefs.put(PreferenceKeys.AUTO_BACKUP_KEEP, it) }
     }
     val cf = java.io.File(ctx.filesDir, "lastcrash.txt")
     var rep by remember { mutableStateOf(if (cf.exists()) cf.readText() else "") }

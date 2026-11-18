@@ -5,6 +5,13 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Vue satellite sur Android Auto : un choix dans la liste des options de l'écran de la voiture.
+- Éviter les trains autos : Réglages › Itinéraires › À éviter écarte les trains qui transportent la voiture (navette du tunnel sous la Manche, tunnels alpins).
+- GPL : nouveau choix de carburant, avec les stations GPL dans les raccourcis.
+- Prix des carburants en Italie (données ouvertes MIMIT).
+- Sauvegarde automatique : une fois par jour, dans un dossier de votre choix ; les traces GPX sont maintenant dans les sauvegardes.
+- Horloge sur la carte, à côté du compteur de vitesse : pratique quand la barre d'état de l'autoradio est masquée.
+- Bouton Naviguer, et carte de vitesse moyenne (radar tronçon) sur Android Auto.
 - Raccourcis Vos lieux et Vos traces : sous la barre de recherche, ils ouvrent vos lieux enregistrés et vos traces GPX, rangés en dossiers.
 - Police de la carte : Réglages › Style de carte choisit la police des noms de routes et de lieux (Roboto, Open Sans, Inter, Lato, Montserrat).
 - Fermer Horizon Nav : un bouton dans les réglages ferme l'appli et son guidage en arrière-plan.
@@ -101,6 +108,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Stops : l'original fait maintenant le même tri que la version française, seuls les stops sur votre route sont signalés.
+- Lune à sa vraie place la nuit, avec « Soleil à sa vraie place ».
+- Lignes des réglages : les boutons passent à la ligne sous le titre au lieu de l'écraser.
+- Couleurs du temps restant plus foncées sur les cartes claires, et vue de la carte jointe aux avis envoyés.
 - Recalcul à contresens : rouler sur l'itinéraire dans le mauvais sens relance le calcul.
 - Flèche à l'arrêt : elle ne dépasse plus dans le carrefour quand vous vous arrêtez.
 - Arrivée en se garant : se garer près de la destination termine le guidage, et un guidage oublié en arrière-plan s'arrête seul.

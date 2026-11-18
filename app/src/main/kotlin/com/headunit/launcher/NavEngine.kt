@@ -705,6 +705,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var tripDest = ""
 
     init {
+        EuFuel.filesDir = ctx.filesDir
+        CarTrains.filesDir = ctx.filesDir   // (the car-train lines, for Avoid car trains)   // (Italy's fuel price list is kept on the device)
         // the language for directions (Settings > Sound & voice > Language): before the voice starts, so it starts in it
         try { L.set(prefs.s(PreferenceKeys.APP_LANG, "auto")) } catch (e: Exception) { }
         // offline mode (Settings > Offline maps): set before anything goes online
@@ -1073,7 +1075,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    /** The last error the map gave (for the feedback report). */
+    @Volatile private var lastMapError = ""
+
     private fun onMapError(msg: String) {
+        lastMapError = msg.take(140)
         val m = msg.lowercase()
         // Mapbox turned the token away: say so (the map can't show without a working token)
         if (m.contains("401") || m.contains("403") || m.contains("unauthor") || m.contains("forbidden") || m.contains("access token")) {
@@ -1171,8 +1177,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (!isCar && theme == "day") return "day"
         if (!isCar && theme == "night") return "night"
         if (theme == "times") return if (dark) "night" else "day"
-        // (on a phone, Auto is the phone's own light / dark setting, so the map simply matches it)
-        if (!isCar && theme == "auto" && onPhone()) return if (dark) "night" else "day"
+        // (Phone's dark mode: the map simply matches the phone's own light / dark setting. On a phone, Auto now follows the sun
+        // below, with its dawn and dusk light: lukaszsakul, #181)
+        if (!isCar && theme == "phone") return if (dark) "night" else "day"
         // Headlights (and the car screen following the car): only the lights decide, so a tunnel at midday goes properly dark and
         // coming out goes straight back to day. The sun's dawn and dusk light is left out, as it would tint the map whatever the
         // lights say. (Until the head unit has been seen switching with the lights, sun times stand in, so dark already follows them.)
@@ -1671,7 +1678,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             appendLine("Unit: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), screen ${dm.widthPixels}x${dm.heightPixels}")
             appendLine("Country: ${detectedCountry.ifBlank { "unknown" }} · map: ${prefs.mapSource()} · TomTom key: ${if (hasKey) "yes" else "no"} · Mapbox token: ${if (hasMapbox) "yes" else "no"} · routes from: ${provider.ifBlank { "offline" }} · online: ${if (online()) "yes" else "no"}")
             appendLine("Offline area: ${installedPackId() ?: "none"}")
-            appendLine("Frame rate: ${prefs.s(PreferenceKeys.MAP_FPS, "auto")} · map detail: ${prefs.mapDetail()} · driving side: ${if (mirrored) "left-hand" else "right-hand"}")
+            appendLine("Map view: " + (if (map.isSatellite) "satellite" else "standard") + " · map shown: " + (if (map.styleShown) "yes" else "no") + (if (lastMapError.isNotBlank()) " · last map error: $lastMapError" else ""))
+            appendLine("Frame rate: ${prefs.s(PreferenceKeys.MAP_FPS, "auto")} · map detail: ${prefs.mapDetail()} · steering wheel: ${if (mirrored) "left (traffic on the right)" else "right (traffic on the left)"}")
             if (perfLine.isNotBlank()) appendLine("Performance: $perfLine")
             try { appendLine(com.headunit.launcher.ui.NightWatch.line() + " · theme " + prefs.s(PreferenceKeys.THEME, "auto")) } catch (e: Exception) { }
             if (heatLevel >= 0) appendLine("Heat: ${listOf("cool", "light", "moderate", "severe", "critical", "emergency", "shutdown").getOrElse(heatLevel) { "$heatLevel" }}")
@@ -2486,6 +2494,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (prefs.b(PreferenceKeys.AVOID_TOLL, false)) "tollRoads" else null,
             if (prefs.b(PreferenceKeys.AVOID_MOTORWAY, false)) "motorways" else null,
             if (prefs.b(PreferenceKeys.AVOID_FERRY, false)) "ferries" else null,
+            if (prefs.b(PreferenceKeys.AVOID_TRAIN, false)) "carTrains" else null,
             if (prefs.b(PreferenceKeys.AVOID_UNPAVED, true)) "unpavedRoads" else null,
         )
         TomTomRest.routeType = if (prefs.b(PreferenceKeys.ROUTE_ECO, false)) "eco" else "fastest"
@@ -3479,7 +3488,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     /** A phone rather than a head unit: it has a phone line and a phone-sized screen (and isn't drawing the car screen). */
-    private fun onPhone(): Boolean = !isCar && try {
+    fun onPhone(): Boolean = !isCar && try {
         ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEPHONY) && ctx.resources.configuration.smallestScreenWidthDp < 600
     } catch (e: Exception) { false }
 
@@ -3535,7 +3544,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val radius = if (nearDest) 900 else if (kind == "parking") 2000 else if (kind == "toilets" || kind == "coffee") 3000 else 6000
         val fuelType = prefs.s(PreferenceKeys.FUEL_TYPE, "E10")
         // (Fuel Finder has no E85 prices, and its station list would show every station rather than ones selling it)
-        val fuelLive = kind == "fuel" && FuelFinder.configured(prefs) && fuelType != "E85"
+        val fuelLive = kind == "fuel" && FuelFinder.configured(prefs) && fuelType != "E85" && fuelType != "LPG"
         nearbyKind = kind; nearbyBusy = true; nearby = emptyList()
         scope.launch {
             try {
@@ -3598,14 +3607,16 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         } else Overpass.nearby("lorrypark", centre, 25_000).map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
                     }
                     // bioethanol: only stations mapped as selling E85 (TomTom's search can't tell which do)
-                    val e85 = kind == "fuel" && fuelType == "E85"
+                    val e85 = kind == "fuel" && (fuelType == "E85" || fuelType == "LPG")
+                    // (LPG the same way: stations mapped as selling it, where no price service covers the country: TheDMAI)
+                    val osmKind = if (fuelType == "LPG") "fuel_lpg" else "fuel_e85"
                     if (e85) {
                         return@async if (alongRoute && rt != null) {
-                            Overpass.nearbyAlong("fuel_e85", RouteExtras.line(rt, progress, progress + 60_000.0, 1500.0, 45), 1500).mapNotNull { n ->
+                            Overpass.nearbyAlong(osmKind, RouteExtras.line(rt, progress, progress + 60_000.0, 1500.0, 45), 1500).mapNotNull { n ->
                                 val pr = RouteExtras.project(rt, n.place.pos, 2000.0, progress) ?: return@mapNotNull null
                                 if (pr.first < progress - 100) null else n.copy(dist = pr.first - progress, detourMin = detour(pr.second), ahead = true)
                             }
-                        } else Overpass.nearby("fuel_e85", centre, 15_000).map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
+                        } else Overpass.nearby(osmKind, centre, 15_000).map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
                     }
                     // fork FR : toilettes : OpenStreetMap d'abord (la base la plus complète en France, les recherches Mapbox/TomTom
                     // en connaissent très peu) ; autour de vous, le rayon s'élargit à 10 km si rien n'est trouvé à 3 km
@@ -6680,7 +6691,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                             out += Nearby(Place(s0.name, s0.sub, s0.pos), pr.first, "", s0.cents, detour(pr.second), true, unit = EuFuel.unit(cc))
                         }
                     }
-                    if (out.isEmpty() && hasKey && online() && fuel != "E85") {
+                    if (out.isEmpty() && hasKey && online() && fuel != "E85" && fuel != "LPG") {
                         val line = RouteExtras.line(r, a, b, 800.0, 140)
                         for ((n, secs) in TomTomRest.poiAlong(apiKey, "fuel", line, 600)) {
                             val pr = RouteExtras.project(r, n.place.pos, 3000.0) ?: continue
