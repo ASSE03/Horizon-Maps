@@ -27,6 +27,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Switch
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.rounded.DriveEta
+import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Shop
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Traffic
@@ -95,20 +99,22 @@ import kotlinx.coroutines.withContext
 private class Section(val title: String, val sub: String, val icon: ImageVector, val tint: Color, val heading: String? = null)
 
 // (the order here is the order in the list; SettingsIndex refers to them by number)
-private val sections = listOf(
-    Section("Style de la carte", "Couleurs, jour et nuit, détail de la carte", Icons.Rounded.Map, Color(0xFF4C8DFF), "CARTE"),
-    Section("Lumière et 3D", "Lumière, météo, 3D, inclinaison, ciel", Icons.Rounded.WbTwilight, Color(0xFF4C8DFF)),
-    Section("Sur la carte", "Trafic, feux, radars, panneaux, météo", Icons.Rounded.Traffic, Color(0xFF4C8DFF)),
-    Section("Votre flèche et le tracé", "Flèche ou voiture, couleurs, aspect du tracé", Icons.Rounded.Navigation, Color(0xFF4C8DFF)),
-    Section("Itinéraires", "Véhicule, à éviter, choix, départ", Icons.Rounded.Route, Color(0xFF12A4B4), "CONDUITE"),
+// (made each time it's read, so the names follow a change of language straight away)
+private val sections: List<Section> get() = listOf(
+    Section("Style de carte", "Couleurs, jour et nuit, détail de la carte", Icons.Rounded.Map, Color(0xFF4C8DFF), "CARTE"),
+    Section("Lumière, météo et 3D", "Lumière, pluie et neige, radar, 3D, ciel", Icons.Rounded.WbTwilight, Color(0xFF4C8DFF)),
+    Section("Sur la carte", "Trafic, feux, radars, panneaux, lampadaires", Icons.Rounded.Traffic, Color(0xFF4C8DFF)),
+    Section("Votre flèche et la ligne d'itinéraire", "Flèche ou voiture, couleurs, aspect de l'itinéraire", Icons.Rounded.Navigation, Color(0xFF4C8DFF)),
+    Section("Itinéraires", "Véhicule, éviter, choisir, démarrer", Icons.Rounded.Route, Color(0xFF12A4B4), "CONDUITE"),
     Section("Carte de direction et voies", "Panneaux, voies, carte de trajet, arrivée", Icons.Rounded.TurnRight, Color(0xFF12A4B4)),
     Section("Alertes", "Vitesse, radars, dangers, signalements", Icons.Rounded.NotificationsActive, Color(0xFFEA4335)),
     Section("Son et voix", "Guidage vocal et volume", Icons.Rounded.VolumeUp, Color(0xFFEA4335)),
+    Section("En conduisant", "Nom de rue, flèche, tunnels, médias, verrouillage", Icons.Rounded.DriveEta, Color(0xFF12A4B4)),
     Section("Lieux et trajets", "Domicile, travail, favoris, partage, journal", Icons.Rounded.Star, Color(0xFFF29900), "VOUS"),
     Section("Carburant et recharge", "Votre carburant, prix, voiture électrique", Icons.Rounded.LocalGasStation, Color(0xFF34A853)),
     Section("Cartes hors ligne", "Cartes, itinéraires et noms de villes sans réseau", Icons.Rounded.CloudDownload, Color(0xFF8E5CF0)),
-    Section("Écran et tailles", "Luminosité, tailles, verre, unités, en conduite", Icons.Rounded.BrightnessMedium, Color(0xFFFFB020), "APPAREIL"),
-    Section("Android Auto", "Tailles sur l'écran de la voiture et installation", Icons.Rounded.DirectionsCar, Color(0xFF9CA4BF)),
+    Section("Écran et tailles", "Luminosité, tailles, vitesse, positions des cartes, unités", Icons.Rounded.BrightnessMedium, Color(0xFFFFB020), "DEVICE"),
+    Section("Android Auto", "Tailles sur l'écran de la voiture et configuration", Icons.Rounded.DirectionsCar, Color(0xFF9CA4BF)),
     Section("Performances", "Fluidité sur les autoradios lents, démo", Icons.Rounded.Speed, Color(0xFF9CA4BF)),
     Section("Clés et comptes", "Clés de carte et recherche", Icons.Rounded.VpnKey, Color(0xFF9CA4BF)),
     Section("À propos et sauvegarde", "Rapport, mises à jour, autorisations, sauvegarde", Icons.Rounded.Info, Color(0xFF9CA4BF)),
@@ -132,6 +138,13 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
     val narrowS = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 720
     var showList by rememberSaveable { mutableStateOf(true) }
     androidx.activity.compose.BackHandler(enabled = narrowS && !showList) { showList = true }
+    // the Google Play testers invitation, opened from the banner at the top of the list
+    var playInvite by remember { mutableStateOf(false) }
+    if (playInvite) PlayInviteDialog(c.dark) { how ->
+        // (from here "Not now" just closes it; "Don't show again" or opening Play also stops the popup on the map)
+        if (how != InviteClose.LATER) prefs.put(PreferenceKeys.PLAY_INVITE, "never")
+        playInvite = false
+    }
     var query by remember { mutableStateOf("") }
     var highlight by remember { mutableStateOf<String?>(null) }
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
@@ -186,7 +199,10 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
                         Text(sections[r.section].title + (if (r.group.isNotBlank()) " · " + L.t(r.group) else ""), color = c.sub, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-            } else sections.forEachIndexed { i, s ->
+            } else {
+            // GitHub edition: a small banner about the coming Google Play version; tapping it opens the testers invitation
+            if (false && BuildConfig.STORE != "play") PlayBanner(c) { playInvite = true }
+            sections.forEachIndexed { i, s ->
                 // the small group headings in the list: Map, Driving, You, Device
                 if (s.heading != null) Text(L.t(s.heading), color = c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp,
                     modifier = Modifier.padding(start = 14.dp, top = if (i == 0) 2.dp else 12.dp, bottom = 2.dp))
@@ -204,6 +220,7 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
                         Text(s.sub, color = c.sub, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
+            }
             }
         }
         // the chosen section (each opens at the top), sliding up gently into place
@@ -245,13 +262,14 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
                         5 -> GuidanceSection(prefs, engine)
                         6 -> AlertsSection(prefs, engine)
                         7 -> SoundSection(prefs, engine)
-                        8 -> { PlacesSection(engine); GpxGroup(engine, onShown = onClose); PhoneLinkGroup(prefs); SharingGroups(prefs) }
-                        9 -> FuelSection(prefs, engine)
-                        10 -> { OfflineMapsContent(prefs, engine); OfflinePlacesGroup(engine) }
-                        11 -> ScreenSection(prefs, engine)
-                        12 -> AndroidAutoSection(prefs)
-                        13 -> PerformanceSection(prefs)
-                        14 -> KeysSection(prefs, engine)
+                        8 -> WhileDrivingSection(prefs)
+                        9 -> { PlacesSection(engine); GpxGroup(engine, onShown = onClose); PhoneLinkGroup(prefs); SharingGroups(prefs) }
+                        10 -> FuelSection(prefs, engine)
+                        11 -> { OfflineMapsContent(prefs, engine); OfflinePlacesGroup(engine) }
+                        12 -> ScreenSection(prefs, engine)
+                        13 -> AndroidAutoSection(prefs)
+                        14 -> PerformanceSection(prefs)
+                        15 -> KeysSection(prefs, engine)
                         else -> AboutSection(prefs, engine)
                     }
                 }
@@ -288,7 +306,7 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
             SFieldItem("Le jour commence à", prefs.s(PreferenceKeys.DAY_FROM, "07:00"), "Format 24 h, par exemple 06:45", placeholder = "07:00") { prefs.put(PreferenceKeys.DAY_FROM, it.trim()) }
         }
     }
-    if (prefs.mapSource() == "mapbox") SGroup("Couleurs") {
+    if (prefs.mapSource() == "mapbox") SGroup("Couleurs et lettrage") {
         MapColoursPicker(prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")) { picked ->
             val now = prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")
             // Custom starts as exactly the theme you had (nothing changes until you change something)
@@ -311,6 +329,9 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
             }
             SPercent("Intensité", "La part de cette couleur que prend la carte", prefs, PreferenceKeys.CAR_TINT_STR, 10, 100, 40)
         }
+        // (karthikeyansr: Mapbox's own lettering is narrow, and hard to read at a glance; these are wider and heavier)
+        SChoice("Police", listOf("" to "Standard") + com.headunit.launcher.MAP_FONTS.map { it to it }, prefs.s(PreferenceKeys.MAP_FONT, ""),
+            "La police des noms de routes et de lieux sur la carte", wrap = true) { prefs.put(PreferenceKeys.MAP_FONT, it) }
     }
     if (prefs.mapSource() == "mapbox" && prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox") == "custom") CustomThemeGroup(prefs, engine)
     if (prefs.mapSource() == "mapbox") SavedThemesGroup(prefs)
@@ -360,6 +381,10 @@ private fun LightSection(prefs: Prefs) {
         SToggle(prefs, "Brume et ciel", "skyweather", true, "Brume à l'horizon selon la météo : grise par temps couvert, plus dense sous la pluie, épaisse dans le brouillard")
         SToggle(prefs, "Ciel nocturne en 3D", "nightsky", true, "Étoiles scintillantes au-dessus de l'horizon la nuit")
     }
+    SGroup("Météo") {
+        SToggle(prefs, "Effets météo sur la carte", "rainfx", false, "Vraie pluie et neige (et brouillard) sur la carte selon la météo là où vous êtes")
+        SToggle(prefs, "Calque radar de pluie", "radar", false, "Radar en direct de RainViewer, sous l'itinéraire")
+    }
 }
 
 // ------------------------------------------------------------------ On the map
@@ -387,10 +412,6 @@ private fun OnTheMapSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Lampadaires, feux et radars en 3D", "furniture3d", true, "Modèles 3D grandeur nature avec lampes et feux allumés (3D complète). Désactivé : badges et blocs simplifiés")
         SToggle(prefs, "Lampadaires", "lamps", true, if (prefs.b(PreferenceKeys.LAMPS, true)) "Actuellement : " + engine.map.lampInfo() else null)
         if (prefs.b(PreferenceKeys.LAMPS, true)) SSlider("Espacement des lampadaires", prefs.s(PreferenceKeys.LAMPGAP, "40").toFloatOrNull() ?: 40f, 15f..120f, " m", reset = 40f) { prefs.put(PreferenceKeys.LAMPGAP, it.toString()) }
-    }
-    SGroup("Météo") {
-        SToggle(prefs, "Effets météo sur la carte", "rainfx", false, "Pluie, neige (et brouillard) sur la carte selon la météo là où vous êtes")
-        SToggle(prefs, "Calque radar de pluie", "radar", false, "Radar en direct de RainViewer, sous l'itinéraire")
     }
 }
 
@@ -794,7 +815,7 @@ private fun PlacesSection(engine: NavEngine) {
     var openGroups by remember { mutableStateOf(setOf<String>()) }
     var renamingGroup by remember { mutableStateOf<String?>(null) }
     val groups = remember(raw) { pl.groups() }
-    SGroup("Vos lieux", footer = "Affichés en boutons sous la barre de recherche, après Domicile et Travail. Ajoutez-en un avec le + là-bas.") {
+    SGroup("Vos lieux", footer = "Ceux avec une étoile s’affichent à côté de Domicile et Travail sous la barre de recherche ; touchez une étoile pour changer. Tous sont dans la recherche et le raccourci Vos lieux.") {
         if (mine.isEmpty()) SNote("Pas encore de lieux à vous.")
         @Composable
         fun placeRow(i: Int, lp: com.headunit.launcher.LabeledPlace, indent: Boolean) {
@@ -806,11 +827,18 @@ private fun PlacesSection(engine: NavEngine) {
                         SField(t, { t = it.take(24) }, width = 220.dp)
                         SButton("Enregistrer", primary = true) { pl.renameCustom(lp.label, t); renaming = null }
                     }
-                } else SItem(lp.label, lp.place.name + if (lp.place.sub.isNotBlank()) ", " + lp.place.sub else "") {
+                } else Row(verticalAlignment = Alignment.CenterVertically) {
+                    // the star: shown next to Home and Work (yellow) or not (grey)
+                    Icon(if (lp.pinned) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                        if (lp.pinned) "Affiché à côté de Domicile et Travail" else "Non affiché à côté de Domicile et Travail",
+                        tint = if (lp.pinned) Color(0xFFFFC928) else LocalVw.current.sub,
+                        modifier = Modifier.size(40.dp).clip(CircleShape).clickable { pl.setPinned(lp.label, !lp.pinned) }.padding(8.dp))
+                    Box(Modifier.weight(1f)) { SItem(lp.label, lp.place.name + if (lp.place.sub.isNotBlank()) ", " + lp.place.sub else "") {
                     if (i > 0) SButton("↑") { pl.moveCustom(lp.label, -1) }
                     SButton("Groupe") { grouping = if (grouping == lp.label) null else lp.label }
                     SButton("Renommer") { renaming = lp.label }
                     SButton("Supprimer", danger = true) { pl.removeCustom(lp.label) }
+                } }
                 }
                 if (grouping == lp.label) {
                     var newName by remember(lp.label) { mutableStateOf("") }
@@ -877,17 +905,17 @@ private fun PlacesSection(engine: NavEngine) {
         if (favs.size > 1) SItem("Supprimer tous les favoris") { SButton("Tout supprimer", danger = true) { pl.clearFavourites() } }
     }
     // (the Home and Work buttons under the search bar, in the app and on Android Auto: each can be left off)
-    SGroup("Barre de recherche") {
+    // everything about the area under the search bar in one place (it was spread over four groups)
+    SGroup("Sous la barre de recherche", footer = "Sur cet écran et sur Android Auto. Vos lieux Domicile et Travail sont conservés dans tous les cas.") {
         SToggle(engine.prefs, "Recherche en bouton", PreferenceKeys.SEARCH_BUTTON, false,
             "Sans itinéraire, un bouton de recherche rond dans le coin au lieu de la barre de recherche et de ses boutons, pour que la flèche soit au centre. Touchez-le pour chercher")
-    }
-    SGroup("Domicile et Travail sous la barre de recherche", footer = "Sur cet écran et sur Android Auto. Vos lieux Domicile et Travail sont conservés dans tous les cas.") {
         SToggle(engine.prefs, "Bouton Domicile", PreferenceKeys.HOME_BTN, true)
         SToggle(engine.prefs, "Bouton Travail", PreferenceKeys.WORK_BTN, true)
+        SToggle(engine.prefs, "Vos lieux à côté de Domicile et Travail", PreferenceKeys.ROW_PLACES, true, "Seuls ceux avec une étoile s’y affichent")
+        SToggle(engine.prefs, "Lieux récents sous la barre de recherche", "quicklist", true, "Vos lieux enregistrés sont dans la rangée de tuiles sous la barre de recherche, qui se termine par Ajouter un lieu")
     }
     ShortcutsGroup(engine)
     SGroup("Historique", footer = "Faites glisser un lieu sur le côté dans la liste Enregistrés & récents pour le retirer.") {
-        SToggle(engine.prefs, "Lieux récents sous la barre de recherche", "quicklist", true, "Vos lieux enregistrés sont dans la rangée de tuiles sous la barre de recherche, qui se termine par Ajouter un lieu")
         SItem("Destinations récentes", "${pl.recents().size} récents, plus des lieux mémorisés pour chercher sans réseau") {
             SButton("Effacer", danger = true) { pl.clearHistory(); engine.toast("Historique effacé", 2000) }
         }
@@ -1159,6 +1187,25 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
         SChoice("Carte de trajet", listOf("auto" to "Sous la carte de direction", "left" to "En bas à gauche", "centre" to "En bas au centre", "right" to "En bas à droite"), prefs.s(PreferenceKeys.TRIP_POS, "auto")) { prefs.put(PreferenceKeys.TRIP_POS, it) }
         SChoice("Compteur", listOf("auto" to "À l'opposé des cartes", "left" to "En bas à gauche", "right" to "En bas à droite"), prefs.s(PreferenceKeys.SPEED_SIDE, "auto")) { prefs.put(PreferenceKeys.SPEED_SIDE, it) }
     }
+    SGroup("Unités") {
+        SChoice("Distance et vitesse", listOf("mi" to "Miles", "km" to "Kilomètres"), if (engine.imperial) "mi" else "km") { prefs.put(PreferenceKeys.DISTANCE_UNIT, it) }
+        SChoice("Horloge", listOf("auto" to "Automatique", "24" to "24-hour", "12" to "12-hour"), prefs.s(PreferenceKeys.CLOCK, "auto"),
+            "Automatique suit le réglage 12 / 24 h du téléphone ou de l'autoradio") { prefs.put(PreferenceKeys.CLOCK, it) }
+        SChoice("Température", listOf("C" to "°C", "F" to "°F"), if (isImperial(prefs)) "F" else "C") { prefs.put(PreferenceKeys.TEMPERATURE_UNIT, it) }
+        SChoice("Côté de conduite", listOf("" to "Automatique", "rhd" to "Conduite à droite", "lhd" to "Conduite à gauche"), prefs.s(PreferenceKeys.DRIVE, ""),
+            when (prefs.s(PreferenceKeys.DRIVE, "")) {
+                "rhd" -> "Conducteur à droite (R.-U.) : cartes à gauche, boutons à droite"
+                "lhd" -> "Conducteur à gauche (É.-U., Europe) : écran en miroir, cartes à droite"
+                else -> "Suit le pays où vous êtes" + (if (engine.mirrored) ": conduite à gauche, écran en miroir" else ": conduite à droite")
+            }) { prefs.put(PreferenceKeys.DRIVE, it) }
+    }
+}
+
+// ------------------------------------------------------------------ While driving
+
+/** What the screen does while you drive (it used to be a group at the end of Screen & sizes, which had grown very long). */
+@Composable
+private fun WhileDrivingSection(prefs: Prefs) {
     SGroup("En conduisant") {
         SToggle(prefs, "Nom de la route en conduisant sans itinéraire", "cruise", true)
         if (prefs.b("cruise", true)) SToggle(prefs, "Direction à côté du nom de la route", PreferenceKeys.CRUISE_HEADING, true, "« Direction E » après la route. Désactivé n'affiche que la route")
@@ -1180,18 +1227,6 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
                 if (granted) Text("Autorisée", color = LocalVw.current.sub, fontSize = 14.sp) else SButton("Autoriser") { com.headunit.launcher.MediaNow.openAccessSettings(ctx) }
             }
         }
-    }
-    SGroup("Unités") {
-        SChoice("Distance et vitesse", listOf("mi" to "Miles", "km" to "Kilomètres"), if (engine.imperial) "mi" else "km") { prefs.put(PreferenceKeys.DISTANCE_UNIT, it) }
-        SChoice("Horloge", listOf("auto" to "Automatique", "24" to "24 h", "12" to "12 h"), prefs.s(PreferenceKeys.CLOCK, "auto"),
-            "Automatique suit le réglage 12 / 24 h du téléphone ou de l'autoradio") { prefs.put(PreferenceKeys.CLOCK, it) }
-        SChoice("Température", listOf("C" to "°C", "F" to "°F"), if (isImperial(prefs)) "F" else "C") { prefs.put(PreferenceKeys.TEMPERATURE_UNIT, it) }
-        SChoice("Position du volant", listOf("" to "Automatique", "rhd" to "Volant à droite", "lhd" to "Volant à gauche"), prefs.s(PreferenceKeys.DRIVE, ""),
-            when (prefs.s(PreferenceKeys.DRIVE, "")) {
-                "rhd" -> "Conducteur à droite (Royaume-Uni) : cartes à gauche, boutons à droite"
-                "lhd" -> "Conducteur à gauche (France, Europe, États-Unis) : écran en miroir, cartes à droite"
-                else -> "Suit le pays où vous êtes" + (if (engine.mirrored) " : volant à gauche, écran en miroir" else " : volant à droite")
-            }) { prefs.put(PreferenceKeys.DRIVE, it) }
     }
 }
 
@@ -1764,5 +1799,23 @@ private fun AlertWaysRow(prefs: Prefs, engine: NavEngine, g: String, label: Stri
                 Pill(name, on, { prefs.put("alert_${g}_$ch", !on) })
             }
         }
+/** GitHub edition: a small banner at the top of the Settings list about the coming Google Play version (tap: the invitation). */
+@Composable
+private fun PlayBanner(c: Vw, onClick: () -> Unit) {
+    val blue = if (c.dark) Color(0xFF8FB6FF) else Color(0xFF1F5FBF)
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(18.dp))
+            .background(blue.copy(alpha = if (c.dark) 0.14f else 0.10f)).border(1.dp, blue.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(blue.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Shop, null, tint = blue, modifier = Modifier.size(20.dp))
+        }
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text("Horizon Maps arrive sur Google Play", color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("Touchez pour aider à le tester", color = c.sub, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Icon(Icons.Rounded.ChevronRight, null, tint = blue, modifier = Modifier.size(20.dp))
     }
 }

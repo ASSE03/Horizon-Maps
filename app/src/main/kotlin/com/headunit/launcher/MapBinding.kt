@@ -373,6 +373,15 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         }
     }
 
+    /** The map's lettering (Mapbox Standard's "font" setting): "" leaves Mapbox's own. Changes in place, no reload. */
+    private var mapFont = ""
+    fun setFont(f: String) {
+        val v = if (f in MAP_FONTS) f else ""
+        if (v == mapFont) return
+        mapFont = v
+        setBase("font", Value.valueOf(if (v.isEmpty()) "DIN Pro" else v))
+    }
+
     fun setColours(c: String) {
         val v = if (c in setOf("mapbox", "horizon", "twilight", "faded", "grey") || c in ThemeLut.ids) c else if (c == "moonlight") "horizon" else "mapbox"
         if (v == colours) return
@@ -641,6 +650,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // shop and place labels rest on the light map and (on the full map) while you're on the move: placing them is the costly part
         c.put("showPointOfInterestLabels", !lite && !poiMoving)
         c.put("showTransitLabels", !lite)
+        if (mapFont.isNotEmpty()) c.put("font", mapFont)
         if (!sat) c.put("show3dObjects", buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail))
         // (colour themes are only for the drawn map: Standard Satellite has none, so nothing is sent for it)
         if (!sat) when (colours) {
@@ -673,6 +683,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     }
 
     private var styleToken = 0
+
+    /** A map style has finished loading and is on screen. */
+    val styleShown: Boolean get() = style != null
 
     private fun loadStyle(url: String) {
         // no real token yet: nothing to load (the engine shows a note asking for one)
@@ -1194,7 +1207,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     fun setBeam(on: Boolean, mps: Double) {
         val was = beamOn
         beamOn = on; beamSpeed = mps
-        if (was && !on) main0.post { try { pushBeam() } catch (e: Throwable) { } }
+        if (was != on) main0.post { try { pushBeam() } catch (e: Throwable) { } }
     }
 
     // The beam is a "location indicator" layer: its place and direction are set straight on the layer each time the arrow moves,
@@ -1223,6 +1236,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         /** Screen points: nose, outer left, outer tip, outer right, inner left, inner tip, inner right, nose left, nose right, far middle. */
         val pts = FloatArray(20)
         var on = false
+        /** The 3D car's outline on screen, left out of the light (null: nothing cut out). */
+        var mask: android.graphics.Path? = null
         private val path = android.graphics.Path()
         private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
         private var gx0 = 0f; private var gy0 = 0f; private var gx1 = 0f; private var gy1 = 0f
@@ -1241,7 +1256,10 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             }
             path.reset()
             path.moveTo(p[14], p[15]); path.lineTo(p[8], p[9]); path.quadTo(p[10], p[11], p[12], p[13]); path.lineTo(p[16], p[17]); path.close()
+            val m = mask
+            if (m != null) { canvas.save(); canvas.clipOutPath(m) }
             canvas.drawPath(path, paint)
+            if (m != null) canvas.restore()
         }
     }
 
@@ -1259,7 +1277,14 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // used to start at the windscreen, liamstears). The flat arrow and the real 3D model are part of the map, under the beam,
             // so there it still starts at the nose.
             val carOnTop = locatorStyle != "flat" && !modelOn && locatorView.visibility == android.view.View.VISIBLE
-            val start = if (carOnTop) ahead * 0.15 else ahead
+            // the 3D car: the beam starts under it too, and the car's own shape on screen (its outline, roof included) is cut out
+            // of the light, so the car looks drawn over it (the beam covered its roof, liamstears). The beam used to be a picture in
+            // the map for this, re-placed many times a second, and it flickered
+            // (only the car: the 3D arrow is low and flat, so its beam starts at its tip as before. Cutting the arrow's outline out
+            // left a gap, and the light seemed to hover in front of it)
+            val carModel = modelOn && carLike
+            val start = if (carOnTop) ahead * 0.15 else if (carModel) ahead * 0.45 else ahead
+            bv.mask = if (carModel) try { modelMask(p, h) } catch (e: Throwable) { null } else null
             val nose = if (start > 0.0) Furniture.offset(p, h, start) else p
             // a little longer the faster you go (up to about 70 mph); measured from the nose, so starting further back doesn't shorten it
             val sc = 0.8 + (beamSpeed.coerceIn(0.0, 31.0) / 31.0) * 0.5
@@ -1277,6 +1302,49 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             }
             bv.show()
         } catch (e: Throwable) { bv.clear() }
+    }
+
+    /**
+     * The 3D car's (or 3D arrow's) outline on screen: its footprint on the road, and the same lifted by its height (the camera looks
+     * down at an angle, so the roof sits higher on screen), joined into one shape. A little generous, so no light shows on the body.
+     */
+    private fun modelMask(p: LL, h: Double): android.graphics.Path? {
+        val tilt = try { mbMap.cameraState.pitch } catch (e: Throwable) { tiltNow }
+        val t = Math.toRadians(tilt)
+        val k = modelPxPerUnit()
+        val a = mbMap.pixelForCoordinate(Point.fromLngLat(p.lon, p.lat))
+        val f = Furniture.offset(p, h, 20.0)
+        val b = mbMap.pixelForCoordinate(Point.fromLngLat(f.lon, f.lat))
+        val dl = Math.hypot(b.x - a.x, b.y - a.y)
+        if (dl < 1e-3 || k <= 0.0) return null
+        val ux = (b.x - a.x) / dl; val uy = (b.y - a.y) / dl
+        val nx = -uy; val ny = ux
+        // model units: about 4.6 long, 2 wide and 1.6 tall for the car; the arrow is flatter
+        val hl = k * (if (carLike) 2.45 else 0.95) * Math.cos(t).coerceAtLeast(0.2) * 1.08
+        val hw = k * (if (carLike) 1.05 else 0.8) * 1.08
+        val up = k * (if (carLike) 1.65 else 0.45) * Math.sin(t)
+        val pts = ArrayList<Pair<Double, Double>>(8)
+        for (lift in doubleArrayOf(0.0, up)) for (sl in doubleArrayOf(-1.0, 1.0)) for (sw in doubleArrayOf(-1.0, 1.0))
+            pts += Pair(a.x + ux * hl * sl + nx * hw * sw, a.y + uy * hl * sl + ny * hw * sw - lift)
+        // the outline round all eight corners (monotone chain)
+        val q = pts.sortedWith(compareBy({ it.first }, { it.second }))
+        fun cross(o: Pair<Double, Double>, a1: Pair<Double, Double>, b1: Pair<Double, Double>) =
+            (a1.first - o.first) * (b1.second - o.second) - (a1.second - o.second) * (b1.first - o.first)
+        val hull = ArrayList<Pair<Double, Double>>()
+        for (pass in 0..1) {
+            val start = hull.size
+            for (pt in if (pass == 0) q else q.asReversed()) {
+                while (hull.size >= start + 2 && cross(hull[hull.size - 2], hull[hull.size - 1], pt) <= 0) hull.removeAt(hull.size - 1)
+                hull += pt
+            }
+            hull.removeAt(hull.size - 1)
+        }
+        if (hull.size < 3) return null
+        return android.graphics.Path().apply {
+            moveTo(hull[0].first.toFloat(), hull[0].second.toFloat())
+            for (i in 1 until hull.size) lineTo(hull[i].first.toFloat(), hull[i].second.toFloat())
+            close()
+        }
     }
 
     /**
@@ -5029,3 +5097,6 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val CAR_MODELS = listOf("saloon", "hatch", "estate", "suv", "pickup", "van", "sports")
     }
 }
+
+/** The fonts offered for the map's lettering: wider and heavier than Mapbox's narrow DIN Pro, all with the weights the map uses. */
+internal val MAP_FONTS = listOf("Roboto", "Open Sans", "Inter", "Lato", "Montserrat")

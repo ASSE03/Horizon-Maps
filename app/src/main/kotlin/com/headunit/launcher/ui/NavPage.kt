@@ -38,6 +38,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddRoad
 import androidx.compose.foundation.layout.widthIn
@@ -51,6 +54,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Route
+import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.EvStation
@@ -222,7 +226,6 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         if (engine.prefs.s(PreferenceKeys.VEHICLE, "car") == "lorry") Pill("+ Parking PL", engine.stopMode && engine.nearbyKind == "lorrypark", { engine.stopMode = true; engine.loadNearby("lorrypark", false) })
         Pill(if (engine.via.isEmpty()) "+ Étape" else "Modifier les étapes", false, { engine.stopsEditor = true })
         if (engine.via.isNotEmpty()) Text(engine.via.joinToString(" › ") { it.name }, color = c.text, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
-        if (costText != null) Text(costText, color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp))
         engine.destRain?.let { Text(it, color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 8.dp)) }
         engine.bisonText?.let { Text(it, color = Warn, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, modifier = Modifier.padding(horizontal = 8.dp).widthIn(max = 420.dp)) }
     }
@@ -337,6 +340,14 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
                     if (delayMin >= 1) "+$delayMin min de trafic" else if (via.isNotEmpty()) "via $via" else "Aucun retard",
                     color = if (delayMin >= 10) Bad else if (delayMin >= 1) Warn else c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
+                // roughly what this route costs in fuel (or charging), from Settings › Fuel (pc4096: it was only at the far end of the
+                // Stops row, scrolled out of sight)
+                if (mpg != null && ppl != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                    Icon(if (ev) Icons.Rounded.EvStation else Icons.Rounded.LocalGasStation, null, tint = c.sub, modifier = Modifier.size(13.dp))
+                    Text((if (ev) "Recharge environ " else "Carburant environ ") + java.text.NumberFormat.getCurrencyInstance(if (engine.imperial) java.util.Locale.UK else java.util.Locale.getDefault()).format(
+                        if (ev) r.len / 1609.344 / mpg * ppl / 100.0 else r.len / 1609.344 / mpg * 4.54609 * ppl / 100.0),
+                        color = c.text.copy(alpha = 0.8f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 4.dp))
+                }
                 LorryBadge(r)
                 if (i == engine.active) LorryCheck(engine, r)
             }
@@ -499,19 +510,22 @@ internal fun ArrivalCard(engine: NavEngine, a: ArrivalInfo, modifier: Modifier =
     }
 }
 
-private fun nearbyIcon(kind: String?): androidx.compose.ui.graphics.vector.ImageVector = when (kind) {
+private fun nearbyIcon(kind: String?): androidx.compose.ui.graphics.vector.ImageVector = when (kind?.substringBefore(':')) {
     "fuel" -> Icons.Rounded.LocalGasStation
     "charging" -> Icons.Rounded.EvStation
     "food" -> Icons.Rounded.Restaurant
     "coffee", "services" -> Icons.Rounded.LocalCafe
     "toilets" -> Icons.Rounded.Wc
     "lorrypark" -> Icons.Rounded.LocalShipping
+    "places" -> Icons.Rounded.Bookmarks
+    "tracks" -> Icons.Rounded.Route
     else -> Icons.Rounded.LocalParking
 }
 
-private fun nearbyTitle(kind: String?): String = when (kind) {
+private fun nearbyTitle(kind: String?): String = if (kind != null && kind.contains(':')) kind.substringAfter(':') else when (kind) {
     "fuel" -> "Stations-service"; "charging" -> "Bornes de recharge"; "food" -> "Restauration"; "coffee" -> "Café"
-    "toilets" -> "Toilettes"; "services" -> "Aires"; "lorrypark" -> "Parkings poids lourds"; else -> "Parkings"
+    "toilets" -> "Toilettes"; "services" -> "Aires"; "lorrypark" -> "Parkings poids lourds"
+    "places" -> "Vos lieux"; "tracks" -> "Vos traces"; else -> "Parkings"
 }
 
 @Composable
@@ -523,7 +537,11 @@ internal fun NearbyCard(engine: NavEngine) {
     val hasPrices = engine.nearby.any { it.price != null }
     Column(Modifier.floating(24.dp).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconBadge(nearbyIcon(engine.nearbyKind), c.accent, Modifier.padding(end = 12.dp), 36.dp)
+            // in one of your folders: ‹ goes back to the folders
+            val nk = engine.nearbyKind
+            if (nk != null && nk.contains(':')) Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Retour", tint = c.accent,
+                modifier = Modifier.padding(end = 8.dp).size(36.dp).clip(androidx.compose.foundation.shape.CircleShape).clickable { engine.loadNearby(nk.substringBefore(':'), false) }.padding(6.dp))
+            IconBadge(if (nk != null && nk.contains(':')) Icons.Rounded.FolderOpen else nearbyIcon(nk), c.accent, Modifier.padding(end = 12.dp), 36.dp)
             Text(title, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             if (engine.nearbyBusy) CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
             Icon(Icons.Rounded.Close, "Fermer", tint = c.sub, modifier = Modifier.padding(start = 12.dp).size(22.dp).clickable { engine.clearNearby() })
@@ -535,9 +553,14 @@ internal fun NearbyCard(engine: NavEngine) {
         }
         LazyColumn(Modifier.heightIn(max = 300.dp).padding(top = 6.dp)) {
             items(engine.nearby) { n ->
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { if (adding) engine.addStop(n.place) else engine.startRoute(n.place) }.padding(vertical = 8.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable {
+                    // (a GPX track is shown on the map with its card, rather than added as a stop or driven straight away; a folder opens)
+                    if (n.place.web.startsWith("folder:")) engine.loadNearby((engine.nearbyKind ?: "places").substringBefore(':') + ":" + n.place.web.removePrefix("folder:"), false)
+                    else if (n.place.web.startsWith("gpx:")) { engine.nearbyKind = null; engine.pickPlace(n.place) }
+                    else if (adding) engine.addStop(n.place) else engine.startRoute(n.place)
+                }.padding(vertical = 8.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(38.dp).clip(androidx.compose.foundation.shape.CircleShape).background(c.accent.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
-                        Icon(nearbyIcon(engine.nearbyKind), null, tint = c.accent, modifier = Modifier.size(20.dp))
+                        Icon(if (n.place.web.startsWith("folder:")) Icons.Rounded.Folder else nearbyIcon(engine.nearbyKind), null, tint = c.accent, modifier = Modifier.size(20.dp))
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text(n.place.name, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -555,7 +578,16 @@ internal fun NearbyCard(engine: NavEngine) {
                         }
                     }
                     if (n.price != null) Text(com.headunit.launcher.fmtFuelPrice(n.price, n.unit), color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
-                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 10.dp)) {
+                    // a charger's live availability: green with some free, red with none, grey without live data
+                    if (n.free.isNotBlank()) {
+                        val none = n.free.startsWith("0 sur"); val unknown = n.free.startsWith("Pas")
+                        val fg = if (unknown) c.sub else if (none) Color(0xFFF2C2BF) else Color(0xFF9BE3B0)
+                        val bg = if (unknown) c.tile else if (none) Color(0xFF3A2224) else Color(0xFF1E3A28)
+                        Text(n.free, color = fg, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                            modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(8.dp)).background(bg).padding(horizontal = 8.dp, vertical = 3.dp))
+                    }
+                    if (n.place.web.startsWith("folder:")) Icon(Icons.Rounded.ChevronRight, null, tint = c.sub, modifier = Modifier.padding(start = 10.dp).size(22.dp))
+                    else Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 10.dp)) {
                         Text(Geo.fmtDist(n.dist, engine.imperial), color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 4.dp))
                         if (n.detourMin >= 0) Text("+${n.detourMin} min", color = c.sub, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                     }

@@ -1,5 +1,11 @@
 package com.headunit.launcher.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.ExpandLess
 import com.headunit.launcher.L
 
 import androidx.compose.foundation.Canvas
@@ -71,6 +77,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.ui.geometry.Size
@@ -157,10 +164,16 @@ fun RouteBar(engine: NavEngine, modifier: Modifier = Modifier, thin: Boolean = f
             val y0 = (size.height - th) / 2f
             val bw = size.width / bins
             drawRoundRect(Color.Black.copy(alpha = 0.45f), Offset(0f, y0 - 1.5f), Size(size.width, th + 3f), CornerRadius(th))
-            for (b in 0 until bins) {
-                val done = (b + 1f) / bins <= frac
-                val col = when (levels[b]) { 2 -> Bad; 1 -> Warn; else -> accent }
-                drawRect(if (done) Color(0xFF8A8F99) else col, Offset(b * bw, y0), Size(bw + 0.6f, th))
+            // the coloured bar has round ends (it used to be square inside the rounded dark track)
+            val ends = androidx.compose.ui.graphics.Path().apply {
+                addRoundRect(androidx.compose.ui.geometry.RoundRect(0f, y0, size.width, y0 + th, CornerRadius(th / 2f)))
+            }
+            clipPath(ends) {
+                for (b in 0 until bins) {
+                    val done = (b + 1f) / bins <= frac
+                    val col = when (levels[b]) { 2 -> Bad; 1 -> Warn; else -> accent }
+                    drawRect(if (done) Color(0xFF8A8F99) else col, Offset(b * bw, y0), Size(bw + 0.6f, th))
+                }
             }
             // the arrow: the map's own locator, shrunk and turned to point along the bar
             val sz = (if (thin) 22.dp else 32.dp).toPx()
@@ -802,7 +815,15 @@ fun PackAgeCard(engine: NavEngine) {
     }
 }
 
-/** A newer version of the app is out (shareable build only): Update downloads it and opens the installer; Later hides it for a few days. */
+/** The changes in an available update (every version from this one up to it), fetched once per version and kept for the run. */
+private object UpdateNotesCache { val notes = HashMap<String, String>() }
+
+/**
+ * A newer version of the app is out (shareable build only), styled like the What's new card: the blue header with your version and
+ * the new one, how many changes are new, improved and fixed, and "What's in it" folding open to just their headlines. Update
+ * downloads it and opens the installer; Later hides it for a few days. On a short landscape screen it's more compact, and the
+ * folded-open list scrolls within a set height, so it never runs off the screen.
+ */
 @Composable
 fun AppUpdateCard(engine: NavEngine) {
     val u = engine.appUpdate ?: return

@@ -123,6 +123,19 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
             delay(15_000)
         }
     }
+    // the invitation to test Horizon Maps on Google Play (GitHub edition only): a while after the app opens, only when you're
+    // stopped with no route, never over the What's new or donate cards. "Not now" brings it back in 3 days
+    var playInviteVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (com.headunit.launcher.BuildConfig.STORE == "play") return@LaunchedEffect
+        val st = prefs.s(PreferenceKeys.PLAY_INVITE, "")
+        if (st == "never" || (st.toLongOrNull() ?: 0L) > System.currentTimeMillis()) return@LaunchedEffect
+        delay(40_000)   // let the map settle first
+        while (true) {
+            if (!whatsNewVisible && !donateVisible && engine.route == null && !engine.previewing && (engine.fix?.speed ?: 0.0) < 2.0) { playInviteVisible = true; break }
+            delay(15_000)
+        }
+    }
     // the head unit has switched to its night mode at least once (so it links night mode to the headlights): noted for "Headlights"
     val sysDarkRaw = rememberSystemNight(useLamps = prefs.s(PreferenceKeys.THEME, "auto") == "lights")
     // On a phone, Auto follows the phone's own light / dark setting exactly (Sun times is there for sunrise and sunset). Head units
@@ -176,6 +189,8 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
     val customOn = mapColours == "custom"
     val baseColours = if (customOn) prefs.s(PreferenceKeys.CUSTOM_BASE, "mapbox") else mapColours
     LaunchedEffect(baseColours) { map.setColours(baseColours) }
+    val mapFont = prefs.s(PreferenceKeys.MAP_FONT, "")
+    LaunchedEffect(mapFont) { map.setFont(mapFont) }
     val customDay = prefs.s(PreferenceKeys.CUSTOM_DAY, "")
     val customNight = prefs.s(PreferenceKeys.CUSTOM_NIGHT, "")
     val customW = prefs.i(PreferenceKeys.CUSTOM_ROUTE_W, 100)
@@ -313,7 +328,9 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
                     val bleed = prefs.b(PreferenceKeys.FULLSCREEN, true)
                     MapHost(map, Modifier.fillMaxSize().bleedCutout(bleed))
                     // at night in 3D, stars and the real moon phase in the sky above the horizon
-                    if (c.dark && engine.tilt3d && !sat && prefs.b(PreferenceKeys.NIGHTSKY, true)) NightSky(Modifier.fillMaxWidth().fillMaxHeight(0.2f))
+                    if (c.dark && engine.tilt3d && !sat && prefs.b(PreferenceKeys.NIGHTSKY, true))
+                        // (stretched up behind the camera notch with the map: it used to start under it, a hard edge across the top)
+                        Box(Modifier.fillMaxSize().bleedCutout(bleed)) { NightSky(Modifier.fillMaxWidth().fillMaxHeight(0.2f)) }
                     // in a tunnel (no GPS) the map is dimmed a little, as the car's own screen would be
                     if (engine.deadReckoning && !c.dark && prefs.b(PreferenceKeys.TUNNELDIM, true)) Box(Modifier.fillMaxSize().bleedCutout(bleed).background(Color.Black.copy(alpha = 0.35f)))
                     val wxCode = engine.weather?.code
@@ -325,7 +342,17 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
                     if (engine.deadReckoning) DeadReckoningChip(Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp))
                     // (with the heading switched off and no road name known, there's nothing to show)
-                    val cruiseShows = engine.cruising && engine.following && prefs.b(PreferenceKeys.CRUISE, true) &&
+                    // it stays up while you slow down or wait at lights (a minute below walking pace), instead of swapping back and
+                    // forth with the bubble under your arrow every time you dropped under 9 mph (liamstears)
+                    val fastNow = engine.cruising
+                    val noRoute = engine.route == null && !engine.previewing
+                    var cruiseHeld by remember { mutableStateOf(false) }
+                    LaunchedEffect(fastNow, noRoute) {
+                        if (fastNow) cruiseHeld = true
+                        else if (!noRoute) cruiseHeld = false
+                        else { kotlinx.coroutines.delay(60_000L); cruiseHeld = false }
+                    }
+                    val cruiseShows = (fastNow || (cruiseHeld && noRoute)) && engine.following && prefs.b(PreferenceKeys.CRUISE, true) &&
                         (prefs.b(PreferenceKeys.CRUISE_HEADING, true) || engine.roadNow.isNotBlank())
                     // (above the media bar when that's showing at the bottom)
                     val mediaUp = prefs.b(PreferenceKeys.MEDIA_BAR, true) && com.headunit.launcher.MediaNow.showing()
@@ -422,6 +449,10 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
         }
     }
     if (donateVisible) DonateDialog(dark) { prefs.put(PreferenceKeys.DONATE_SHOWN, true); donateVisible = false }
+    if (playInviteVisible) PlayInviteDialog(dark) { how ->
+        prefs.put(PreferenceKeys.PLAY_INVITE, if (how == InviteClose.LATER) (System.currentTimeMillis() + 3L * 24 * 3600_000L).toString() else "never")
+        playInviteVisible = false
+    }
     if (whatsNewVisible) {
         // Follow the app's active day/night palette so the update card stays readable in both modes.
         val updatePalette = if (dark) DarkVw else LightVw

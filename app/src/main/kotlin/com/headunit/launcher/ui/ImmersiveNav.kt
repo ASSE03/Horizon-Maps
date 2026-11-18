@@ -48,6 +48,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.AddLocationAlt
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Park
@@ -729,6 +731,22 @@ private fun OptionsSheet(engine: NavEngine, shareEta: () -> Unit, wide: Boolean 
                 )
                 SheetHeading(if (engine.route != null) "Trouver sur l'itinéraire" else "Trouver à proximité")
                 WideTiles(4, finds)
+                // closes the app properly: ends any route and stops the GPS, so nothing keeps running in the background (pc4096: swiping
+                // it away left a route, and the GPS with it, going for hours)
+                val act = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(14.dp)).border(1.5.dp, Bad.copy(alpha = 0.8f), RoundedCornerShape(14.dp))
+                    .clickable {
+                        close()
+                        try { if (engine.route != null || engine.previewing) engine.endRoute() } catch (e: Exception) { }
+                        try { engine.stopLocation() } catch (e: Exception) { }
+                        try { act?.let { com.headunit.launcher.NavService.stop(it.applicationContext) } } catch (e: Exception) { }
+                        try { act?.finishAndRemoveTask() } catch (e: Exception) { }
+                    }.padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.PowerSettingsNew, null, tint = Bad, modifier = Modifier.size(18.dp))
+                    Text("Fermer Horizon Nav", color = Bad, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp))
+                }
+                Text("Termine l’itinéraire et arrête le GPS", color = c.sub, fontSize = 11.sp, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
         }
         if (wide) Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -867,8 +885,9 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                 }
                 val buttons: @Composable () -> Unit = {
                     // electric: chargers along the route from here
-                    // (voice, sound and stops moved off the card: sound is a big button at the top right, voice and stops are in Map
-                    // options > This trip)
+                    // (voice and sound moved off the card: sound is a big button at the top right, voice is in Map options > This trip)
+                    // add a stop (or see the stops) on the way
+                    ImmCircle({ engine.stopsEditor = true }, 44.dp) { Icon(Icons.Rounded.AddLocationAlt, if (engine.via.isEmpty()) "Ajouter un arrêt" else "Arrêts", tint = c.accent, modifier = Modifier.size(22.dp)) }
                     if (evPct != null) ImmCircle({ engine.loadNearby("charging", false) }, 44.dp) { Icon(Icons.Rounded.EvStation, "Bornes plus loin", tint = Good, modifier = Modifier.size(22.dp)) }
                     Box(Modifier.size(44.dp).shadow(6.dp, CircleShape).clip(CircleShape).background(Bad).pressClick { engine.endRoute() }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.Close, "Terminer l'itinéraire", tint = Color.White, modifier = Modifier.size(23.dp))
@@ -885,7 +904,7 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                     // all fit (an electric car adds a fourth figure and a fifth button), the buttons go on a line under the figures:
                     // squeezed onto one line the figures ran into each other ("21 min14:1216 km75")
                     val nStats = (if (evPct != null) 5 else 3) + (if (evStop != null) 1 else 0)
-                    val nButtons = if (evPct != null) 2 else 1
+                    val nButtons = if (evPct != null) 3 else 2
                     val oneLine = maxWidth >= (nStats * 74 + nButtons * 42 + 30).dp
                     // fork FR : trop de chiffres pour une ligne (voiture électrique, sur un téléphone en portrait) : le trajet sur une
                     // ligne, la batterie sur la suivante (serrés sur une seule ligne, ils se chevauchaient)
@@ -913,6 +932,7 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                     }
                     val smallButtons: @Composable (Modifier) -> Unit = { m ->
                         Row(m, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ImmCircle({ engine.stopsEditor = true }, 40.dp) { Icon(Icons.Rounded.AddLocationAlt, if (engine.via.isEmpty()) "Ajouter un arrêt" else "Arrêts", tint = c.accent, modifier = Modifier.size(20.dp)) }
                             if (evPct != null) ImmCircle({ engine.loadNearby("charging", false) }, 40.dp) { Icon(Icons.Rounded.EvStation, "Bornes plus loin", tint = Good, modifier = Modifier.size(20.dp)) }
                             Box(Modifier.size(40.dp).shadow(6.dp, CircleShape).clip(CircleShape).background(Bad).pressClick { engine.endRoute() }, contentAlignment = Alignment.Center) {
                                 Icon(Icons.Rounded.Close, "Terminer l'itinéraire", tint = Color.White, modifier = Modifier.size(21.dp))
@@ -1192,7 +1212,7 @@ internal fun ImmTurnCard(
         } else {
         val thenIcon = t.thenManeuver != null && engine.prefs.s(PreferenceKeys.THEN_STYLE, "row") == "icon"
         Row(Modifier.padding(start = if (compact) 12.dp else 18.dp, end = if (compact) 12.dp else 16.dp, top = if (compact) 9.dp else 16.dp, bottom = if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ManeuverArrow(t.maneuver, Geo.maneuverAngle(t.maneuver), Modifier.size(if (compact) 42.dp else 60.dp), roundaboutExit = t.exit, roundaboutClockwise = !engine.mirrored, exitAngle = roundaboutTurn(t.rbIn, t.rbOut))
+            ManeuverArrow(t.maneuver, Geo.maneuverAngle(t.maneuver), Modifier.size(if (compact) 42.dp else 60.dp), roundaboutExit = t.exit, roundaboutClockwise = !engine.mirrored, exitAngle = roundaboutTurn(t.rbIn, t.rbOut), exitNumber = t.exit)
             Column(Modifier.padding(start = if (compact) 9.dp else 16.dp).weight(1f)) {
                 // at traffic lights or a stop sign: that in big ("At the lights"), and the distance moves down beside the road name
                 val lmk = t.landmark.isNotBlank()
@@ -1270,13 +1290,19 @@ internal fun ImmTurnCard(
         // (the "then" line stays on a small car screen too)
         if ((!compact || car) && t.thenManeuver != null && !thenIcon) {
             Row(Modifier.fillMaxWidth().background(TealDeep).padding(horizontal = 18.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                ManeuverArrow(t.thenManeuver, Geo.maneuverAngle(t.thenManeuver), Modifier.size(22.dp), roundaboutExit = t.thenExit, roundaboutClockwise = !engine.mirrored)
-                Text(t.thenText, color = Color.White.copy(alpha = 0.92f), fontSize = 14.sp, maxLines = 2, lineHeight = 17.sp, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 10.dp))
+                // a roundabout next: its exit number goes in the icon, so the line only needs the road ("Then A3057 Romsey Road");
+                // "Then take the 3rd exit onto …" ran out of room on long names (karthikeyansr)
+                val rbShort = t.thenExit > 0 && t.thenStreet.isNotBlank() && t.thenManeuver.uppercase().contains("ROUNDABOUT")
+                if (rbShort) ManeuverArrow(t.thenManeuver, Geo.maneuverAngle(t.thenManeuver), Modifier.size(38.dp), roundaboutExit = t.thenExit, roundaboutClockwise = !engine.mirrored, exitNumber = t.thenExit)
+                else ManeuverArrow(t.thenManeuver, Geo.maneuverAngle(t.thenManeuver), Modifier.size(22.dp), roundaboutExit = t.thenExit, roundaboutClockwise = !engine.mirrored)
+                Text(if (rbShort) "Puis ${t.thenStreet}" else t.thenText, color = Color.White.copy(alpha = 0.92f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 10.dp))
             }
         }
         } // (end of the full card)
         footer?.invoke()
-        Box(Modifier.fillMaxWidth().height(4.dp).background(Color.Black.copy(alpha = 0.18f))) {
+        // the progress bar sits a little way inside the card, clear of its round corners (which hid the last few seconds of it
+        // when it ran along the very bottom edge, karthikeyansr)
+        Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 5.dp, bottom = 9.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.Black.copy(alpha = 0.18f))) {
             Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(Color.White.copy(alpha = 0.9f)))
         }
     }
@@ -1382,9 +1408,12 @@ private fun ImmChips(engine: NavEngine, focusSearch: () -> Unit) {
         // recent places; the row always ends with "Add a place"
         val rawRoutes = engine.prefs.s(PreferenceKeys.PLACES_ROUTES, "[]")
         val routes = remember(rawRoutes) { engine.savedRoutes() }
-        val extra: List<Pair<String, com.headunit.launcher.Place>> = remember(rawCustom, rawFav) {
-            val mine = engine.places.customs()
-            val favs = engine.places.favourites().filter { f -> mine.none { Geo.dist(it.place.pos, f.pos) < 60 } &&
+        val rowPlaces = engine.prefs.b(PreferenceKeys.ROW_PLACES, true)
+        val extra: List<Pair<String, com.headunit.launcher.Place>> = remember(rawCustom, rawFav, rowPlaces) {
+            val all = engine.places.customs()
+            // (only the starred ones, and none with "Your places next to Home and Work" off: GitHub bijindas)
+            val mine = if (rowPlaces) all.filter { it.pinned } else emptyList()
+            val favs = engine.places.favourites().filter { f -> all.none { Geo.dist(it.place.pos, f.pos) < 60 } &&
                 listOfNotNull(home, work).none { Geo.dist(it.pos, f.pos) < 60 } }
             (mine.map { it.label to it.place } + favs.map { it.name to it }).take(40)
         }
@@ -1566,7 +1595,6 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
         @Suppress("UNUSED_VARIABLE") val unusedGroups = grouped
         recents.map { Triple(it, 2, it.name) }
     }
-    var showAll by rememberSaveable { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
     if (adding) AddPlaceDialog(engine, null) { adding = false }
     val here = engine.fix?.pos
@@ -1622,12 +1650,11 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
         Column(Modifier.fillMaxWidth().panel(10.dp, RoundedCornerShape(26.dp), c.surface).padding(vertical = 6.dp)) {
             Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Récents".uppercase(L.locale), color = c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f))
-                if (saved.size > 3) Text(if (showAll) "Moins" else "Tous (${saved.size})", color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { showAll = !showAll }.padding(horizontal = 10.dp, vertical = 8.dp))
             }
             if (saved.isEmpty()) Text("Les lieux où vous allez apparaissent ici", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 8.dp))
             LazyColumn(Modifier.heightIn(max = 250.dp)) {
-                items(if (showAll || openGroup.isNotEmpty()) saved else saved.take(3)) { (p, kind, label) ->
+                // (all of them, scrolling within the panel: the "All 6" / "Less" switch is gone)
+                items(saved) { (p, kind, label) ->
                     if (kind == 4) {
                         val open = label == openGroup
                         Row(Modifier.fillMaxWidth().clickable { openGroup = if (open) "" else label }.padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {

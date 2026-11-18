@@ -5,6 +5,10 @@ Everything that has changed in Horizon Nav, newest first. Each version lists wha
 ## Unreleased
 
 ### New
+- Close Horizon Nav: a button at the bottom of Map options ends any route, stops the GPS and closes the app, so nothing keeps running in the background (thanks to pc4096)
+- Help test Horizon Maps on Google Play: a one-off invitation to join the testers for the coming Google Play version, with a QR code for head units. It never shows while you are driving, and a banner at the top of Settings opens it any time
+- Your places and Your tracks shortcuts: two new buttons for the row under the search bar (Settings › Places & trips › Shortcuts). One lists your saved places, the other your GPX tracks, nearest first, on the phone and on Android Auto (thanks to bijindas)
+- Map lettering: choose a wider, bolder font for road and place names on the map (Settings › Map style › Map lettering): Roboto, Open Sans, Inter, Lato or Montserrat (thanks to karthikeyansr-lgtm)
 - Stops on Android Auto: tap the trip card's figures while navigating for the stops on the way, each with when you get there. Move them earlier or later, take one off or add one, then Update route (thanks to yurividal)
 - Search while navigating on Android Auto: the trip card has a search button (Settings › Android Auto › Buttons on the trip card). A place picked while driving is asked about: Add as a stop, or Go here instead (thanks to yurividal)
 - "Add a stop" by voice: "Hey Google, add a stop at…" while navigating adds it as the next stop and keeps where you're going, on Android Auto and on the phone (thanks to yurividal)
@@ -35,6 +39,18 @@ Everything that has changed in Horizon Nav, newest first. Each version lists wha
 - Reorder your shortcuts: Settings › Places & trips › Shortcuts under the search bar now has a "Your order" list with up and down arrows to move each one
 
 ### Improved
+- Tidier Settings: While driving has its own page (road name, arrow, tunnels, media controls, locking), so Screen & sizes is shorter. Weather now sits with the light (Light, weather & 3D). Everything about the search bar is in one group, Under the search bar, and Map lettering is part of Colours and lettering. Settings search finds everything in its new place
+- Choose which of your places sit next to Home and Work: each place in Settings › Places & trips › Your places has a star. Starred ones show in the row under the search bar, and a switch hides them all. Every place is still in search and the Your places shortcut (thanks to bijindas)
+- Folders in Your places and Your tracks: the shortcut lists show your folders first, then what's in no folder. Tap a folder to open it, and ‹ goes back. This works on Android Auto too (thanks to bijindas)
+- Fuel cost on each route: the route options show roughly what each route costs in fuel (or charging) on its own card. It used to sit at the far end of the Stops row, out of sight (thanks to pc4096)
+- Update card: now styled like the What's new card, showing your version and the new one, and how many changes are new, improved and fixed. "What's in it" folds open to the headlines of everything since your version. It fits a short landscape screen too
+- Trip card progress bar: the coloured bar now has rounded ends
+- Recent places under the search bar: all of them show in the list, which scrolls, instead of three with an "All" / "Less" switch
+- Headlight under the 3D car: the beam starts under the 3D car and no longer shines over its roof, and it no longer flickers. On a route it comes on once you first move off, then stays on to the end, even when you stop at lights; with no route it shows while you are moving (thanks to liamstears)
+- Road name at the bottom stays put: driving without a route, the road name at the bottom no longer swaps with the bubble under your arrow every time you slow down. It stays for a minute after you stop (thanks to liamstears)
+- Clearer traffic note when stopped: the note now reads "Showing traffic while you’re stopped" (thanks to liamstears)
+- Turn card: the progress bar now sits a little way inside the card, so its rounded corners no longer hide the last few seconds. At a roundabout, the exit number is written large inside a bigger ring, on the turn card and in the "then" line, so the "then" line only needs the road name (thanks to karthikeyansr-lgtm)
+- Add a stop from the trip card: the trip card has an add-stop button again, next to End route. It opens your stops, where you can add one on the way
 - Saved places all in one row: your own places, favourites and saved routes are now all in the scrolling row under the search bar, which always ends with an "Add a place" tile. The list below it is just recent places
 - Getting ready for Google Play: the build can now also make a Google Play edition of the app, called Horizon Maps so it's easy to tell apart (installed beside this one, updated by Play, without the self-updater). Nothing changes in this version
 - Quicker rerouting: a wrong turn is now noticed on the first GPS reading when you're clearly on another road, and the new route is asked for twice at once (the early request and a fresh one from where you are), using whichever answers first. An early request made from too far back is no longer used, as it gave a route starting behind you (thanks to karthikeyansr-lgtm)
@@ -65,6 +81,12 @@ Everything that has changed in Horizon Nav, newest first. Each version lists wha
 - Map preview in Settings on a phone: on the map pages (Map style, Light & 3D, On the map, Your arrow) the live preview now stays at the top while you scroll the settings, as it does in landscape, so you can see each change as you make it
 
 ### Fixed
+- Arriving in a big car park: stopping for a minute within 250 m of your destination now counts as arriving, so the route ends when you park, not only at the shop's front door (thanks to pc4096)
+- Routes left running in the background: a route still going after half an hour parked, with the app put away, now ends by itself, stopping the GPS (thanks to pc4096)
+- Driving the route the wrong way: turning round, or setting off the other way along the route, now finds a new route in about 2 seconds. Your arrow follows you instead of freezing, facing backwards, with the map standing still (thanks to jvricardo1)
+- Map not appearing: if the map still hasn't loaded after 25 seconds with no error, the app now checks with Mapbox itself and says what's in the way: a blocked server (private DNS or an ad blocker), the head unit's clock, the token, or the connection
+- Arrow running into the junction: stopping at a junction no longer leaves your arrow out in the middle of the road you are turning into. The arrow slows with you and moves back to where you really are (thanks to jvricardo1)
+- Night sky behind the camera notch: the starry fade at the top of the map now reaches the top of the screen, instead of starting below the notch with a hard edge
 - Voice "add a stop" replaced the destination: asking the Assistant to add a stop while navigating threw the trip away and went to the stop instead (thanks to yurividal)
 - Stops set back from the road: a stop more than 80 m from the road (a pin in the middle of a car park) was never counted as reached, so the route went back to it the next time it was worked out (thanks to yurividal)
 - Google Play Protect no longer blocks installing: the media bar's song and artwork needed notification access, which Play Protect now blocks in apps installed from a file. The GitHub edition's media bar keeps back, play / pause and next without the song (thanks to desko1973)

@@ -5,6 +5,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Raccourcis Vos lieux et Vos traces : sous la barre de recherche, ils ouvrent vos lieux enregistrés et vos traces GPX, rangés en dossiers.
+- Police de la carte : Réglages › Style de carte choisit la police des noms de routes et de lieux (Roboto, Open Sans, Inter, Lato, Montserrat).
+- Fermer Horizon Nav : un bouton dans les réglages ferme l'appli et son guidage en arrière-plan.
+- Coût du carburant sur chaque itinéraire : la carte de chaque choix d'itinéraire affiche son coût estimé.
+- Section En conduisant : nom de la rue, flèche, tunnels, multimédia et verrouillage sont regroupés dans une section des réglages.
 - Traces GPX : Réglages › Lieux et trajets › Traces GPX importe un fichier .gpx, l'affiche sur la carte et le fait suivre comme itinéraire (aussi depuis la recherche), avec des groupes pour les ranger.
 - Étapes sur Android Auto : la liste des étapes se modifie sur l'écran de la voiture (ajouter, monter, descendre, retirer), avec l'heure d'arrivée à chacune.
 - Recherche et réglages sur Android Auto : une carte de recherche et une carte de réglages s'ouvrent sur l'écran de la voiture, et se font défiler du doigt.
@@ -96,6 +101,14 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Recalcul à contresens : rouler sur l'itinéraire dans le mauvais sens relance le calcul.
+- Flèche à l'arrêt : elle ne dépasse plus dans le carrefour quand vous vous arrêtez.
+- Arrivée en se garant : se garer près de la destination termine le guidage, et un guidage oublié en arrière-plan s'arrête seul.
+- Carte de direction : barre de progression dans les coins arrondis, numéro de sortie en grand dans l'anneau du rond-point, et « Puis » donne juste la route après un rond-point.
+- Faisceau des phares : sans scintillement, la voiture découpée dans la lumière, allumé tout le trajet une fois parti.
+- Bouton d'ajout d'étape de retour sur la carte de trajet.
+- Lieux favoris à côté de Domicile et Travail, et la liste complète des lieux récents.
+- Ciel de nuit derrière l'encoche de la caméra, et nom de la route plus stable.
 - Recalcul plus rapide : une demande anticipée et une nouvelle demande partent en même temps, la première arrivée est utilisée.
 - Flèche sur la bonne voie des routes à chaussées séparées : la flèche ne saute plus sur l'autre sens quand le GPS dérive vers le milieu.
 - Étape atteinte même sans passer à 80 m : une étape un peu à l'écart de la route (au milieu d'un parking) est validée une fois dépassée.
