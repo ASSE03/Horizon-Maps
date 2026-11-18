@@ -1799,6 +1799,9 @@ private fun AlertWaysRow(prefs: Prefs, engine: NavEngine, g: String, label: Stri
                 Pill(name, on, { prefs.put("alert_${g}_$ch", !on) })
             }
         }
+    }
+}
+
 /** GitHub edition: a small banner at the top of the Settings list about the coming Google Play version (tap: the invitation). */
 @Composable
 private fun PlayBanner(c: Vw, onClick: () -> Unit) {
