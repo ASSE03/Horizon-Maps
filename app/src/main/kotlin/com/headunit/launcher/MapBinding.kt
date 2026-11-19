@@ -195,11 +195,14 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             else if (modelOn && (e.sourceId ?: "").startsWith("dl-me-m")) main0.post {
                 // your own model: only it is given up (until another file is picked), and the car picture shows; a built-in one: the
                 // picture of the same shape for the rest of this run
-                if (modelShape == "own") { ownFailed = true; ownFailedStamp = ownStamp } else modelBroken = true
+                if (modelShape == "own") { ownFailed = true; ownFailedStamp = ownStamp; ownFailReason = (e.message ?: "").take(120); onOwnModelFailed?.invoke(ownFailReason) } else modelBroken = true
                 modelWanted = false; reinstall()
             }
             // a piece of Mapbox's map itself (not one of the app's extras, like traffic) couldn't be loaded
-            else if ((e.type == MapLoadingErrorType.TILE || e.type == MapLoadingErrorType.SOURCE) && !(e.sourceId ?: "").startsWith("dl-")) onTileMissing?.invoke()
+            else if ((e.type == MapLoadingErrorType.TILE || e.type == MapLoadingErrorType.SOURCE) && !(e.sourceId ?: "").startsWith("dl-")) {
+                lastTileError = "${e.sourceId ?: "?"}: ${e.message}".take(140)
+                onTileMissing?.invoke()
+            }
         }
         mapView.gestures.addOnMapLongClickListener { p -> onLongPress?.invoke(LL(p.latitude(), p.longitude())); true }
         mapView.gestures.addOnMapClickListener { p ->
@@ -415,6 +418,21 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             addS(st, RasterSource.Builder("dl-ortho").tiles(listOf(IGN_ORTHO)).tileSize(256).minzoom(0).maxzoom(19).attribution("© IGN").build())
             addL(st, RasterLayer("dl-ortho", "dl-ortho").inSlot("bottom").rasterOpacity(1.0).rasterFadeDuration(150.0).rasterEmissiveStrength(0.85))
         } catch (e: Throwable) { android.util.Log.w("MapBinding", "ortho: ${e.message}") }
+    /** For the feedback report: the last piece of Mapbox's map that wouldn't load, and which map is really on screen. */
+    @Volatile var lastTileError = ""
+    /** Why the map wouldn't load your own 3D model (Mapbox's words), and a hook to say so on screen. */
+    @Volatile var ownFailReason = ""
+    var onOwnModelFailed: ((String) -> Unit)? = null
+    val shownMap: String get() = when (loadedStyle) {
+        null -> "none"; Style.STANDARD_SATELLITE -> "satellite"; Style.STANDARD -> "standard"; Style.MAPBOX_STREETS, Style.DARK -> "classic"
+        else -> if ((loadedStyle ?: "").startsWith("{")) "own style" else "other"
+    }
+    /** For the feedback report: what's drawing your arrow. */
+    val arrowNote: String get() = when {
+        modelShape == "own" && ownFailed -> "your 3D model wouldn't load (car picture instead)" + (if (ownFailReason.isNotBlank()) ": $ownFailReason" else "")
+        modelOn -> "3D model ($modelShape)"
+        modelWanted -> "3D model ($modelShape) waiting"
+        else -> "picture ($locatorStyle)"
     }
 
     private fun isMapboxStyle(u: String?) = u == Style.STANDARD || u == Style.STANDARD_SATELLITE || u == Style.MAPBOX_STREETS || u == Style.DARK || u == NAV_DAY || u == NAV_NIGHT
@@ -643,9 +661,10 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
 
     private fun horizonNightBuildings(): Boolean = hzFamily() && !satellite && (lightPreset == "night" || lightPreset == "dusk")
 
-    /** Satellite at "night" darkens the photos until there's next to nothing to see (it looked as if satellite wasn't working),
-     *  so satellite goes no darker than dusk. */
-    private fun satLight(p: String): String = if (satellite && p == "night") "dusk"
+    /** Satellite at "night" darkens the photos until there's next to nothing to see, and even dusk left them so dark that with
+     *  Night chosen it still looked as if satellite wasn't working (Matattack99, #186): satellite's photos are shown in daylight at
+     *  night (the screen's own night dimming still applies). */
+    private fun satLight(p: String): String = if (satellite && p == "night") "day"
         else if (p == "night" && hzFamily() && hzLight == "dusk") "dusk" else p
 
     /** One of Standard's settings (only once a style is showing; they're also written into the style when it loads). */
@@ -658,7 +677,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private fun baseConfig(): org.json.JSONObject {
         val sat = (wantedStyle ?: "") == Style.STANDARD_SATELLITE
         val c = org.json.JSONObject()
-        c.put("lightPreset", if (sat && lightPreset == "night") "dusk" else if (!sat && lightPreset == "night" && hzFamily() && hzLight == "dusk") "dusk" else lightPreset)
+        c.put("lightPreset", if (sat && lightPreset == "night") "day" else if (!sat && lightPreset == "night" && hzFamily() && hzLight == "dusk") "dusk" else lightPreset)
         // shop and place labels rest on the light map and (on the full map) while you're on the move: placing them is the costly part
         c.put("showPointOfInterestLabels", !lite && !poiMoving)
         c.put("showTransitLabels", !lite)
@@ -1294,7 +1313,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // the map for this, re-placed many times a second, and it flickered
             // (only the car: the 3D arrow is low and flat, so its beam starts at its tip as before. Cutting the arrow's outline out
             // left a gap, and the light seemed to hover in front of it)
-            val carModel = modelOn && carLike
+            // (not your own model: its shape is unknown, so a car-shaped box cut out of the light didn't match it and left an odd
+            // dark patch round it, GitHub #152. Its beam starts at its nose instead, like the flat arrow's)
+            val carModel = modelOn && carLike && modelShape != "own"
             val start = if (carOnTop) ahead * 0.15 else if (carModel) ahead * 0.45 else ahead
             bv.mask = if (carModel) try { modelMask(p, h) } catch (e: Throwable) { null } else null
             val nose = if (start > 0.0) Furniture.offset(p, h, start) else p
@@ -1303,7 +1324,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             val l = len * sc + (ahead - start)
             val far = Furniture.offset(nose, h, l * 0.88)
             val tipO = Furniture.offset(nose, h, l * 1.05); val tipI = Furniture.offset(nose, h, l)
-            val wO = l * 0.42; val wI = l * 0.34
+            // (about half as wide as it was: the wide cone lit up the buildings either side, GitHub #152)
+            val wO = l * 0.24; val wI = l * 0.19
             val places = arrayOf(nose, Furniture.offset(far, h - 90.0, wO), tipO, Furniture.offset(far, h + 90.0, wO),
                 Furniture.offset(far, h - 90.0, wI), tipI, Furniture.offset(far, h + 90.0, wI),
                 Furniture.offset(nose, h - 90.0, l * 0.025), Furniture.offset(nose, h + 90.0, l * 0.025), Furniture.offset(nose, h, l))
@@ -1323,7 +1345,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private fun modelMask(p: LL, h: Double): android.graphics.Path? {
         val tilt = try { mbMap.cameraState.pitch } catch (e: Throwable) { tiltNow }
         val t = Math.toRadians(tilt)
-        val k = modelPxPerUnit()
+        val k = modelPxPerCarUnit()
         val a = mbMap.pixelForCoordinate(Point.fromLngLat(p.lon, p.lat))
         val f = Furniture.offset(p, h, 20.0)
         val b = mbMap.pixelForCoordinate(Point.fromLngLat(f.lon, f.lat))
@@ -1368,7 +1390,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val cosT = Math.cos(Math.toRadians(tilt)).coerceAtLeast(0.2)
         val bmp = spriteBmp
         val reachPx: Double = when {
-            modelOn -> modelPxPerUnit() * (if (carLike) 2.3 else 0.85) * cosT
+            modelOn -> modelPxPerCarUnit() * (if (carLike) 2.3 else 0.85) * cosT
             locatorStyle != "flat" && bmp != null -> (drawnRadius(bmp) * spriteSize() * 0.8).toDouble()
             else -> ((flatArrow?.let { drawnRadius(it) * (if (theme == "immersive") 0.25f else 0.625f) * arrowScale } ?: 0f) * cosT)
         }
@@ -2655,7 +2677,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             .visibility(vis(locatorStyle == "flat")))
         // the real 3D model (Full 3D only); otherwise the 3D locator is drawn by locatorView over the map, see pushModel
         modelOn = false; modelAt = null
-        if (modelWanted && !modelBroken && !satellite && MapStylePolicy.supportsFullDetailFeatures(mapDetail)) installModel(st)
+        if (modelWanted && !modelBroken && MapStylePolicy.supportsFullDetailFeatures(mapDetail)) installModel(st)
         // (the road-name pill is roadView, see placeLocator)
         spriteName = null
         placeLocator()
@@ -3488,7 +3510,27 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             liveLines.forEachIndexed { i, l -> if (l.size >= 2) fl += line(l).also { it.addNumberProperty("i", i) } }
             src("dl-live-alts")?.featureCollection(FeatureCollection.fromFeatures(fl))
         } catch (e: Exception) { }
+        stylePicked()
         pushCards()
+    }
+
+    // the other route tapped once (fahadfadi): drawn in yellow on top of the others until it's tapped again to switch to it; -1 none
+    private var pickedLive = -1
+
+    /** Shows which other route has been tapped once ([i] its number; -1 for none). */
+    fun setPickedAlt(i: Int) { main0.post { if (pickedLive != i) { pickedLive = i; stylePicked() } } }
+
+    private fun stylePicked() {
+        val ly = layer("dl-live-alts-line") as? LineLayer ?: return
+        val base = prefs.s(PreferenceKeys.ALT_ROUTE_COLOUR, "#C4D9E6")
+        try {
+            val i = pickedLive
+            if (i < 0) { ly.lineColor(base); ly.lineSortKey(0.0) }
+            else {
+                ly.lineColor(Expression.fromRaw("[\"case\",[\"==\",[\"get\",\"i\"],$i],\"#F0B429\",\"$base\"]"))
+                ly.lineSortKey(Expression.fromRaw("[\"case\",[\"==\",[\"get\",\"i\"],$i],1,0]"))
+            }
+        } catch (e: Exception) { }
     }
 
     /** Where each card is on the map right now (for taps), by alternative number. */
@@ -3691,7 +3733,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             modelColour = parts.getOrNull(1)?.takeIf { it.startsWith("#") } ?: (if (modelShape != "arrow") "#F4F5F7" else "#F2F2F6")
             ownTurn = parts.getOrNull(3)?.toDoubleOrNull() ?: 0.0
             ownStamp = parts.getOrNull(4) ?: ""
-            if (modelShape == "own") ownSide = OwnModel.info(Prefs(ctx))?.third ?: 4.4
+            if (modelShape == "own") ownSide = OwnModel.side(ctx, Prefs(ctx))
         }
         // (your own model that wouldn't load isn't tried again until a different file is picked)
         if (modelShape == "own" && ownStamp != ownFailedStamp) ownFailed = false
@@ -3740,6 +3782,16 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private fun modelPxPerUnit(): Double = arrowScale * (if (carLike) 300.0 / 4.4 * 0.6 * 0.28 * (if (modelShape == "own") 4.4 / ownSide.coerceIn(1e-4, 1e6) else 1.0) else 300.0 * 0.42 * 0.31)
 
     /**
+     * Screen pixels per "car unit" (a metre of the built-in car, which is 4.4 long). Your own model is sized by its own units, which
+     * can be anything (millimetres, centimetres, or tiny units): the glow, the headlight beam and the car's outline are sized in car
+     * units, so they fit round your model the same as round the built-in car (Matattack99: the glow filled nearly the whole screen).
+     */
+    private fun modelPxPerCarUnit(): Double = modelPxPerUnit() * (if (modelShape == "own") ownSide.coerceIn(1e-4, 1e6) / 4.4 else 1.0)
+
+    /** The glow's radius (map pixels): round the model, in step with its size on screen. */
+    private fun modelGlowRadius(): Double = modelPxPerCarUnit() / max(0.1, pixelRatioUsed.toDouble()) * (if (carLike) 2.2 else 1.45)
+
+    /**
      * The model's size: the same size on screen at every zoom, exactly like the picture locator. Mapbox's location-indicator models
      * are sized in screen pixels per model unit ("viewport" scale mode), in the map's own pixels (screen pixels / pixel ratio).
      */
@@ -3786,7 +3838,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                 addS(st, GeoJsonSource.Builder("dl-me-glow").featureCollection(FeatureCollection.fromFeatures(
                     if (p != null) listOf(Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat))) else emptyList())).build())
                 addL(st, CircleLayer("dl-me-glow-l", "dl-me-glow").inSlot(TOP)
-                    .circleRadius(scale[0] * (if (car) 2.2 else 1.45)).circleBlur(0.85).circleColor("#4C9BE6").circleOpacity(0.55)
+                    .circleRadius(modelGlowRadius()).circleBlur(0.85).circleColor("#4C9BE6").circleOpacity(0.55)
                     .circlePitchAlignment(CirclePitchAlignment.MAP).circleEmissiveStrength(1.0))
             }
             // the untinted part first (the blue disc under the arrow, or the car's glass, lights and tyres), then the coloured part
@@ -4255,7 +4307,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // the Classic look has a flat blue ring on the map under the arrow (the Modern look draws its ring in the picture itself)
             val discHalf = if (theme == "immersive") 0f else 15f * 0.625f * arrowScale * dens * Math.cos(Math.toRadians(tilt)).toFloat()
             // the picture has empty space round the arrow / car: measure where its drawing really ends at the bottom
-            val below = if (modelOn) (modelPxPerUnit() * (if (carLike) 2.3 else 0.85) * Math.cos(Math.toRadians(tilt))).toFloat()
+            val below = if (modelOn) (modelPxPerCarUnit() * (if (carLike) 2.3 else 0.85) * Math.cos(Math.toRadians(tilt))).toFloat()
                         else if (locatorStyle != "flat" && bmp != null) drawnBelowCentre(bmp) * spriteSize()
                         else flatArrow?.let { drawnBelowCentre(it) * (if (theme == "immersive") 0.25f else 0.625f) * arrowScale * Math.cos(Math.toRadians(tilt)).toFloat() } ?: 0f
             roadView.translationY = pt.y + maxOf(discHalf, below) + 3f * dens
@@ -4327,7 +4379,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             (layer("dl-me-arrow") as? SymbolLayer)?.iconSize((if (im) 0.25 else 0.625) * f)
             (layer("dl-me-halo") as? CircleLayer)?.circleRadius(15.0 * 0.625 * f)
             if (modelOn) { val sc = modelScale(); (layer("dl-me-model-a") as? ModelLayer)?.modelScale(sc); (layer("dl-me-model-b") as? ModelLayer)?.modelScale(sc)
-                (layer("dl-me-glow-l") as? CircleLayer)?.circleRadius(sc[0] * (if (carLike) 2.2 else 1.45)) }
+                (layer("dl-me-glow-l") as? CircleLayer)?.circleRadius(modelGlowRadius()) }
         } catch (e: Exception) { }
         placeLocator()
     }
@@ -4947,7 +4999,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** All the branches fitted into the part of the map beside the list (on the driver's side: left, or right when [mirrored]). */
     fun fitChain(points: List<LL>, mirrored: Boolean) {
         val side = if (mapView.width > mapView.height) 0.40 else 0.06
-        fitFrac(points, if (mirrored) 0.06 else side, 0.12, if (mirrored) side else 0.06, if (mapView.width > mapView.height) 0.10 else 0.55)
+        // (upright: the list is along the bottom and the turn card across the top, so the places go in the space between)
+        val wide = mapView.width > mapView.height
+        fitFrac(points, if (mirrored) 0.06 else side, if (wide) 0.12 else 0.2, if (mirrored) side else 0.06, if (wide) 0.10 else 0.52)
     }
 
     /** A tap near a branch's pin (within about 30 dp). */

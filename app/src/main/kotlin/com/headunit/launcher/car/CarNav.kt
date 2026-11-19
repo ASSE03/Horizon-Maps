@@ -1,5 +1,7 @@
 package com.headunit.launcher.car
 
+import com.headunit.launcher.ui.drawManeuver
+import androidx.compose.ui.graphics.asImageBitmap
 import com.headunit.launcher.PreferenceKeys
 import com.headunit.launcher.carSpeedSpot
 import com.headunit.launcher.setCarSpeedSpot
@@ -323,7 +325,7 @@ class CarNavSession : Session() {
         map.setCarTint(prefs.s(PreferenceKeys.CAR_TINT, "#8A5AD0"), prefs.i(PreferenceKeys.CAR_TINT_STR, 40))
         map.setLightOpts(com.headunit.launcher.lightOptsFrom(prefs))
         // (3D buildings and trees as set on the phone: the car's map used to keep them on whatever the setting, GitHub)
-        map.setView(prefs.b(PreferenceKeys.SATELLITE, false), prefs.b(PreferenceKeys.BUILDINGS_3D, true))
+        map.setView(prefs.b(PreferenceKeys.SATELLITE, false) && !com.headunit.launcher.Plus.free, prefs.b(PreferenceKeys.BUILDINGS_3D, true))
         map.treesEnabled(prefs.b(PreferenceKeys.TREES, true))
         map.setLogoCorner(prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"))
         map.setExtras(prefs.b(PreferenceKeys.FACADES, true), prefs.b(PreferenceKeys.LANDMARKS3D, true), prefs.b(PreferenceKeys.PATHS, true), prefs.b(PreferenceKeys.TERRAIN, false),
@@ -873,11 +875,33 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             Maneuver.TYPE_KEEP_RIGHT -> R.drawable.ic_man_keep_right
             Maneuver.TYPE_U_TURN_LEFT -> R.drawable.ic_man_uturn_left
             Maneuver.TYPE_U_TURN_RIGHT -> R.drawable.ic_man_uturn_right
-            Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW, Maneuver.TYPE_ROUNDABOUT_ENTER_CW -> R.drawable.ic_man_roundabout_cw
-            Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW, Maneuver.TYPE_ROUNDABOUT_ENTER_CCW -> R.drawable.ic_man_roundabout_ccw
+            Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW, Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW_WITH_ANGLE, Maneuver.TYPE_ROUNDABOUT_ENTER_CW -> R.drawable.ic_man_roundabout_cw
+            Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW, Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW_WITH_ANGLE, Maneuver.TYPE_ROUNDABOUT_ENTER_CCW -> R.drawable.ic_man_roundabout_ccw
             Maneuver.TYPE_DESTINATION, Maneuver.TYPE_DESTINATION_LEFT, Maneuver.TYPE_DESTINATION_RIGHT -> R.drawable.ic_man_destination
             else -> R.drawable.ic_man_straight
         }
+
+        /** The last turn arrow picture (sent again with every update on the way to the turn, so it's only drawn once). */
+        private var arrowCache: Pair<String, android.graphics.Bitmap>? = null
+
+        /** The turn card's arrow (ui/Components.kt drawManeuver) drawn into a picture for Android Auto; null if it can't be. */
+        private fun arrowPicture(t: TurnInfo, clockwise: Boolean): android.graphics.Bitmap? = try {
+            val m = t.maneuver.uppercase()
+            val rb = m.startsWith("ROUNDABOUT")
+            val ea = if (rb) com.headunit.launcher.ui.roundaboutTurn(t.rbIn, t.rbOut) else Float.NaN
+            val num = if (rb) t.exit else 0
+            val key = "$m|$num|${if (ea.isNaN()) "-" else Math.round(ea / 5f).toString()}|$clockwise"
+            arrowCache?.takeIf { it.first == key }?.second ?: run {
+                val px = 144
+                val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+                androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(androidx.compose.ui.unit.Density(1f), androidx.compose.ui.unit.LayoutDirection.Ltr,
+                    androidx.compose.ui.graphics.Canvas(bmp.asImageBitmap()), androidx.compose.ui.geometry.Size(px.toFloat(), px.toFloat())) {
+                    drawManeuver(t.maneuver, com.headunit.launcher.Geo.maneuverAngle(t.maneuver), androidx.compose.ui.graphics.Color.White, clockwise, ea, num)
+                }
+                arrowCache = key to bmp
+                bmp
+            }
+        } catch (e: Throwable) { null }
 
         /** The last lanes picture (the same junction is sent many times on the approach). */
         private var lanesCache: Pair<String, android.graphics.Bitmap>? = null
@@ -961,11 +985,42 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             return bmp
         }
 
+        /**
+         * How far round the roundabout your exit is, in degrees (1 to 360) in the direction the traffic goes round: clockwise where
+         * you drive on the left, anticlockwise where you drive on the right. Straight on is 180; the first exit to the side is
+         * about 90; going all the way round is 360. From the roads' real directions in and out when the route has them (Mapbox),
+         * otherwise from the turn's direction (left, right, straight on, back). Null when neither is known.
+         */
+        private fun roundaboutExitAngle(t: TurnInfo, m: String, clockwise: Boolean): Int? {
+            // the turn: 0 straight on, positive to the right, negative to the left (-180 to 180)
+            val exact = com.headunit.launcher.ui.roundaboutTurn(t.rbIn, t.rbOut).toDouble()
+            val d: Double = if (!exact.isNaN()) exact else when {
+                m.contains("BACK") || m.contains("UTURN") || m.contains("U_TURN") -> 180.0
+                m.contains("SHARP_LEFT") -> -135.0
+                m.contains("SHARP_RIGHT") -> 135.0
+                m.contains("SLIGHT_LEFT") || m.contains("BEAR_LEFT") -> -45.0
+                m.contains("SLIGHT_RIGHT") || m.contains("BEAR_RIGHT") -> 45.0
+                m.contains("LEFT") -> -90.0
+                m.contains("RIGHT") -> 90.0
+                m.contains("CROSS") || m.contains("STRAIGHT") -> 0.0
+                else -> return null
+            }
+            // going round clockwise, a left turn is the first quarter; anticlockwise, a right turn is
+            val a = Math.round(((if (clockwise) 180.0 + d else 180.0 - d) % 360.0 + 360.0) % 360.0).toInt()
+            return if (a <= 0 || a > 360) 360 else a
+        }
+
         fun step(e: NavEngine, t: TurnInfo, ctx: CarContext): Step {
             val left = !e.mirrored
             val m = t.maneuver.uppercase()
+            // A roundabout's exit angle: how far round the roundabout the exit is (degrees, the way the traffic goes round). The
+            // car's own displays (a head-up display, the dashboard) draw the exit from it; without it some, like the VW ID.7's
+            // head-up display, showed every roundabout as a right turn (desko1973)
+            val rbAngle = if (m.startsWith("ROUNDABOUT") && t.exit > 0) roundaboutExitAngle(t, m, left) else null
             val type = when {
-                m.startsWith("ROUNDABOUT") -> if (t.exit > 0) (if (left) Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW else Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW)
+                m.startsWith("ROUNDABOUT") -> if (t.exit > 0) (
+                                                  if (rbAngle != null) (if (left) Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW_WITH_ANGLE else Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW_WITH_ANGLE)
+                                                  else (if (left) Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW else Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW))
                                                else (if (left) Maneuver.TYPE_ROUNDABOUT_ENTER_CW else Maneuver.TYPE_ROUNDABOUT_ENTER_CCW)
                 m == "TURN_LEFT" -> Maneuver.TYPE_TURN_NORMAL_LEFT
                 m == "TURN_RIGHT" -> Maneuver.TYPE_TURN_NORMAL_RIGHT
@@ -986,10 +1041,16 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
                 m == "STRAIGHT" || m == "FOLLOW" -> Maneuver.TYPE_STRAIGHT
                 else -> Maneuver.TYPE_UNKNOWN
             }
-            val mb = Maneuver.Builder(type).setIcon(CarIcon.Builder(IconCompat.createWithResource(ctx, maneuverIcon(type))).build())
-            if (type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW || type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW) mb.setRoundaboutExitNumber(t.exit.coerceAtLeast(1))
+            // the arrow: the same picture as the phone's turn card (with the roundabout's real exit and its number), or the
+            // plain arrow image if that can't be drawn
+            val pic = arrowPicture(t, left)
+            val mb = Maneuver.Builder(type).setIcon(CarIcon.Builder(if (pic != null) IconCompat.createWithBitmap(pic) else IconCompat.createWithResource(ctx, maneuverIcon(type))).build())
+            val rbExitType = type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW || type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW ||
+                type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW_WITH_ANGLE || type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW_WITH_ANGLE
+            if (rbExitType) mb.setRoundaboutExitNumber(t.exit.coerceAtLeast(1))
+            if (rbAngle != null) mb.setRoundaboutExitAngle(rbAngle)
             val what = when {
-                type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW || type == Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CCW -> "Prenez la sortie ${t.exit}"
+                rbExitType -> "Prenez la sortie ${t.exit}"
                 m.startsWith("ARRIVE") -> "Arrivée"
                 t.tag.isNotBlank() -> t.tag
                 else -> com.headunit.launcher.Geo.maneuverText(m, t.exit).replaceFirstChar { it.uppercase() }

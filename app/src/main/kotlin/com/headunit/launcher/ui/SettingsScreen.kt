@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material3.Switch
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.height
@@ -140,6 +141,9 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
     androidx.activity.compose.BackHandler(enabled = narrowS && !showList) { showList = true }
     // the Google Play testers invitation, opened from the banner at the top of the list
     var playInvite by remember { mutableStateOf(false) }
+    // Horizon Maps Plus (Play edition, once its key server is set up)
+    var plusOpen by remember { mutableStateOf(false) }
+    if (plusOpen) PlusDialog { plusOpen = false }
     if (playInvite) PlayInviteDialog(c.dark) { how ->
         // (from here "Not now" just closes it; "Don't show again" or opening Play also stops the popup on the map)
         if (how != InviteClose.LATER) prefs.put(PreferenceKeys.PLAY_INVITE, "never")
@@ -202,6 +206,7 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
             } else {
             // GitHub edition: a small banner about the coming Google Play version; tapping it opens the testers invitation
             if (false && BuildConfig.STORE != "play") PlayBanner(c) { playInvite = true }
+            if (com.headunit.launcher.Plus.offered) PlusBanner { plusOpen = true }
             sections.forEachIndexed { i, s ->
                 // the small group headings in the list: Map, Driving, You, Device
                 if (s.heading != null) Text(L.t(s.heading), color = c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp,
@@ -242,7 +247,9 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
            val pinPreview = !narrowS || androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp >= 600
            Column(Modifier.fillMaxSize()) {
             if (withPreview && pinPreview) SettingsMapPreview(engine, if (narrowS) 170 else 210)
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 4.dp)) {
+            // (the on-screen keyboard takes the bottom of the screen: the settings scroll in the space above it, so the box being
+            // typed in can be seen, smikkelvriend #200)
+            Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 4.dp)) {
                 if (withPreview && !pinPreview) SettingsMapPreview(engine, 170)
                 if (narrowS) Row(Modifier.padding(bottom = 6.dp).clip(RoundedCornerShape(50)).clickable { showList = true }.padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(42.dp).clip(CircleShape).background(c.tile), contentAlignment = Alignment.Center) {
@@ -1092,14 +1099,14 @@ private fun FuelSection(prefs: Prefs, engine: NavEngine) {
         }
         SFieldItem("Batterie utile (kWh)", prefs.s(PreferenceKeys.EV_BATTERY_KWH, ""), "Pour l'estimation de batterie et les arrêts recharge (60 si vide)", placeholder = "ex. 64", number = true) { s -> prefs.put(PreferenceKeys.EV_BATTERY_KWH, s.filter { it.isDigit() || it == '.' }.take(5)) }
         SFieldItem("Puissance de charge maximale (kW)", prefs.s("ev_max_kw", ""), "Pour le temps de recharge aux arrêts proposés (135 si vide). Voir la fiche technique de la voiture", placeholder = "ex. 135", number = true) { s -> prefs.put("ev_max_kw", s.filter { it.isDigit() }.take(3)) }
-        SFieldItem(if (mi) "Prix de l'électricité (pence par kWh)" else "Prix de l'électricité (centimes par kWh)", prefs.s(PreferenceKeys.EVPPK, ""), placeholder = "ex. 28", number = true) { s -> prefs.put(PreferenceKeys.EVPPK, s.filter { it.isDigit() || it == '.' }.take(6)) }
-    } else SGroup("Coût du carburant dans les options d'itinéraire", footer = "Avec les deux renseignés, chaque itinéraire indique à peu près son coût en carburant.") {
+        SFieldItem(if (mi) "Prix de l'électricité (pence par kWh)" else "Prix de l'électricité (centimes par kWh)", prefs.s(PreferenceKeys.EVPPK, ""), placeholder = "ex. 28", number = true) { s -> prefs.put(PreferenceKeys.EVPPK, s.filter { it.isDigit() || it == '.' || it == ',' }.take(6)) }
+    } else SGroup("Coût du carburant dans les options d'itinéraire", footer = "Avec les deux renseignés, chaque itinéraire indique environ le coût en carburant.") {
         if (mi) SFieldItem("Consommation (miles par gallon)", prefs.s(PreferenceKeys.FUELMPG, ""), placeholder = "ex. 45", number = true) { s -> prefs.put(PreferenceKeys.FUELMPG, num(s).take(5)) }
         // litres per 100 km: 282.48 / UK miles per gallon
         else SFieldItem("Consommation (litres aux 100 km)", prefs.s(PreferenceKeys.FUELMPG, "").toDoubleOrNull()?.takeIf { it > 0 }?.let { fmt1(282.481 / it) } ?: "", placeholder = "ex. 6.3", number = true) { s ->
             prefs.put(PreferenceKeys.FUELMPG, num(s).toDoubleOrNull()?.takeIf { it > 0 }?.let { String.format(java.util.Locale.US, "%.2f", 282.481 / it) } ?: "")
         }
-        SFieldItem(if (mi) "Prix du carburant (pence par litre)" else "Prix du carburant (centimes par litre)", prefs.s(PreferenceKeys.FUELPPL, ""), placeholder = "ex. 139.9", number = true) { s -> prefs.put(PreferenceKeys.FUELPPL, s.filter { it.isDigit() || it == '.' }.take(6)) }
+        SFieldItem(if (mi) "Prix du carburant (pence par litre)" else "Prix du carburant (centimes par litre)", prefs.s(PreferenceKeys.FUELPPL, ""), placeholder = "ex. 1,899", number = true) { s -> prefs.put(PreferenceKeys.FUELPPL, s.filter { it.isDigit() || it == '.' || it == ',' }.take(6)) }
     }
 }
 
@@ -1182,6 +1189,7 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Affichage de la vitesse") {
         SToggle(prefs, "Votre vitesse à côté de la limitation", "mapspeed", true)
         SToggle(prefs, "Anneau du compteur", "speedring", true, "Se remplit vers la limite, passe à l'orange puis au rouge")
+        SToggle(prefs, "Grand panneau de limitation", PreferenceKeys.SPEED_SWAP, false, "Inverse les deux : le panneau de limitation en grand, votre vitesse en petit à côté")
         SSlider("Taille de la limitation et du compteur", prefs.i(PreferenceKeys.SPEED_SIZE, 100).toFloat(), 50f..200f, "%", sub = "Sur cet écran (Android Auto a sa propre taille, dans Android Auto)", steps = 29, reset = 100f) { prefs.put(PreferenceKeys.SPEED_SIZE, it) }
         SPictureChoice("Position de la vitesse", "Du côté opposé aux cartes pour ne jamais les cacher. Montez-la si votre main la cache",
             listOf("bottom" to "En bas", "middle" to "Au milieu", "top" to "En haut"), prefs.s(PreferenceKeys.SPEED_POS, "bottom"), { id, c -> speedPicture(id, c) },
@@ -1378,6 +1386,14 @@ private fun KeysSection(prefs: Prefs, engine: NavEngine) {
             "Horizon Nav utilise la recherche TomTom : la meilleure pour les adresses et numéros de rue") { prefs.put(PreferenceKeys.SEARCHWITH, it) }
         else if (!engine.hasKey) SNote("Pour la recherche d'adresse la plus précise, ajoutez une clé TomTom gratuite ci-dessous.")
     }
+    // Horizon Maps on Play: the keys are the app's own (Plus) or not needed (the free OpenStreetMap version), so there's nothing to paste
+    if (com.headunit.launcher.Plus.offered) {
+        SGroup("Comptes de carte") {
+            SNote(if (com.headunit.launcher.Plus.active) "Plus est activé : la carte, la recherche, les itinéraires et le trafic utilisent les comptes de Horizon Maps, aucune clé à ajouter."
+                else "La version gratuite utilise OpenStreetMap, avec des itinéraires calculés depuis votre pack pays. Horizon Maps Plus ajoute la carte 3D, le satellite et le trafic en direct, sans clé à configurer.")
+        }
+        return
+    }
     SGroup("Comptes de carte", footer = "La recherche trouve aussi les lieux enregistrés ou déjà visités. Sans réseau, itinéraires, carte et recherche viennent du pack hors ligne.") {
         SFieldItem("Clé API TomTom", prefs.s(PreferenceKeys.API_KEY, ""), if (BuildConfig.TOMTOM_API_KEY.isNotBlank() && prefs.s(PreferenceKeys.API_KEY, "").isBlank()) "Clé intégrée à l'appli utilisée, sauf si vous en collez une autre" else "Facultatif : la recherche d'adresse la plus précise, et une solution de secours pour les itinéraires et le trafic. Gratuite sur developer.tomtom.com",
             placeholder = "Coller une clé") { prefs.setApiKey(it) }
@@ -1437,7 +1453,7 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
             mainH.post { android.widget.Toast.makeText(ctx, if (ok) "Sauvegarde enregistrée" else "Impossible d'enregistrer la sauvegarde", android.widget.Toast.LENGTH_SHORT).show() }
         }.start()
     }
-    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val restoreFrom: (android.net.Uri?) -> Unit = { uri ->
         if (uri != null) Thread {
             val msg = try {
                 val text = ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
@@ -1447,6 +1463,10 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
             mainH.post { android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show() }
         }.start()
     }
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> restoreFrom(uri) }
+    // (the older kind of file picker, for a phone or unit where nothing answers the newer one: franciscoserranoadt's Xiaomi
+    // crashed on Restore)
+    val importer2 = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res -> restoreFrom(res.data?.data) }
     // automatic backup: a folder picked once (its permission kept), then a backup there once a day when the app opens
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -1458,8 +1478,17 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Sauvegarde", footer = "Comprend les réglages, les lieux enregistrés et les traces GPX, pas le pack hors ligne. Vos clés API n’y sont que si l’interrupteur est activé. Une sauvegarde de Horizon Launcher peut aussi être restaurée ici.") {
         SToggle(prefs, "Inclure les clés API", PreferenceKeys.BACKUP_KEYS, false, "Place vos clés TomTom et Mapbox dans le fichier de sauvegarde, pour que Restaurer les remette. Le fichier est en texte brut : gardez-le en lieu sûr")
         SItem("Réglages, lieux et traces") {
-            SButton("Sauvegarder") { exporter.launch("horizon-nav-backup.json") }
-            SButton("Restaurer") { importer.launch(arrayOf("application/json", "text/plain", "*/*")) }
+            SButton("Sauvegarder") {
+                try { exporter.launch("horizon-nav-backup.json") }
+                catch (e: Exception) { android.widget.Toast.makeText(ctx, "Aucune application de cet appareil ne peut choisir un fichier (installez un gestionnaire de fichiers)", android.widget.Toast.LENGTH_LONG).show() }
+            }
+            SButton("Restaurer") {
+                try { importer.launch(arrayOf("application/json", "text/plain", "*/*")) }
+                catch (e: Exception) {
+                    try { importer2.launch(android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).setType("*/*").addCategory(android.content.Intent.CATEGORY_OPENABLE)) }
+                    catch (e2: Exception) { android.widget.Toast.makeText(ctx, "Aucune application de cet appareil ne peut choisir un fichier (installez un gestionnaire de fichiers)", android.widget.Toast.LENGTH_LONG).show() }
+                }
+            }
         }
         val autoDir = prefs.s(PreferenceKeys.AUTO_BACKUP_DIR, "")
         val lastAt = prefs.s(PreferenceKeys.AUTO_BACKUP_AT, "0").toLongOrNull() ?: 0L

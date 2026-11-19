@@ -395,12 +395,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         return if (cc.isBlank() || cc in MILES_COUNTRIES) "imperial" else "metric"
     }
 
+    // Horizon Maps Plus (Play edition, once its key server is set up): Plus uses the developer's TomTom key through the key server
+    // and an hour-long Mapbox token from it; the free version has neither (OpenStreetMap, routes from the downloaded pack) and
+    // only a token for the map engine. Otherwise (the GitHub edition, and Play until then) your own keys as before.
     val apiKey: String
-        get() = prefs.s(PreferenceKeys.API_KEY, "").ifBlank { BuildConfig.TOMTOM_API_KEY }.trim()
+        get() = if (Plus.offered) (if (Plus.active && KeyServer.tomtom) KeyServer.TT else "")
+            else prefs.s(PreferenceKeys.API_KEY, "").ifBlank { BuildConfig.TOMTOM_API_KEY }.trim()
     val hasKey: Boolean get() = apiKey.isNotEmpty() && !apiKey.startsWith("YOUR_")
 
     /** Your Mapbox access token (Settings > Keys & accounts), for the Mapbox map, routes, search and traffic. */
-    val mbToken: String get() = MapboxRest.clean(prefs.s(PreferenceKeys.MAPBOX_TOKEN, ""))
+    val mbToken: String get() = if (Plus.offered) (if (Plus.active) KeyServer.mapbox else "") else MapboxRest.clean(prefs.s(PreferenceKeys.MAPBOX_TOKEN, ""))
+    /** The token the map engine itself starts with: as [mbToken], except that the free version has one too (from the key server). */
+    val mapToken: String get() = if (Plus.offered) KeyServer.mapbox else mbToken
+    val hasMapToken: Boolean get() = MapboxRest.looksValid(mapToken) && refusedMb != mapToken
     val hasMapbox: Boolean get() = MapboxRest.looksValid(mbToken) && refusedMb != mbToken
     /** A Mapbox token that Mapbox turned away: not used again until it's changed. (Screen state, so the map can say so.) */
     private var refusedMb: String? by mutableStateOf<String?>(null)
@@ -417,7 +424,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             "tomtom" -> if (hasKey) "tomtom" else if (hasMapbox) "mapbox" else ""
             "mapbox" -> if (hasMapbox) "mapbox" else if (hasKey) "tomtom" else ""
             // (eco routes are TomTom's: Mapbox has none, so with Eco routes on and a TomTom key, TomTom plans them)
-            else -> if (prefs.b(PreferenceKeys.ROUTE_ECO, false) && hasKey) "tomtom"
+            // (Avoid car trains: TomTom leaves them out properly; Mapbox's routes can't, Resul9704 #176)
+            else -> if ((prefs.b(PreferenceKeys.ROUTE_ECO, false) || prefs.b(PreferenceKeys.AVOID_TRAIN, false)) && hasKey) "tomtom"
                 else if (prefs.mapSource() == "mapbox" && hasMapbox) "mapbox" else if (hasKey) "tomtom" else if (hasMapbox) "mapbox" else ""
         }
         // the chosen one isn't working right now (its limit reached, the key refused, an outage): the other one meanwhile
@@ -522,7 +530,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
 
     private fun routesFromInner(p: String, from: LL, to: LL, alternatives: Boolean, departAtMs: Long, via: List<LL>, headingDeg: Double, quick: Boolean): List<Route> =
-        if (p == "mapbox") try { MapboxRest.routes(mbToken, from, to, alternatives, departAtMs, via, headingDeg, quick, !mirrored) } catch (e: Exception) { noteMbRefused(e); throw e }
+        if (p == "mapbox") try {
+            val rs = MapboxRest.routes(mbToken, from, to, alternatives, departAtMs, via, headingDeg, quick, !mirrored)
+            // Mapbox couldn't keep off a car train: TomTom's route instead when there's a key (it can), else Mapbox's with the train
+            if (MapboxRest.trainKept && hasKey && prefs.b(PreferenceKeys.AVOID_TRAIN, false)) {
+                try { TomTomRest.routes(apiKey, from, to, alternatives, departAtMs, via, headingDeg, quick).ifEmpty { rs } } catch (x: Exception) { rs }
+            } else rs
+        } catch (e: Exception) { noteMbRefused(e); throw e }
         else TomTomRest.routes(apiKey, from, to, alternatives, departAtMs, via, headingDeg, quick)
 
     /**
@@ -573,7 +587,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // fork FR : à pied, seulement Mapbox (profil piéton)
         if (walking && hasMapbox) return routesFrom("mapbox", from, to, false, 0L, via, -1.0, quick).also { lastRouteProvider = "mapbox" }
         val both = askBoth && !quick && hasKey && hasMapbox && refusedKey != apiKey && prefs.s(PreferenceKeys.DATAPROV, "auto") == "auto" &&
-            !prefs.b(PreferenceKeys.ROUTE_ECO, false) && now >= ttDownUntil && now >= mbDownUntil
+            !prefs.b(PreferenceKeys.ROUTE_ECO, false) && !prefs.b(PreferenceKeys.AVOID_TRAIN, false) && now >= ttDownUntil && now >= mbDownUntil
         if (!both) return withBackup { p -> lastRouteProvider = p; routesFrom(p, from, to, alternatives, departAtMs, via, headingDeg, quick) }
         val mainP = provider
         val otherP = if (mainP == "mapbox") "tomtom" else "mapbox"
@@ -634,16 +648,20 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val with = prefs.s(PreferenceKeys.SEARCHWITH, "auto")
         val tomtomOk = hasKey && refusedKey != apiKey && System.currentTimeMillis() >= ttDownUntil
         if (tomtomOk && (with == "tomtom" || (with == "auto") || !hasMapbox)) {
-            // fork FR : Mapbox est interrogé en même temps que TomTom (et plus seulement après) : une seconde de gagnée quand
-            // TomTom trouve peu de résultats
-            val mbF = if (hasMapbox) java.util.concurrent.CompletableFuture.supplyAsync { try { MapboxRest.geocode(mbToken, country, q, near) } catch (e: Exception) { emptyList<Place>() } } else null
-            val tt = try { TomTomRest.geocode(apiKey, country, q, near) } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; null }
+            // with a Mapbox token too, both are asked at the same time and their results put together (jvricardo1, #192: TomTom
+            // found streets of the same name further away, and Mapbox, which had the nearest one, was only asked when TomTom
+            // found fewer than 4). TomTom's still come first; the same place from both is listed once, and exact matches go
+            // nearest first (rankResults)
+            val mbJob = if (hasMapbox) java.util.concurrent.CompletableFuture.supplyAsync {
+                try { MapboxRest.geocode(mbToken, country, q, near) } catch (e: Throwable) { emptyList<Place>() }
+            } else null
+            val tt = try { TomTomRest.geocode(apiKey, country, q, near) } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) { mbJob?.cancel(true); throw e }; null }
             // TomTom refused the search (a key without the Search API, the daily limit): said once a session, as the results
             // otherwise just look thin
             TomTomRest.lastSearchError?.let { err -> if (!ttSearchWarned) { ttSearchWarned = true; scope.launch { toast("La recherche TomTom n'a pas fonctionné : ${err.take(160)}", 8000) } } }
-            if (tt != null && (tt.size >= 4 || !hasMapbox)) return tt
-            if (!hasMapbox) return tt ?: OsmSearch.geocode(country, q, near)
-            val mb = try { mbF?.get(6, java.util.concurrent.TimeUnit.SECONDS) ?: emptyList() } catch (e: Exception) { emptyList() }
+            if (mbJob == null) return tt ?: OsmSearch.geocode(country, q, near)
+            // (Mapbox is given a few seconds more at most: TomTom's results aren't held up for long by a slow answer)
+            val mb = try { mbJob.get(if (tt.isNullOrEmpty()) 10L else 4L, java.util.concurrent.TimeUnit.SECONDS) } catch (e: Exception) { mbJob.cancel(true); emptyList() }
             val out = ArrayList(tt ?: emptyList())
             for (p in mb) if (out.none { (it.name.equals(p.name, true) && Geo.dist(it.pos, p.pos) < 80) || Geo.dist(it.pos, p.pos) < 15 }) out += p
             return out
@@ -714,6 +732,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         mapboxOffline(Net.offline)
         // 12 or 24-hour clock times: the device's own setting unless Settings picks one
         try { Clock.init(ctx, prefs) } catch (e: Exception) { }
+        // Horizon Maps Plus (Play edition, once the key server is set up; nothing otherwise): what Play says this person has,
+        // and the key server's tokens
+        try { KeyServer.start(ctx, prefs); PlusBilling.start(ctx, prefs) } catch (e: Throwable) { }
         // an older pack on the unit goes into its own area folder (it's the area that was chosen then)
         try { migratePack() } catch (e: Exception) { }
         // speed limits and the wrong-way warning read the roads from a downloaded area when one covers you (no network needed)
@@ -810,14 +831,25 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         map.onReportTap = { p -> reportAt(p)?.let { r -> showReportCard(r) } }
         map.onPoiTap = { name, p -> tappedPoi = name to p; tappedAt = android.os.SystemClock.uptimeMillis(); toast(if (route != null && !previewing) "$name : appui long pour l'ajouter comme étape" else "$name : appui long pour y aller", 3000) }
         // (with "all locations" open the map stays where it's moved, and "Search this area" shows)
-        map.onUserGesture = { if (chain != null) chainMoved = true else { if (following) { following = false }; scheduleRecentre(12_000) } }
-        map.onAltTap = { i -> switchToAlt(i) }
+        map.onUserGesture = { if (chain != null) chainMoved = true else { if (following) { following = false }; altFitting = false; scheduleRecentre(12_000) } }
+        map.onAltTap = { i -> tapAlt(i) }
         map.onChainTap = { i -> chainTapped(i) }
         // the parked-car spot is no longer used (the app lives in the car): drop any old one
         if (prefs.s(PreferenceKeys.PLACE_PARKED, "").isNotBlank()) places.clearParked()
         map.onError = { msg -> onMapError(msg) }
         // with no signal Mapbox's map keeps showing what it has stored; only when it starts missing pieces does the pack's map take over
+        map.onOwnModelFailed = { why ->
+            scope.launch { toast("La carte n’a pas pu charger votre modèle 3D, la voiture s’affiche à la place. Réexportez-le en .glb simple (sans compression Draco ni KTX2)" + (if (why.isNotBlank()) " ($why)" else ""), 10_000) }
+        }
         map.onTileMissing = {
+            // satellite pictures refused by Mapbox (too many requests): said once a run, as the map otherwise just shows the plain
+            // satellite background (Matattack99, #186). Mapbox has been doing this to tokens well inside their limits since late
+            // October 2026 (mapbox-gl-js #13744), so it's put down to Mapbox, not the person's token
+            val te = map.lastTileError
+            if (!satRefusedSaid && te.contains("satellite", true) && te.contains("429")) {
+                satRefusedSaid = true
+                scope.launch { toast("Les serveurs de Mapbox refusent les images satellite en ce moment (trop de requêtes). Le problème vient de Mapbox, pas de votre jeton ni de l’app : le satellite devrait revenir tout seul, réessayez plus tard", 12_000) }
+            }
             val now = android.os.SystemClock.uptimeMillis()
             if (!mapboxGaps && !online()) {
                 if (now - gapFirstAt > 20_000L) { gapFirstAt = now; gapCount = 0 }
@@ -926,7 +958,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     // ---- style ----
     fun styleUrl(dark: Boolean): String {
         val traffic = prefs.b(PreferenceKeys.TRAFFIC, true)
-        return if (hasKey && prefs.mapSource() == "tomtom" && refusedKey != apiKey) TomTomRest.styleUrl(apiKey, dark, traffic)
+        return if (hasKey && prefs.mapSource() == "tomtom" && refusedKey != apiKey && ttMapRefusedKey != apiKey) TomTomRest.styleUrl(apiKey, dark, traffic)
         else OsmStyle.json(dark)
     }
 
@@ -950,6 +982,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     val layoutMirrored: Boolean get() = when (prefs.s(PreferenceKeys.CARDS_SIDE, "auto")) { "left" -> false; "right" -> true; else -> mirrored }
 
     /** The speed limit sign to draw: the white "SPEED LIMIT" board in the US, "MAXIMUM" in Canada, the red roundel elsewhere. */
+    /** UK road numbers as little signs on the turn card (karthikeyansr): in the UK, the Isle of Man and the Channel Islands. */
+    val ukRoadBadges: Boolean get() = detectedCountry.uppercase() in setOf("GB", "UK", "IM", "JE", "GG")
+
     val limitSignStyle: String get() = when (detectedCountry.uppercase()) { "US", "PR", "GU", "VI", "AS", "MP" -> "us"; "CA" -> "ca"; else -> "round" }
 
     fun countryCode(): String { val v = prefs.s(PreferenceKeys.COUNTRY, "auto"); return if (v == "auto") detectedCountry else v }
@@ -1051,6 +1086,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** The map style failed to load (usually a signal blip): try again a few times, then fall back to the downloaded map if there is one. */
     /** A key TomTom's map server turned away (it may still work for search and routes): the OpenStreetMap map is used instead. */
     @Volatile private var refusedKey: String? = null
+    /** A TomTom key whose map wouldn't load (it may still plan routes and search): Mapbox's map shows instead until the app restarts. */
+    @Volatile private var ttMapRefusedKey: String? = null
 
     /**
      * The map never appearing with no error at all (reported now and then with a token that's right): 25 s after asking for it,
@@ -1061,6 +1098,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var mapCheckedFor = ""
     private var mapCheckNote = ""
     private fun watchMapLoad() {
+        // (with Plus set up the tokens are the key server's and change every hour: nothing for the person to check)
+        if (Plus.offered) return
         if (mapCheckedFor == mbToken) return
         mapWatchJob?.cancel()
         mapWatchJob = scope.launch {
@@ -1075,12 +1114,26 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    private var satRefusedSaid = false
+
     /** The last error the map gave (for the feedback report). */
     @Volatile private var lastMapError = ""
 
     private fun onMapError(msg: String) {
-        lastMapError = msg.take(140)
+        // (kept for the feedback report without any key in it, and with the web address shortened so the reason itself fits)
+        lastMapError = scrubKeys(msg).replace(Regex("https?://([^/\\s']+)[^\\s']*"), "$1/…").take(200)
         val m = msg.lowercase()
+        // TomTom's map wouldn't load with this key, though the key may still plan routes (zedje85: TomTom's map for routes was
+        // set, and the refusal was taken for a Mapbox token problem, so no map showed at all). Mapbox's map shows instead for
+        // now, with a note saying why; TomTom's map is tried again next time the app starts. A signal problem is retried as usual.
+        val mNoUrl = m.replace(Regex("https?://\\S+"), "")
+        val sigProblem = mNoUrl.contains("resolve") || mNoUrl.contains("timeout") || mNoUrl.contains("timed out") || mNoUrl.contains("unreachable") || mNoUrl.contains("network")
+        if (m.contains("api.tomtom.com") && !sigProblem && !Net.offline) {
+            if (ttMapRefusedKey != apiKey) { ttMapRefusedKey = apiKey; scope.launch { applyStyle(lastDark) } }
+            return
+        }
+        // with Plus set up, a turned-down token is the key server's hour-long one running out: a new one is fetched
+        if (Plus.offered && (m.contains("401") || m.contains("unauthor") || m.contains("access token"))) { KeyServer.refreshSoon(); return }
         // Mapbox turned the token away: say so (the map can't show without a working token)
         if (m.contains("401") || m.contains("403") || m.contains("unauthor") || m.contains("forbidden") || m.contains("access token")) {
             if (m.contains("403") || m.contains("forbidden"))
@@ -1103,6 +1156,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (styleRetry == 1) toast("Pas de réseau pour la carte : nouvel essai…" + NetHealth.clockHint(), if (NetHealth.clockHint().isEmpty()) 3000 else 8000)
         // still no signal: the downloaded pack's own map meanwhile
         if (styleRetry == 2 && OfflineMap.installed(ctx) && OfflineMap.hasFonts(ctx) && prefs.s(PreferenceKeys.OFF_MAP, "auto") != "never") {
+            mapboxOffline(false)
             try { map.setStyleUrl(OfflineServer.styleJson(ctx, lastDark)) } catch (e: Exception) { }
         }
         if (styleRetry > 8) return
@@ -1207,35 +1261,44 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (map.onRestyle == null) map.onRestyle = { restyle() }
         watchNetwork()
         styleJob?.cancel()
-        map.setTraffic(prefs.b(PreferenceKeys.TRAFFIC, true))
+        // (live traffic is Plus's: none on the free OpenStreetMap version)
+        map.setTraffic(prefs.b(PreferenceKeys.TRAFFIC, true) && !Plus.free)
         setLight(lightPreset(dark))
         // the light follows the sun (dawn, day, dusk, night) without waiting for the day / night switch
         if (lightJob == null) lightJob = scope.launch { while (true) { delay(60_000L); try { setLight(lightPreset(lastDark)) } catch (e: Throwable) { } } }
-        if (!hasMapbox) {
+        if (!hasMapToken) {
             map.setToken("")
             val now = System.currentTimeMillis()
+            // (with Plus set up, the token comes from the key server: nothing to add, it's just on its way)
+            if (Plus.offered) { KeyServer.refreshSoon(); return }
             if (refusedMb != mbToken && now - noTokenToldAt > 60_000L) {
                 noTokenToldAt = now
                 toast("Ajoutez votre jeton d'accès Mapbox (il commence par pk.) dans Réglages > Clés et comptes pour afficher la carte", 8000)
             }
             return
         }
-        map.setToken(mbToken)
+        map.setToken(mapToken)
         watchMapLoad()
         map.keepBaseLook = false
         map.recolourBase = false
         // no signal (or "Téléchargée" chosen): the pack's own map, served from the phone. Satellite is Mapbox's photos, so it
         // wins while there's a connection (with "Téléchargée" chosen, switching satellite on used to do nothing at all)
         if (useOfflineMap() && !(map.isSatellite && online())) {
-            if (map.isSatellite) toast("La vue satellite demande une connexion : carte téléchargée affichée en attendant", 5000)
+            if (map.isSatellite) toast("La vue satellite nécessite une connexion : la carte téléchargée est affichée en attendant", 5000)
+            // (the downloaded map is served from the unit itself, at a local address: Mapbox's engine has to be let load it, even in
+            // Offline mode, where it was kept off the network altogether and so loaded none of it, Johnm76 #208: a blank map with
+            // only the street names and lights on it. Nothing goes online: every piece of this map comes from the unit)
+            mapboxOffline(false)
             try { map.setStyleUrl(OfflineServer.styleJson(ctx, dark)); return } catch (e: Exception) { android.util.Log.w("NavEngine", "offline map", e) }
         }
+        // Mapbox's own map: kept off the network again in Offline mode (it draws what it has stored)
+        mapboxOffline(Net.offline)
         OfflineServer.stop()
         val src = prefs.mapSource()
         when {
             map.isSatellite || src == "mapbox" -> map.setStyleUrl(map.baseStyle())
             src == "tomtom" -> {
-                if (hasKey && refusedKey != apiKey) {
+                if (hasKey && refusedKey != apiKey && ttMapRefusedKey != apiKey) {
                     // TomTom's map in the Horizon colours, as in Horizon Nav
                     map.recolourBase = true
                     map.setStyleUrl(TomTomRest.styleUrl(apiKey, dark, prefs.b(PreferenceKeys.TRAFFIC, true)))
@@ -1655,7 +1718,20 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         else { limitTapAt = now; toast("Touchez encore le panneau pour signaler une limitation fausse", 3500) }
     }
 
-    fun feedbackReport(note: String): String {
+    fun feedbackReport(note: String): String = scrubKeys(feedbackReport0(note))
+
+    /**
+     * Takes any key or token out of text that's going to be shared (a feedback report goes on a public GitHub page): the TomTom
+     * key and the Mapbox token wherever they appear, and anything given as key=, access_token=, token= or apiKey= in a web
+     * address (zedje85's report showed his whole TomTom key, in the address of a map that failed to load).
+     */
+    private fun scrubKeys(text: String): String {
+        var t = text
+        for (k in listOf(apiKey, mbToken)) if (k.length >= 8) t = t.replace(k, "•••")
+        return t.replace(Regex("(?i)\\b(key|access_token|token|apikey|api_key|subscription-key)=[^&\\s'\")]+"), "$1=•••")
+    }
+
+    private fun feedbackReport0(note: String): String {
         val dm = ctx.resources.displayMetrics
         val crash = try { java.io.File(ctx.filesDir, "lastcrash.txt").takeIf { it.exists() }?.readText()?.take(2500) } catch (e: Exception) { null }
         return buildString {
@@ -1678,7 +1754,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             appendLine("Unit: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), screen ${dm.widthPixels}x${dm.heightPixels}")
             appendLine("Country: ${detectedCountry.ifBlank { "unknown" }} · map: ${prefs.mapSource()} · TomTom key: ${if (hasKey) "yes" else "no"} · Mapbox token: ${if (hasMapbox) "yes" else "no"} · routes from: ${provider.ifBlank { "offline" }} · online: ${if (online()) "yes" else "no"}")
             appendLine("Offline area: ${installedPackId() ?: "none"}")
-            appendLine("Map view: " + (if (map.isSatellite) "satellite" else "standard") + " · map shown: " + (if (map.styleShown) "yes" else "no") + (if (lastMapError.isNotBlank()) " · last map error: $lastMapError" else ""))
+            appendLine("Map view: " + (if (map.isSatellite) "satellite" else "standard") + " · map on screen: " + (if (map.styleShown) map.shownMap else "not yet (${map.shownMap})") +
+                (if (lastMapError.isNotBlank()) " · last map error: $lastMapError" else "") + (if (map.lastTileError.isNotBlank()) " · last missing piece: ${map.lastTileError}" else ""))
+            appendLine("Arrow: " + map.arrowNote)
             appendLine("Frame rate: ${prefs.s(PreferenceKeys.MAP_FPS, "auto")} · map detail: ${prefs.mapDetail()} · steering wheel: ${if (mirrored) "left (traffic on the right)" else "right (traffic on the left)"}")
             if (perfLine.isNotBlank()) appendLine("Performance: $perfLine")
             try { appendLine(com.headunit.launcher.ui.NightWatch.line() + " · theme " + prefs.s(PreferenceKeys.THEME, "auto")) } catch (e: Exception) { }
@@ -2241,7 +2319,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** One branch: [secs]/[road] from the matrix service (or -1 when it couldn't be timed), [detour] extra seconds on the route. */
     class ChainSpot(val place: Place, val dist: Double, val secs: Double, val road: Double, val detour: Double,
                     /** Adding a stop: how far along the route ahead it is, and how far off the route (metres; -1 not known). */
-                    val ahead: Double = -1.0, val off: Double = -1.0)
+                    val ahead: Double = -1.0, val off: Double = -1.0,
+                    /** Petrol stations: the price of your fuel there (pence or cents a litre, in [unit]), or null when not known. */
+                    val price: Double? = null, val unit: String = "p")
     /** The list on show: [name] as searched, [domain] for its logo, [radius] metres looked within. */
     class ChainView(val name: String, val domain: String?, val spots: List<ChainSpot>, val radius: Int, val centre: LL,
                     /** Picking a stop to add along the route (the list is about the detour, and the only button is Add as a stop). */
@@ -2319,7 +2399,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      * route with the time each adds, and a list by least detour, soonest along the way, or nearest to you. From TomTom's
      * along-route search (with the real detour times), or without a TomTom key the usual search round points along the route.
      */
-    fun openStopSearch(q: String) {
+    fun openStopSearch(q: String, title: String? = null, category: Boolean = false) {
         val r = route ?: return
         if (dest == null || q.isBlank()) return
         chainQuery = q
@@ -2349,11 +2429,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 for ((p, t) in all) if (out.none { Geo.dist(it.first.pos, p.pos) < 80 }) out += p to t
                 // a shop or chain: only its own branches when there are some ("Western Union, Sainsbury's" is a counter inside one,
                 // not a Sainsbury's)
-                val own = out.filter { chainHit(it.first, q) }
+                // (not for a kind of place, from Add a stop's buttons: "coffee" kept only the places with Coffee in their name)
+                val own = if (category) emptyList() else out.filter { chainHit(it.first, q) }
                 if (own.size >= 2) own else out
             }
             val from = fix?.pos ?: ahead.first()
-            val spots = found.mapNotNull { (p, t) ->
+            val fuelList = category && q == "petrol station"
+            val spots0 = found.mapNotNull { (p, t) ->
                 // where it is against the route: the nearest point of the route still ahead
                 var best = Double.MAX_VALUE; var at = -1
                 var j = i0
@@ -2362,12 +2444,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (at < 0 || best > 6000.0) return@mapNotNull null
                 val detour = if (t >= 0) t.toDouble() else best * 2.6 / 13.0
                 ChainSpot(p, Geo.dist(from, p.pos), -1.0, -1.0, detour, ahead = (r.cum[at] - prog).coerceAtLeast(0.0), off = best)
-            }.sortedBy { it.detour }.take(25)
+            }
+            // petrol stations: each one's price for your fuel, from the price service the app already uses (and any priced station
+            // the search missed); everything else as it was
+            val spots = if (fuelList) {
+                val priced = try { withContext(Dispatchers.Default) { priceFuelSpots(r, prog, from, spots0) } } catch (e: Exception) { spots0 }
+                priced.sortedBy { it.detour }.take(40)
+            } else spots0.sortedBy { it.detour }.take(25)
             if (spots.isEmpty()) { chainBusy = false; toast("Rien trouvé sur l'itinéraire devant", 3000); return@launch }
             withContext(Dispatchers.IO) { spots.mapNotNull { Logos.domainFor(it.place) }.distinct().take(6).forEach { Logos.load(ctx, it) } }
             val domain = spots.asSequence().mapNotNull { Logos.domainFor(it.place) }.firstOrNull()
             val n = spots.first().place.name
-            chain = ChainView(if (Logos.norm(n).startsWith(Logos.norm(q)) && n.length <= q.length + 14) n else q.replaceFirstChar { it.uppercase() },
+            chain = ChainView(title ?: if (Logos.norm(n).startsWith(Logos.norm(q)) && n.length <= q.length + 14) n else q.replaceFirstChar { it.uppercase() },
                 domain, spots, 0, from, forStop = true)
             chainSort = "route"
             chainSel = chainSorted().firstOrNull()
@@ -2376,6 +2464,66 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             following = false
             drawChain()
         }
+    }
+
+    /**
+     * Prices for the petrol stations along the route (Add a stop › Fuel): the UK's Fuel Finder when it's set up, otherwise the
+     * country's own price service where the app has one. Only stored prices are waited on for long: a slow download is given
+     * 6 seconds, then the last saved prices are used (the download carries on for next time).
+     */
+    private suspend fun priceFuelSpots(r: Route, prog: Double, from: LL, spots: List<ChainSpot>): List<ChainSpot> {
+        val fuel = prefs.s(PreferenceKeys.FUEL_TYPE, "E10")
+        if (fuel == "EV") return spots
+        class Pr(val place: Place, val price: Double, val along: Double, val off: Double)
+        val found = ArrayList<Pr>()
+        var unit = "p"
+        val end = minOf(r.len, prog + 300_000.0)
+        if (FuelFinder.configured(prefs) && fuel != "E85" && fuel != "LPG") {
+            val job = searchScope.async { try { FuelFinder.refresh(ctx, prefs) } catch (e: Exception) { } }
+            kotlinx.coroutines.withTimeoutOrNull(6000L) { job.await() }
+            val st = FuelFinder.stations(ctx)
+            if (st.isNotEmpty()) {
+                var bMinLat = 90.0; var bMaxLat = -90.0; var bMinLon = 180.0; var bMaxLon = -180.0
+                for (i in r.pts.indices) {
+                    if (r.cum[i] < prog - 200 || r.cum[i] > end) continue
+                    val q = r.pts[i]
+                    bMinLat = min(bMinLat, q.lat); bMaxLat = max(bMaxLat, q.lat); bMinLon = min(bMinLon, q.lon); bMaxLon = max(bMaxLon, q.lon)
+                }
+                for (s0 in st) {
+                    if (s0.pos.lat < bMinLat - 0.015 || s0.pos.lat > bMaxLat + 0.015 || s0.pos.lon < bMinLon - 0.025 || s0.pos.lon > bMaxLon + 0.025) continue
+                    val price = FuelFinder.priceOf(ctx, s0.id, fuel) ?: continue
+                    val pr = RouteExtras.project(r, s0.pos, 1500.0, prog) ?: continue
+                    if (pr.first < prog - 100 || pr.first > end) continue
+                    found += Pr(Place(s0.name, listOf(s0.brand, s0.postcode).filter { it.isNotBlank() && it != s0.name }.joinToString(" · "), s0.pos), price.pence, pr.first, pr.second)
+                }
+            }
+        }
+        val cc = detectedCountry.uppercase()
+        if (found.isEmpty() && cc != "GB" && EuFuel.supported(cc, prefs) && EuFuel.hasFuel(cc, fuel) && online()) {
+            unit = EuFuel.unit(cc)
+            val eu = withContext(Dispatchers.IO) {
+                try { EuFuel.along(cc, prefs, RouteExtras.line(r, prog, prog + 60_000.0, 1500.0, 45), fuel) } catch (e: Exception) { emptyList() }
+            }
+            for (s0 in eu) {
+                val pr = RouteExtras.project(r, s0.pos, 1500.0, prog) ?: continue
+                if (pr.first < prog - 100) continue
+                found += Pr(Place(s0.name, s0.sub, s0.pos), s0.cents, pr.first, pr.second)
+            }
+        }
+        if (found.isEmpty()) return spots
+        val used = HashSet<Pr>()
+        // the stations the search found, with the price of the one in the same spot (within 150 m)
+        val out = spots.map { s ->
+            val m = found.filter { it !in used && Geo.dist(it.place.pos, s.place.pos) < 150.0 }.minByOrNull { Geo.dist(it.place.pos, s.place.pos) }
+            if (m == null) s else {
+                used += m
+                ChainSpot(s.place, s.dist, s.secs, s.road, s.detour, s.ahead, s.off, m.price, unit)
+            }
+        }.toMutableList()
+        // and the priced ones it missed
+        for (m in found) if (m !in used && out.none { Geo.dist(it.place.pos, m.place.pos) < 150.0 })
+            out += ChainSpot(m.place, Geo.dist(from, m.place.pos), -1.0, -1.0, m.off * 2.6 / 13.0, (m.along - prog).coerceAtLeast(0.0), m.off, m.price, unit)
+        return out
     }
 
     /** Roughly how much time a branch adds to the route being driven: there and back from the nearest point of the route. */
@@ -2393,6 +2541,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         return when (chainSort) {
             "route" -> c.spots.sortedBy { if (it.detour >= 0) it.detour else Double.MAX_VALUE }
             "soon" -> c.spots.sortedBy { if (it.ahead >= 0) it.ahead else Double.MAX_VALUE }
+            // (no price last; the same price: the smaller detour first)
+            "cheap" -> c.spots.sortedWith(compareBy<ChainSpot>({ it.price ?: Double.MAX_VALUE }, { if (it.detour >= 0) it.detour else Double.MAX_VALUE }))
             "quick" -> c.spots.sortedBy { if (it.secs >= 0) it.secs else it.dist / 9.0 }
             else -> c.spots.sortedBy { it.dist }
         }
@@ -2407,7 +2557,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun chainGo(s: ChainSpot) { closeChain(); startRoute(s.place) }
 
-    fun chainAddStop(s: ChainSpot) { closeChain(); if (route != null && dest != null) addStop(s.place) else startRoute(s.place) }
+    fun chainAddStop(s: ChainSpot) { closeChain(); stopsEditor = false; if (route != null && dest != null) addStop(s.place) else startRoute(s.place) }
 
     /** Closes "all locations"; [back] puts the map back to following you (the ✕), as it was before. */
     fun closeChain(back: Boolean = false) {
@@ -2643,6 +2793,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 var usedOffline = false
                 val rs = withContext(Dispatchers.IO) {
                     val haveOffline = OfflineRouter.installed(ctx)
+                    // the free version on Play plans routes from the downloaded country pack (no route service): say what's needed
+                    if (Plus.free && !haveOffline) throw IllegalStateException("téléchargez d’abord votre pays dans Réglages › Cartes hors ligne (la version gratuite calcule les itinéraires avec), ou prenez Horizon Maps Plus")
                     if (haveOffline && !walking && (!hasOnline || !online())) { usedOffline = true; OfflineRouter.routes(ctx, from, to.pos, routeVia()) }
                     else try { netRoutes(from, to.pos, true, departMs, routeVia(), askBoth = true, simple = true) }
                     catch (e: Exception) {
@@ -2651,8 +2803,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 }
                 if (rs.isEmpty()) throw IllegalStateException("aucun itinéraire trouvé")
                 shortRoute = usedOffline && OfflineRouter.endsShort
-                if (shortRoute) toast("Votre carte téléchargée s'arrête avant ${to.name} : l'itinéraire va jusqu'à sa limite pour l'instant, la suite sera calculée dès qu'il y aura du réseau", 8000)
-                else if (usedOffline) toast("Itinéraire hors ligne : ni trafic ni données en direct", 4000)
+                if (shortRoute) toast("Votre carte téléchargée s'arrête avant ${to.name} : l'itinéraire va jusqu'à sa limite pour l'instant, le reste sera calculé dès qu'il y aura du réseau", 8000)
+                else if (usedOffline && !Plus.free) toast("Itinéraire hors ligne : pas de trafic ni de données en direct", 4000)
                 if (rs[0].steps.isEmpty()) toast(if (provider == "mapbox") "Mapbox n'a renvoyé aucune instruction pour cet itinéraire" else "Cette clé n'a renvoyé aucune instruction. Vérifiez qu'elle a accès à l'API TomTom Routing", 6000)
                 if (departInMin > 0 && !usedOffline && !departApplied) toast("Heure de départ non prise en charge ici : trafic en direct affiché", 4000)
                 departMin = departInMin
@@ -2886,7 +3038,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (haveOffline && (!hasOnline || !online())) return@withContext OfflineRouter.routes(ctx, from, to, viaPts, hd) to true
         val now = System.currentTimeMillis()
         val race = hasKey && hasMapbox && refusedKey != apiKey && prefs.s(PreferenceKeys.DATAPROV, "auto") == "auto" && !Vehicle.lorry &&
-            !prefs.b(PreferenceKeys.ROUTE_ECO, false) && now >= ttDownUntil && now >= mbDownUntil
+            !prefs.b(PreferenceKeys.ROUTE_ECO, false) && !prefs.b(PreferenceKeys.AVOID_TRAIN, false) && now >= ttDownUntil && now >= mbDownUntil
         if (race) {
             val ch = kotlinx.coroutines.channels.Channel<Pair<String, List<Route>>>(2)
             val jobs = listOf("tomtom", "mapbox").map { p ->
@@ -5456,7 +5608,43 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Closes the routes box, keeping your route, and goes back to following you. */
     fun closeAlternatives() {
         altListOpen = false
+        pickAlt(null)
         recenter(byUser = true)
+    }
+
+    /**
+     * The other route tapped once (fahadfadi): shown in yellow on the map and marked in the routes box; tapping it again switches
+     * to it. Null when none is picked. Forgotten when the routes are looked up afresh and it's no longer one of them.
+     */
+    var altPicked by mutableStateOf<LiveAlt?>(null)
+        private set
+
+    private fun pickAlt(a: LiveAlt?) {
+        altPicked = a
+        map.setPickedAlt(if (a == null) -1 else liveAlts.indexOf(a))
+    }
+
+    /** Keeps the picked route's mark right after the other routes change (its number can change; it's let go if it's gone). */
+    private fun syncPicked() {
+        val a = altPicked ?: return
+        val l = liveAlts
+        // (looked up afresh, it's a new copy of the same way: matched by where it turns off yours)
+        var i = l.indexOfFirst { it === a }
+        if (i < 0) i = l.indexOfFirst { Geo.dist(it.bubble, a.bubble) < 60.0 && it.diffMin == a.diffMin }
+        altPicked = l.getOrNull(i)
+        map.setPickedAlt(i)
+    }
+
+    /**
+     * A tap on another route, in the routes box or on the map: the first tap shows it (yellow on the map), a second tap on the
+     * same one switches to it. (The car screen's own list of routes still switches with one tap: it has no map beside it.)
+     */
+    fun tapAlt(i: Int) {
+        val a = liveAlts.getOrNull(i) ?: return
+        if (altPicked === a) { switchToAlt(i); return }
+        pickAlt(a)
+        // (on the map with the routes box closed there's no line saying so: a short note instead)
+        if (!altListOpen) toast("Touchez à nouveau pour changer", 2500)
     }
 
     /** The routes box beside the Other routes button: open, and still looking. */
@@ -5504,7 +5692,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     val list = withContext(Dispatchers.Default) { altsFor(cur, same, others, curProgress) }
                     if (route !== cur) return@launch
                     liveAlts = list
-                    map.setLiveAlts(list.map { it.line() }, list.map { it.bubble }, list.map { it.diffMin }, list.map { it.traffic })
+                    map.setLiveAlts(list.map { it.line() }, list.map { it.bubble }, list.map { it.diffMin }, list.map { it.traffic }); syncPicked()
                     if (force && list.isNotEmpty()) showAlternatives(list.map { it.line() })
                     val best = list.minByOrNull { it.diffMin }
                     if (best != null && best.diffMin <= -3 && liveSaid.add(best.diffMin / 2)) speak("Un itinéraire plus rapide est disponible, ${-best.diffMin} minutes de gagnées. Touchez-le sur la carte pour en changer.", true)
@@ -5533,8 +5721,32 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         for (l in lines) pts += l.filterIndexed { n, _ -> n % 8 == 0 }
         pts += r.pts.last()
         following = false
-        map.fit(pts)
+        altFitting = true
+        // a phone held upright: the routes panel is along the bottom (this part of the screen), with the one-line turn card above
+        val cover = altSheetCover
+        val side = altSideCover
+        when {
+            cover > 0.0 -> map.fitFrac(pts, 0.07, 0.14, 0.07, (cover + 0.04).coerceAtMost(0.7))
+            // a phone held sideways: the panel down one side, the one-line turn card at the top of the other
+            side != null -> map.fitFrac(pts, (side.first + 0.04).coerceAtMost(0.75), 0.2, (side.second + 0.04).coerceAtMost(0.75), 0.08)
+            else -> map.fit(pts)
+        }
         scheduleRecentre(15_000)
+    }
+
+    /** How much of the screen's height the routes panel takes along the bottom (a phone held upright; 0 otherwise). */
+    @Volatile var altSheetCover = 0.0
+    /** A phone held sideways: how much of the screen's width the routes panel takes from the left and from the right (null otherwise). */
+    @Volatile var altSideCover: Pair<Double, Double>? = null
+    // the map is showing the routes zoomed out (not moved by hand since): so it can be fitted again when the panel changes height
+    private var altFitting = false
+
+    /** Fits the routes into the map again (the panel along the bottom has changed height), unless the map has been moved since. */
+    fun refitAlternatives() {
+        if (!altListOpen || following || !altFitting || route == null) return
+        val l = liveAlts
+        if (l.isEmpty()) return
+        try { showAlternatives(l.map { it.line() }) } catch (e: Exception) { }
     }
 
     private var curProgress = 0.0
@@ -5685,7 +5897,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     .map { LiveAlt(it.route, -a.diffMin, it.bubble, it.divergeOff, -a.traffic, it.divIdx) }
                 if (route !== nr || back.isEmpty()) return@launch
                 liveAlts = back
-                map.setLiveAlts(back.map { it.line() }, back.map { it.bubble }, back.map { it.diffMin }, back.map { it.traffic })
+                map.setLiveAlts(back.map { it.line() }, back.map { it.bubble }, back.map { it.diffMin }, back.map { it.traffic }); syncPicked()
             }
         }
     }
@@ -5733,11 +5945,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             map.setRoute(cur.pts, emptyList(), cur.sev)
             map.setStopFlags(via.map { it.pos })
             map.setTunnels(cur.tunnels.map { (a, b) -> slice(r = cur, a = a, b = b) })
-            map.setLiveAlts(list.map { it.line() }, list.map { it.bubble }, list.map { it.diffMin }, list.map { it.traffic })
+            map.setLiveAlts(list.map { it.line() }, list.map { it.bubble }, list.map { it.diffMin }, list.map { it.traffic }); syncPicked()
         }
     }
 
-    private fun clearLiveAlts() { if (liveAlts.isNotEmpty()) liveAlts = emptyList(); map.setLiveAlts(emptyList(), emptyList(), emptyList(), emptyList()) }
+    private fun clearLiveAlts() { if (liveAlts.isNotEmpty()) liveAlts = emptyList(); map.setLiveAlts(emptyList(), emptyList(), emptyList(), emptyList()); pickAlt(null) }
 
     /** Drops alternatives whose turn-off is already behind you. */
     private fun pruneLiveAlts(progress: Double) {
@@ -5746,7 +5958,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val keep = l.filter { it.divergeOff > progress - 15.0 }
         if (keep.size != l.size) {
             liveAlts = keep
-            map.setLiveAlts(keep.map { it.line() }, keep.map { it.bubble }, keep.map { it.diffMin }, keep.map { it.traffic })
+            map.setLiveAlts(keep.map { it.line() }, keep.map { it.bubble }, keep.map { it.diffMin }, keep.map { it.traffic }); syncPicked()
         }
     }
 
@@ -5959,7 +6171,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val nowP = android.os.SystemClock.elapsedRealtime()
         if (!closeBy || (f0?.speed ?: 0.0) > 1.5) parkedSince = 0L else if (parkedSince == 0L) parkedSince = nowP
         val parked = closeBy && parkedSince > 0L && nowP - parkedSince > 60_000L
-        val atEnd = nearEnd || parked
+        // stopped right by the destination (within 40 m for 15 s), however much of the route is left: the route may go on past it
+        // and round to come back (Nubber99 was outside his own house with the route still saying 1.9 km)
+        val dNow = dest
+        val atDoor = f0 != null && dNow != null && Geo.dist(f0.pos, dNow.pos) < 40.0 && f0.speed <= 1.5 && simMode == 0
+        if (!atDoor) atDoorSince = 0L else if (atDoorSince == 0L) atDoorSince = nowP
+        val atEnd = nearEnd || parked || (atDoor && nowP - atDoorSince > 15_000L)
         if (atEnd && said.add("end")) {
             toast("Vous êtes arrivé", 5000)
             if (navStartMs > 0) {
@@ -5983,6 +6200,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var idleSince = 0L
     /** When you stopped near the destination (0 = not stopped there), for arriving in a big car park. */
     private var parkedSince = 0L
+    private var atDoorSince = 0L
 
     // ---- live rain radar ----
     private var radarJob: Job? = null

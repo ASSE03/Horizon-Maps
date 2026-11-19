@@ -119,14 +119,16 @@ private fun SetupBody(prefs: Prefs, engine: NavEngine, onDone: () -> Unit) {
                         Box(Modifier.size(54.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
                             Icon(setupSteps[s].icon, null, tint = c.accent, modifier = Modifier.size(28.dp))
                         }
+                        // (Horizon Maps on Play: the keys step is the choice between Plus and the free version)
+                        val plusStep = s == 1 && com.headunit.launcher.Plus.offered
                         Column(Modifier.padding(start = 16.dp)) {
-                            Text(setupSteps[s].title, color = c.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                            Text(setupSteps[s].sub, color = c.sub, fontSize = 14.sp)
+                            Text(if (plusStep) "Comment vous voulez naviguer" else setupSteps[s].title, color = c.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                            Text(if (plusStep) "Horizon Maps Plus ou la version gratuite" else setupSteps[s].sub, color = c.sub, fontSize = 14.sp)
                         }
                     }
                     when (s) {
                         0 -> WelcomeStep()
-                        1 -> KeyStep(prefs, engine)
+                        1 -> if (com.headunit.launcher.Plus.offered) PlusStep() else KeyStep(prefs, engine)
                         2 -> HomeWorkStep(engine)
                         3 -> PackStep(prefs, engine)
                         else -> PermissionStep()
@@ -185,6 +187,17 @@ private fun KeyStep(prefs: Prefs, engine: NavEngine) {
     SField(tk, { tk = it; prefs.setApiKey(it) }, placeholder = "Clé API TomTom", width = 560.dp, fill = true)
     if (tk.isBlank()) Text("Sans elle, la recherche utilise Mapbox et OpenStreetMap, qui ratent plus de numéros de rue. Vous pourrez l'ajouter plus tard dans Réglages › Clés et comptes.", color = c.sub, fontSize = 13.sp)
     else SetupPoint("Clé TomTom ajoutée : la recherche utilise TomTom")
+}
+
+/** Horizon Maps on Play: Plus (opens the subscribe screen) or the free OpenStreetMap version (a country pack, next steps). */
+@Composable
+private fun PlusStep() {
+    val c = LocalVw.current
+    var open by remember { mutableStateOf(false) }
+    if (open) PlusDialog { open = false }
+    PlusChoice(onPlus = { open = true }, onFree = {})
+    Text(if (com.headunit.launcher.Plus.active) "Plus est activé : tout est prêt, sans clé à configurer."
+        else "Avec la version gratuite, téléchargez votre pays à l’étape Pack hors ligne : c’est lui qui calcule vos itinéraires.", color = c.sub, fontSize = 13.sp)
 }
 
 @Composable

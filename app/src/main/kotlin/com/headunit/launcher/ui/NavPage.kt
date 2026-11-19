@@ -196,7 +196,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
     // fuel estimate from the economy and pump price set in Settings > Driving (blank = not shown)
     val ev = engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV"
     val mpg = engine.prefs.s(if (ev) "evmpk" else "fuelmpg", "").toDoubleOrNull()?.takeIf { it > 0 }
-    val ppl = engine.prefs.s(if (ev) "evppk" else "fuelppl", "").toDoubleOrNull()?.takeIf { it > 0 }
+    val ppl = pricePence(engine.prefs.s(if (ev) "evppk" else "fuelppl", ""), ev)
     val costText = if (mpg != null && ppl != null && selRoute != null)
         (if (ev) "Recharge environ " else "Carburant environ ") + java.text.NumberFormat.getCurrencyInstance(if (engine.imperial) java.util.Locale.UK else java.util.Locale.FRANCE).format(
             if (ev) selRoute.len / 1609.344 / mpg * ppl / 100.0 else selRoute.len / 1609.344 / mpg * 4.54609 * ppl / 100.0) else null
@@ -361,8 +361,9 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         ) {
             Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(progress.value).background(c.accent))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(if (engine.demoNext) "Démarrer la démo" else "Démarrer", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                Text(if (hold) "Prévu pour plus tard" else if (autoStart) "Départ dans ${kotlin.math.ceil((1f - progress.value) * (countdownMs / 1000f)).toInt()} s" else "Touchez pour démarrer", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                // always on one line (in Dutch it wrapped and was cut off, smikkelvriend): a long wording shortens with "…"
+                Text(if (engine.demoNext) "Démarrer la démo" else "Démarrer", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 10.dp))
+                Text(if (hold) "Prévu pour plus tard" else if (autoStart) "Départ dans ${kotlin.math.ceil((1f - progress.value) * (countdownMs / 1000f)).toInt()} s" else "Touchez pour démarrer", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 10.dp))
             }
         }
     }
@@ -382,10 +383,23 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
             RoundBtn(Icons.Rounded.Close, { engine.endRoute() }, size = 46.dp)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { routeCards() }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (engine.prefs.b(PreferenceKeys.FLYOVER, true)) FlyOverBtn(engine)
-            // fork FR : pas de bouton Démo ici, la ligne « Lancer la démo » au-dessus fait déjà ce travail (et il écrasait Démarrer)
-            startBtn(Modifier.weight(1f))
+        // fork FR : pas de bouton Démo ici, la ligne « Lancer la démo » au-dessus fait déjà ce travail
+        // with both Fly over route and Demo on, they get a row of their own: three across a phone squeezed Start navigation into a
+        // narrow column of broken words (GitHub)
+        val flyOn = engine.prefs.b(PreferenceKeys.FLYOVER, true)
+        val demoOn = false
+        if (flyOn && demoOn) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlyOverBtn(engine, Modifier.weight(1f), 56.dp)
+                DemoChoiceBtn(engine, Modifier.weight(1f), 56.dp)
+            }
+            startBtn(Modifier.fillMaxWidth())
+        } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Fly over route takes its share (its words may go on two lines), Start navigation the bigger share, so a long wording
+            // like Dutch "Over de route vliegen" no longer squeezes Start into a column of broken words (smikkelvriend, #199)
+            if (flyOn) FlyOverBtn(engine, Modifier.weight(1f), twoLines = true)
+            if (demoOn) DemoChoiceBtn(engine)
+            startBtn(Modifier.weight(if (flyOn) 1.3f else 1f))
         }
     }
     }
@@ -428,15 +442,17 @@ internal fun LorryCheck(engine: NavEngine, r: com.headunit.launcher.Route) {
 
 /** "Survoler l'itinéraire": a 3D flight along the whole drive before you set off. */
 @Composable
-private fun FlyOverBtn(engine: NavEngine, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 72.dp) {
+private fun FlyOverBtn(engine: NavEngine, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 72.dp, twoLines: Boolean = false) {
     val c = LocalVw.current
     Row(
         modifier.height(height).clip(RoundedCornerShape(height / 2)).background(c.accent.copy(alpha = 0.14f))
-            .clickable(enabled = !engine.flyingOver) { engine.flyOver() }.padding(horizontal = 16.dp),
+            .clickable(enabled = !engine.flyingOver) { engine.flyOver() }.padding(horizontal = if (twoLines) 12.dp else 16.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
     ) {
         Icon(Icons.Rounded.PlayArrow, null, tint = c.accent, modifier = Modifier.size(24.dp))
-        Text(if (engine.flyingOver) "Survol…" else "Survol 3D", color = c.accent, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
+        Text(if (engine.flyingOver) "Survol…" else "Survoler l'itinéraire", color = c.accent, fontSize = if (twoLines) 14.sp else 15.sp, fontWeight = FontWeight.Bold,
+            maxLines = if (twoLines) 2 else 1, overflow = TextOverflow.Ellipsis, lineHeight = 17.sp, textAlign = if (twoLines) androidx.compose.ui.text.style.TextAlign.Center else null,
+            modifier = Modifier.padding(start = 6.dp))
     }
 }
 
@@ -809,4 +825,15 @@ internal fun DemoChoiceBtn(engine: NavEngine, modifier: Modifier = Modifier, hei
         Icon(Icons.Rounded.DirectionsCar, null, tint = if (on) Color.White else c.accent, modifier = Modifier.size(24.dp))
         Text("Démo", color = if (on) Color.White else c.accent, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
     }
+}
+
+/**
+ * The price set in Settings > Fuel, in cents or pence (per litre, or per kWh for electric), or null when blank. The box asks for
+ * cents, but a price per litre typed in euros or pounds ("2.15" or "2,15") is understood too: no fuel costs under 10 cents a
+ * litre, so anything under 10 is taken as euros or pounds (smikkelvriend: 2.15 gave 3 cents for a 30-minute drive). For
+ * electricity, anything under 2 (no one pays 2 cents a kWh).
+ */
+internal fun pricePence(raw: String, ev: Boolean): Double? {
+    val v = raw.trim().replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 } ?: return null
+    return if (v < (if (ev) 2.0 else 10.0)) v * 100.0 else v
 }

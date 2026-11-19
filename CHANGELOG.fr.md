@@ -5,6 +5,9 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Ajouter un arrêt en panneau latéral : les catégories listent les lieux le long de l'itinéraire dans le même panneau, avec un onglet « Moins cher » pour les prix du carburant ; sur un téléphone en portrait, le panneau est en bas et les lieux au-dessus.
+- Grand panneau de limitation : Réglages › Tailles inverse les deux, le panneau de limitation en grand et votre vitesse en petit à côté.
+- Itinéraires sur téléphone : en portrait, les choix d'itinéraire s'affichent en bas ; en paysage, à côté ; un appui montre l'itinéraire, un deuxième le choisit.
 - Vue satellite sur Android Auto : un choix dans la liste des options de l'écran de la voiture.
 - Éviter les trains autos : Réglages › Itinéraires › À éviter écarte les trains qui transportent la voiture (navette du tunnel sous la Manche, tunnels alpins).
 - GPL : nouveau choix de carburant, avec les stations GPL dans les raccourcis.
@@ -108,6 +111,15 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Nouvelles flèches de direction (aussi sur Android Auto), avec les routes voisines en léger ; chiffres centrés dans le rond-point et dans la limitation ; coins plus ronds.
+- Carte de direction : elle grandit depuis le milieu et ne déborde plus de l'écran.
+- Faisceau des phares plus étroit, partant de l'avant de votre propre modèle 3D.
+- Satellite : de jour même la nuit, avec votre propre modèle 3D.
+- Mode hors ligne : la carte téléchargée s'affiche bien (plus de carte vide avec seulement les noms de rues).
+- Arrivée : plus d'itinéraire qui fait le tour du pâté de maisons, s'arrêter devant compte comme arrivé.
+- Avis envoyés : les clés TomTom et Mapbox y sont masquées.
+- Titre de la musique lu depuis plus d'applis.
+- Restaurer / sauvegarder ne plante plus sans sélecteur de fichiers.
 - Stops : l'original fait maintenant le même tri que la version française, seuls les stops sur votre route sont signalés.
 - Lune à sa vraie place la nuit, avec « Soleil à sa vraie place ».
 - Lignes des réglages : les boutons passent à la ligne sous le titre au lieu de l'écraser.

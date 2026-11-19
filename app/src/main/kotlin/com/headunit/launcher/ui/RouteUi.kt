@@ -4,6 +4,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Wc
+import androidx.compose.material.icons.rounded.LocalConvenienceStore
+import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.EvStation
+import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.ExpandLess
 import com.headunit.launcher.L
@@ -12,6 +17,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,6 +35,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,6 +58,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Construction
 import androidx.compose.material.icons.rounded.Eco
 import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.AddLocationAlt
 import androidx.compose.material.icons.rounded.GpsOff
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -341,11 +350,17 @@ fun CruisePill(engine: NavEngine, modifier: Modifier = Modifier) {
     }
 }
 
-/** Edit the stops on the way: add by searching, move them up or down, or remove them. */
+/**
+ * Edit the stops on the way, in a panel down the side with the map still showing (it was a box over the whole map): a category
+ * shows the places of that kind along your route in the same panel, with the time each adds (as "See them along your route"),
+ * rather than adding one unseen; or search, add one of your places, and move stops up or down or remove them. Opening it doesn't
+ * move the map: only the list of places along the route zooms out to show them.
+ */
 @Composable
-fun StopsDialog(engine: NavEngine, onClose: () -> Unit) {
+fun StopsPanel(engine: NavEngine, modifier: Modifier, onClose: () -> Unit) {
     val c = LocalVw.current
-    var stops by remember { mutableStateOf(engine.via) }
+    // (picked up again when a stop is added from the list of places along the route)
+    var stops by remember(engine.via) { mutableStateOf(engine.via) }
     var q by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<Place>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
@@ -356,100 +371,131 @@ fun StopsDialog(engine: NavEngine, onClose: () -> Unit) {
         results = try { engine.findPlaces(q) } catch (e: Exception) { emptyList() }
         busy = false
     }
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.padding(horizontal = 16.dp).widthIn(max = 620.dp).fillMaxWidth().heightIn(max = 560.dp).clip(RoundedCornerShape(26.dp)).background(c.surface.copy(alpha = 1f)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // (fork FR : fond opaque : en thème sombre il était transparent et l'écran des itinéraires se voyait à travers)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Étapes du trajet", color = c.text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Icon(Icons.Rounded.Close, "Fermer", tint = c.sub, modifier = Modifier.size(28.dp).clickable { onClose() })
+    // (the same look as the list of places along the route it opens: the same solid panel, round buttons, tiles and blue)
+    val blue = ChainBlue
+    Column(modifier.clip(RoundedCornerShape(28.dp)).background(c.surface.copy(alpha = 1f)).pointerInput(Unit) { detectTapGestures { } }
+        .verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // header: as the list's, with a round icon, the title and how many stops there are, and a round ✕
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(46.dp).clip(CircleShape).background(c.tile), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.AddLocationAlt, null, tint = Color(0xFFEA4335), modifier = Modifier.size(24.dp))
             }
-            // one tap, no typing: the best one along the route ahead is added straight away
-            if (engine.dest != null) {
-                Text("UN APPUI : LE MEILLEUR SUR VOTRE ITINÉRAIRE", color = c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val ev = engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV"
-                    for ((kind, name) in listOfNotNull(if (ev) null else "fuel" to "Carburant", "charging" to "Borne", "coffee" to "Café", "food" to "Restauration", "services" to "Aires", "toilets" to "Toilettes"))
-                        Pill(name, false, { engine.addBestStop(kind); onClose() })
-                }
+            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                Text(if (stops.isEmpty() && engine.via.isEmpty()) "Ajouter un arrêt" else "Arrêts en chemin", color = c.text, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(engine.dest?.name ?: "Destination", color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            // your own places, added to the list below (then Update route)
-            val mine = remember { listOfNotNull(engine.places.slot("home")?.let { "Maison" to it }, engine.places.slot("work")?.let { "Travail" to it }) +
-                engine.places.favourites().take(4).map { "★ " + it.name to it } }
-            if (mine.isNotEmpty()) {
-                Text("VOS LIEUX", color = c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for ((name, p) in mine) Pill(name, false, { stops = (stops + p).take(8) })
-                }
+            Box(Modifier.size(42.dp).clip(CircleShape).background(c.tile).clickable { onClose() }, contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Close, "Fermer", tint = c.text)
             }
-            TextField(
-                value = q, onValueChange = { q = it }, singleLine = true,
-                placeholder = { Text("Cherchez une étape à ajouter") },
-                leadingIcon = { Icon(Icons.Rounded.Search, null, tint = c.sub) },
-                trailingIcon = { if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = c.accent, strokeWidth = 2.dp) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                // the keyboard's search key: everything matching along the route, on the map
-                keyboardActions = KeyboardActions(onSearch = { if (q.isNotBlank() && engine.route != null && engine.dest != null) { engine.openStopSearch(q.trim()); onClose() } }),
-                shape = RoundedCornerShape(50),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = c.tile, unfocusedContainerColor = c.tile, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = c.text, unfocusedTextColor = c.text, cursorColor = c.accent,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            // see where they all are on the route, with the time each adds (like "See all locations")
-            if (q.trim().length >= 3 && engine.route != null && engine.dest != null) Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.accent.copy(alpha = 0.13f)).border(2.dp, c.accent, RoundedCornerShape(16.dp))
-                    .clickable { engine.openStopSearch(q.trim()); onClose() }.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Rounded.Map, null, tint = c.accent, modifier = Modifier.size(22.dp))
-                Column(Modifier.padding(start = 10.dp).weight(1f)) {
-                    Text("Les voir sur votre itinéraire", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Sur la carte, avec le temps ajouté par chacun", color = c.sub, fontSize = 12.sp)
-                }
+        }
+        // search first: it's what the keyboard comes up for, so it stays in view above it
+        TextField(
+            value = q, onValueChange = { q = it }, singleLine = true,
+            placeholder = { Text("Cherchez un arrêt à ajouter") },
+            leadingIcon = { Icon(Icons.Rounded.Search, null, tint = c.sub) },
+            trailingIcon = { if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = blue, strokeWidth = 2.dp) },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            // the keyboard's search key: everything matching along the route, on the map
+            keyboardActions = KeyboardActions(onSearch = { if (q.trim().length >= 2 && engine.route != null && engine.dest != null) engine.openStopSearch(q.trim()) }),
+            shape = RoundedCornerShape(16.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = c.tile, unfocusedContainerColor = c.tile, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                focusedTextColor = c.text, unfocusedTextColor = c.text, cursorColor = blue,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        // see where they all are on the route, with the time each adds
+        if (q.trim().length >= 3 && engine.route != null && engine.dest != null) Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(blue.copy(alpha = 0.12f)).border(2.dp, blue, RoundedCornerShape(20.dp))
+                .clickable { engine.openStopSearch(q.trim()) }.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.Map, null, tint = blue, modifier = Modifier.size(22.dp))
+            Column(Modifier.padding(start = 10.dp).weight(1f)) {
+                Text("Les voir sur votre itinéraire", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("Sur la carte, avec le temps ajouté par chacun", color = c.sub, fontSize = 12.sp)
             }
-            if (results.isNotEmpty()) LazyColumn(Modifier.heightIn(max = 200.dp).clip(RoundedCornerShape(16.dp)).background(c.tile)) {
-                itemsIndexed(results) { _, p ->
-                    Row(Modifier.fillMaxWidth().clickable { stops = (stops + p).take(8); q = ""; results = emptyList() }.padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Add, null, tint = c.accent, modifier = Modifier.size(22.dp))
-                        Column(Modifier.padding(start = 10.dp)) {
-                            Text(p.name, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (p.sub.isNotBlank()) Text(p.sub, color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
+        }
+        if (results.isNotEmpty()) Column(Modifier.clip(RoundedCornerShape(16.dp)).background(c.tile)) {
+            results.forEach { p ->
+                Row(Modifier.fillMaxWidth().clickable { stops = (stops + p).take(8); q = ""; results = emptyList() }.padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Add, null, tint = blue, modifier = Modifier.size(22.dp))
+                    Column(Modifier.padding(start = 10.dp)) {
+                        Text(p.name, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (p.sub.isNotBlank()) Text(p.sub, color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
-            LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 260.dp)) {
-                itemsIndexed(stops) { i, p ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(30.dp).clip(CircleShape).background(c.accent), contentAlignment = Alignment.Center) {
-                            Text("${i + 1}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                            Text(p.name, color = c.text, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            // when you get there, on the route as it is (not once the list here has been changed)
-                            if (stops === engine.via) engine.stopEtas.firstOrNull { it.place === p }?.let { s ->
-                                Text(s.arrive + " · " + Geo.fmtDur(s.secs) + " · " + Geo.fmtDist(s.dist, engine.imperial), color = Good, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                        Icon(Icons.Rounded.KeyboardArrowUp, "Avant", tint = if (i > 0) c.text else c.sub.copy(alpha = 0.3f),
-                            modifier = Modifier.size(36.dp).clickable(enabled = i > 0) { stops = stops.toMutableList().also { l -> val t = l[i]; l[i] = l[i - 1]; l[i - 1] = t } })
-                        Icon(Icons.Rounded.KeyboardArrowDown, "Descendre", tint = if (i < stops.size - 1) c.text else c.sub.copy(alpha = 0.3f),
-                            modifier = Modifier.size(36.dp).clickable(enabled = i < stops.size - 1) { stops = stops.toMutableList().also { l -> val t = l[i]; l[i] = l[i + 1]; l[i + 1] = t } })
-                        Icon(Icons.Rounded.Close, "Retirer", tint = Bad, modifier = Modifier.padding(start = 6.dp).size(30.dp).clickable { stops = stops.filterIndexed { n, _ -> n != i } })
+        }
+        // a kind of place: the ones along the route ahead, listed in this same spot with the map zoomed out to show them. Tiles in
+        // the same block as the list's Least detour / Soonest / Nearest
+        if (engine.dest != null && engine.route != null) {
+            Text("Chercher sur l'itinéraire", color = c.sub, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            val ev = engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV"
+            // (searched for along the route by these words: the search services know them in any country)
+            // the same round icons as under the search bar (each named for TalkBack)
+            class Kind(val term: String, val name: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val tint: Color)
+            val kinds = listOfNotNull(if (ev) null else Kind("petrol station", "Carburant", Icons.Rounded.LocalGasStation, Color(0xFFEA4335)),
+                Kind("EV charging station", "Borne", Icons.Rounded.EvStation, Color(0xFF34A853)), Kind("coffee", "Café", Icons.Rounded.LocalCafe, Color(0xFFA56BFF)),
+                Kind("restaurant", "Restauration", Icons.Rounded.Restaurant, Color(0xFFF29900)), Kind("rest area", "Aire de services", Icons.Rounded.LocalConvenienceStore, Color(0xFF00A3A3)),
+                Kind("public toilet", "Toilettes", Icons.Rounded.Wc, Color(0xFF4C8DFF)))
+            // (each gets an equal share of the width, up to 56 dp, so six still fit on a small phone)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (k in kinds) Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxWidth().widthIn(max = 56.dp).aspectRatio(1f).clip(CircleShape).background(c.tile)
+                        .clickable { engine.openStopSearch(k.term, title = k.name, category = true) }, contentAlignment = Alignment.Center) {
+                        Icon(k.icon, k.name, tint = k.tint, modifier = Modifier.size(26.dp))
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(30.dp).clip(CircleShape).background(Color(0xFFEA4335)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Flag, null, tint = Color.White, modifier = Modifier.size(18.dp))
+        }
+        // your own places, added to the list below (then Update route)
+        val mine = remember { listOfNotNull(engine.places.slot("home")?.let { "Domicile" to it }, engine.places.slot("work")?.let { "Travail" to it }) +
+            engine.places.favourites().take(4).map { "★ " + it.name to it } }
+        if (mine.isNotEmpty()) {
+            Text("Vos lieux", color = c.sub, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for ((name, p) in mine) Box(Modifier.clip(RoundedCornerShape(12.dp)).background(c.tile).clickable { stops = (stops + p).take(8) }
+                    .padding(horizontal = 16.dp, vertical = 10.dp)) { Text(name, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+            }
+        }
+        // the stops, then where you're going, as the list's rows
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            stops.forEachIndexed { i, p ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(38.dp).clip(CircleShape).background(blue), contentAlignment = Alignment.Center) {
+                        Text("${i + 1}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text(p.name, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // when you get there, on the route as it is (not once the list here has been changed)
+                        if (stops === engine.via) engine.stopEtas.firstOrNull { it.place === p }?.let { s ->
+                            Text(s.arrive + " · " + Geo.fmtDur(s.secs) + " · " + Geo.fmtDist(s.dist, engine.imperial), color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Icon(Icons.Rounded.KeyboardArrowUp, "Avant", tint = if (i > 0) c.text else c.sub.copy(alpha = 0.3f),
+                        modifier = Modifier.size(36.dp).clickable(enabled = i > 0) { stops = stops.toMutableList().also { l -> val t = l[i]; l[i] = l[i - 1]; l[i - 1] = t } })
+                    Icon(Icons.Rounded.KeyboardArrowDown, "Après", tint = if (i < stops.size - 1) c.text else c.sub.copy(alpha = 0.3f),
+                        modifier = Modifier.size(36.dp).clickable(enabled = i < stops.size - 1) { stops = stops.toMutableList().also { l -> val t = l[i]; l[i] = l[i + 1]; l[i + 1] = t } })
+                    Icon(Icons.Rounded.Close, "Supprimer", tint = Bad, modifier = Modifier.padding(start = 6.dp).size(30.dp).clickable { stops = stops.filterIndexed { n, _ -> n != i } })
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(38.dp).clip(CircleShape).background(Color(0xFFEA4335)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Flag, null, tint = Color.White, modifier = Modifier.size(20.dp))
                 }
                 Text(engine.dest?.name ?: "Destination", color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 12.dp))
             }
-            if (stops.isEmpty()) Text("Aucune étape. Cherchez ci-dessus pour en ajouter ; l'itinéraire les suit dans cet ordre.", color = c.sub, fontSize = 13.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
-                Pill("Mettre à jour", true, { engine.setStops(stops); onClose() })
-                Pill("Annuler", false, onClose)
+        }
+        if (stops.isEmpty()) Text("Aucun arrêt pour l'instant. Ajoutez-en un et l'itinéraire y passera en chemin.", color = c.sub, fontSize = 13.sp)
+        // (only once something's been changed here: a full-width blue button, as the list's Add as a stop)
+        if (stops != engine.via) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(blue).clickable { engine.setStops(stops); onClose() }.padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Text("Mettre à jour l'itinéraire", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+            Box(Modifier.clip(RoundedCornerShape(16.dp)).background(c.tile).clickable { stops = engine.via }.padding(horizontal = 18.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+                Text("Annuler les changements", color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }

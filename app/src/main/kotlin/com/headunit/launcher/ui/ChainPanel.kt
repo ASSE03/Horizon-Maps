@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Map
@@ -56,7 +57,7 @@ import com.headunit.launcher.Place
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private val ChainBlue = Color(0xFF4C8DFF)
+internal val ChainBlue = Color(0xFF4C8DFF)
 
 /**
  * A place's logo in a white circle (the shop's own, from its website), or [fallback] when there isn't one. Looked up once per
@@ -116,27 +117,37 @@ private fun roadOf(p: Place): Pair<String, String> {
 internal fun ChainPanel(engine: NavEngine, modifier: Modifier) {
     val c = LocalVw.current
     val view = engine.chain
-    Column(modifier.clip(RoundedCornerShape(28.dp)).background(c.surface).padding(16.dp)) {
+    // (solid: the map's labels and pins showed through the list's text)
+    Column(modifier.clip(RoundedCornerShape(28.dp)).background(c.surface.copy(alpha = 1f)).padding(16.dp)) {
         if (view == null) {
             Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChainBlue) }
             return@Column
         }
         val sample = view.spots.first().place
+        // (opened from Add a stop: the arrow goes back to it, with the map back on you; the ✕ closes both)
+        val fromStops = view.forStop && engine.stopsEditor
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (fromStops) Box(Modifier.padding(end = 10.dp).size(42.dp).clip(CircleShape).background(c.tile).clickable { engine.closeChain(back = true) }, contentAlignment = Alignment.Center) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Retour", tint = c.text)
+            }
             PlaceLogo(sample, 46.dp) {
                 Box(Modifier.size(46.dp).clip(CircleShape).background(c.tile), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Place, null, tint = Color(0xFFEA4335)) }
             }
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                 Text(if (view.forStop) "Ajouter un arrêt : ${view.name}" else view.name, color = c.text, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(if (view.forStop) "${view.spots.size} sur votre itinéraire" else L.t(if (engine.imperial) "{0} within 10 miles" else "{0} within 15 km", view.spots.size), color = c.sub, fontSize = 13.sp)
+                // (petrol stations with prices: which fuel the prices are for)
+                val priced = view.forStop && view.spots.any { it.price != null }
+                val fuelName = if (priced) " · " + L.t(com.headunit.launcher.FuelFinder.fuelName(engine.prefs.s(com.headunit.launcher.PreferenceKeys.FUEL_TYPE, "E10"))) else ""
+                Text(if (view.forStop) "${view.spots.size} sur votre itinéraire" + fuelName else L.t(if (engine.imperial) "{0} within 10 miles" else "{0} within 15 km", view.spots.size), color = c.sub, fontSize = 13.sp)
             }
-            Box(Modifier.size(42.dp).clip(CircleShape).background(c.tile).clickable { engine.closeChain(back = true) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(42.dp).clip(CircleShape).background(c.tile).clickable { engine.closeChain(back = true); if (fromStops) engine.stopsEditor = false }, contentAlignment = Alignment.Center) {
                 Icon(Icons.Rounded.Close, "Fermer", tint = c.text)
             }
         }
         // the order: Quickest (drive time now), Nearest, On my route (while driving somewhere)
         // (adding a stop: least detour, soonest along the way, nearest to you)
-        val sorts = if (view.forStop) listOf("route" to "Moins de détour", "soon" to "Le plus tôt", "near" to "Le plus proche") else buildList {
+        val sorts = if (view.forStop) listOfNotNull("route" to "Moins de détour", if (view.spots.any { it.price != null }) "cheap" to "Le moins cher" else null,
+            "soon" to "Le plus tôt", "near" to "Le plus proche") else buildList {
             if (view.spots.any { it.secs >= 0 }) add("quick" to "La plus rapide")
             add("near" to "Le plus proche")
             if (view.spots.any { it.detour >= 0 }) add("route" to "Sur mon trajet")
@@ -146,11 +157,13 @@ internal fun ChainPanel(engine: NavEngine, modifier: Modifier) {
                 val on = engine.chainSort == id
                 Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (on) ChainBlue else Color.Transparent).clickable { engine.sortChainBy(id) }.padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center) {
-                    Text(label, color = if (on) Color.White else c.sub, fontSize = 15.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
+                    Text(label, color = if (on) Color.White else c.sub, fontSize = if (sorts.size >= 4) 13.sp else 15.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
                 }
             }
         }
         val list = engine.chainSorted()
+        // the cheapest price on the list, shown in green
+        val low = view.spots.mapNotNull { it.price }.minOrNull()
         LazyColumn(Modifier.padding(top = 10.dp).fillMaxWidth().weight(1f, fill = false)) {
             items(list, key = { "${it.place.pos.lat},${it.place.pos.lon}" }) { s ->
                 val sel = engine.chainSel === s
@@ -174,7 +187,13 @@ internal fun ChainPanel(engine: NavEngine, modifier: Modifier) {
                                 Text(s.place.name, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(where, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
-                            Text("+$mn min", color = tint, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
+                            // a price: the price, with the detour small under it; no price: the detour as before
+                            val pr = s.price
+                            if (pr != null) Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.End) {
+                                Text(com.headunit.launcher.fmtFuelPrice(pr, s.unit), color = if (low != null && pr <= low) Color(0xFF5FBF6A) else c.text,
+                                    fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text("+$mn min", color = tint, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            } else Text("+$mn min", color = tint, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
                         }
                     }
                     if (sel) Column(Modifier.padding(vertical = 4.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(ChainBlue.copy(alpha = 0.12f))

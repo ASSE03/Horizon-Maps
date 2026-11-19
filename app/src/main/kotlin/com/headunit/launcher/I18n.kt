@@ -15,7 +15,7 @@ object L {
         "ro" to "Română", "eu" to "Euskara", "zh" to "繁體中文", "zhhk" to "繁體中文（香港・粵語）",
         "el" to "Ελληνικά", "cs" to "Čeština", "fi" to "Suomi",
         "zhs" to "简体中文", "sk" to "Slovenčina", "da" to "Dansk", "hr" to "Hrvatski", "ms" to "Bahasa Melayu", "hu" to "Magyar",
-        "tr" to "Türkçe", "sr" to "Srpski", "ar" to "العربية", "he" to "עברית", "ur" to "اردو", "sv" to "Svenska", "bs" to "Bosanski", "kn" to "ಕನ್ನಡ", "mr" to "मराठी", "nb" to "Norsk bokmål", "esar" to "Español (Argentina)")
+        "tr" to "Türkçe", "sr" to "Srpski", "ar" to "العربية", "he" to "עברית", "ur" to "اردو", "sv" to "Svenska", "bs" to "Bosanski", "kn" to "ಕನ್ನಡ", "mr" to "मराठी", "nb" to "Norsk bokmål", "ru" to "Русский", "esar" to "Español (Argentina)")
 
     /** Arabic, Hebrew and Urdu read right to left: the cards and settings are laid out that way round. */
     val rtl: Boolean get() = lang == "ar" || lang == "he" || lang == "ur"
@@ -32,7 +32,7 @@ object L {
         "bg" -> Locale("bg", "BG"); "sl" -> Locale("sl", "SI"); "ro" -> Locale("ro", "RO"); "eu" -> Locale("eu", "ES")
         "el" -> Locale("el", "GR"); "cs" -> Locale("cs", "CZ"); "fi" -> Locale("fi", "FI")
         "zhs" -> Locale("zh", "CN"); "sk" -> Locale("sk", "SK"); "da" -> Locale("da", "DK"); "hr" -> Locale("hr", "HR"); "ms" -> Locale("ms", "MY"); "hu" -> Locale("hu", "HU")
-        "tr" -> Locale("tr", "TR"); "sr" -> Locale("sr", "RS"); "sv" -> Locale("sv", "SE"); "bs" -> Locale("bs", "BA"); "kn" -> Locale("kn", "IN"); "mr" -> Locale("mr", "IN"); "nb" -> Locale("nb", "NO"); "esar" -> Locale("es", "AR")
+        "tr" -> Locale("tr", "TR"); "sr" -> Locale("sr", "RS"); "sv" -> Locale("sv", "SE"); "bs" -> Locale("bs", "BA"); "kn" -> Locale("kn", "IN"); "mr" -> Locale("mr", "IN"); "nb" -> Locale("nb", "NO"); "ru" -> Locale("ru", "RU"); "esar" -> Locale("es", "AR")
         "he" -> Locale("he", "IL"); "ur" -> Locale("ur", "PK")
         // (Arabic: the phone's own country when it's set to Arabic, Saudi Arabia otherwise)
         "ar" -> Locale.getDefault().takeIf { it.language == "ar" } ?: Locale("ar", "SA")
@@ -502,6 +502,20 @@ object L {
                 "zoom inn" to "zoom in", "zoom ut" to "zoom out", "nord opp" to "north up", "hva er klokka|hva er klokken" to "what time",
                 "^\\s*(naviger til|kjør til|ta meg til|før meg til|til)\\s" to "go to",
             ),
+            // Russian (GitHub #207)
+            "ru" to r(
+                "\\s(домой|поехали домой|едем домой|отвези меня домой)\\s" to "go home", "\\s(на работу|в офис)\\s" to "go to work",
+                "^\\s*(сообщить о|сообщить|сообщи)\\s" to "report", "авария|дтп|столкновение" to "accident", "полиция|гаи|дпс|патруль" to "police", "поломка|сломался|сломанная машина" to "breakdown", "камера|радар" to "camera",
+                "заправк[аиу]|бензин|топливо|дизель|азс" to "fuel", "зарядк[аиу]|зарядная станция|зарядную станцию" to "charging", "туалет" to "toilet", "кофе|кафе" to "coffee",
+                "\\sеда\\s|ресторан|поесть|перекусить" to "food", "зона отдыха|придорожный сервис" to "services", "парковк[аиу]|стоянк[аиу]|припарковаться" to "parking",
+                "\\s(найди|найти|ближайш[а-я]+|где|мне нужн[аоы]?)\\s" to "find", "самая дешёвая|самую дешёвую|самый дешёвый|дешёв[а-я]*|дешевле" to "cheap",
+                "без платных дорог|избегать платных( дорог)?|объезжать платные" to "avoid toll", "без автомагистралей|избегать автомагистралей|без трасс" to "avoid motorway",
+                "объехать эту дорогу|избегать этой дороги" to "avoid this road", "когда я приеду|когда прибуду|сколько ехать|сколько ещё ехать" to "eta", "\\s(отправь|поделись|поделиться) (время|прибытием|прибытие)" to "share",
+                "включи голос|голос включ[её]н" to "voice on", "только оповещения|только предупреждения" to "alerts only", "без звука|выключи голос|замолчи" to "mute",
+                "(заверши|останови|отмени|закончи) (маршрут|навигацию)" to "end route", "обзор маршрута|весь маршрут|обзор" to "overview",
+                "приблизь|увеличь" to "zoom in", "отдали|уменьши" to "zoom out", "север вверху" to "north up", "который час|сколько времени" to "what time",
+                "^\\s*(поехали в|поехали на|едем в|едем на|отвези меня в|отвези меня на|проложи маршрут до|маршрут до|навигация до|до)\\s" to "go to",
+            ),
             "da" to r(
                 "\\s(hjem|kør hjem|tag mig hjem)\\s" to "go home", "\\s(på arbejde|til arbejde|til kontoret)\\s" to "go to work",
                 "^\\s*(rapportér|rapporter|meld)\\s" to "report", "ulykke|uheld" to "accident", "politi|politiet" to "police", "i stykker|motorstop|nedbrud" to "breakdown", "fartkamera|kamera|fotovogn" to "camera",
@@ -585,6 +599,8 @@ object L {
         // (1:a, 2:a, 3:e … but 11:e and 12:e)
         "sv" -> if (n % 10 in 1..2 && n % 100 !in 11..12) "$n:a" else "$n:e"
         "ar", "he", "ur" -> "$n"
+        // (Russian: "2-й съезд")
+        "ru" -> "$n-й"
         "kn" -> "${n}ನೇ"
         "mr" -> "${n}वा"
         "el" -> "${n}η"
@@ -650,6 +666,8 @@ object L {
         "tr" -> "birinci|ikinci|üçüncü|dördüncü|beşinci|altıncı|yedinci|sekizinci|dokuzuncu|onuncu"
         "da" -> "første|anden|tredje|fjerde|femte|sjette|syvende|ottende|niende|tiende"
         "nb" -> "første|andre|tredje|fjerde|femte|sjette|sjuende|åttende|niende|tiende"
+        // (in the form the roundabout phrase needs: "выполните второй съезд")
+        "ru" -> "первый|второй|третий|четвёртый|пятый|шестой|седьмой|восьмой|девятый|десятый"
         "kn" -> "ಮೊದಲ|ಎರಡನೇ|ಮೂರನೇ|ನಾಲ್ಕನೇ|ಐದನೇ|ಆರನೇ|ಏಳನೇ|ಎಂಟನೇ|ಒಂಬತ್ತನೇ|ಹತ್ತನೇ"
         "mr" -> "पहिला|दुसरा|तिसरा|चौथा|पाचवा|सहावा|सातवा|आठवा|नववा|दहावा"
         "sv" -> "första|andra|tredje|fjärde|femte|sjätte|sjunde|åttonde|nionde|tionde"
@@ -676,7 +694,7 @@ object L {
         val keys3 = listOf("th", "ja", "id")
         val keys4 = listOf("bg")
         val keys5 = listOf("sl")
-        val m = (keys + keys2 + keys3 + keys4 + keys5 + listOf("ro", "eu", "zh", "el", "cs", "fi", "zhs", "sk", "da", "hr", "ms", "hu", "tr", "sr", "ar", "he", "ur", "sv", "bs", "kn", "mr", "nb", "esar", "zhhk")).associateWith { HashMap<String, String>() }
+        val m = (keys + keys2 + keys3 + keys4 + keys5 + listOf("ro", "eu", "zh", "el", "cs", "fi", "zhs", "sk", "da", "hr", "ms", "hu", "tr", "sr", "ar", "he", "ur", "sv", "bs", "kn", "mr", "nb", "ru", "esar", "zhhk")).associateWith { HashMap<String, String>() }
         for ((en, tr) in rows) for ((i, k) in keys.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows2) for ((i, k) in keys2.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows3) for ((i, k) in keys3.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
@@ -706,6 +724,7 @@ object L {
         addOwn(m, "kn", I18nKn.rows())
         addOwn(m, "mr", I18nMr.rows())
         addOwn(m, "nb", I18nNb.rows())
+        addOwn(m, "ru", I18nRu.rows())
         addOwn(m, "esar", I18nEsAr.rows())
         m
     }
@@ -1052,6 +1071,8 @@ object L {
         "Via {0} · " to listOf("Via {0} · ", "Über {0} · ", "Par {0} · ", "Por {0} · "),
         "Looking for other routes…" to listOf("Andere routes zoeken…", "Andere Routen werden gesucht…", "Recherche d'autres itinéraires…", "Buscando otras rutas…"),
         "Tap a route to switch to it, or tap it on the map" to listOf("Tik op een route om te wisselen, of tik erop op de kaart", "Tippen Sie auf eine Route, um zu wechseln, oder auf der Karte", "Touchez un itinéraire pour le choisir, ou sur la carte", "Toque una ruta para cambiar, o tóquela en el mapa"),
+        "Tap a route to see it, then tap it again to switch" to listOf("Tik op een route om hem te zien, tik er nog eens op om te wisselen", "Tippen Sie auf eine Route, um sie zu sehen, und nochmals, um zu wechseln", "Touchez un itinéraire pour le voir, puis touchez-le à nouveau pour le choisir", "Toque una ruta para verla y tóquela otra vez para cambiar"),
+        "Tap again to switch" to listOf("Tik nog eens om te wisselen", "Nochmals tippen zum Wechseln", "Touchez à nouveau pour changer", "Toque otra vez para cambiar"),
         "AVERAGE SPEED CHECK AHEAD" to listOf("TRAJECTCONTROLE VERDEROP", "ABSCHNITTSKONTROLLE VORAUS", "RADAR TRONÇON À L'APPROCHE", "TRAMO DE CONTROL MÁS ADELANTE"),
         "AVERAGE SPEED CHECK" to listOf("TRAJECTCONTROLE", "ABSCHNITTSKONTROLLE", "RADAR TRONÇON", "TRAMO DE CONTROL"),
         "Starts in {0} · {1} long" to listOf("Begint over {0} · {1} lang", "Beginnt in {0} · {1} lang", "Commence dans {0} · sur {1}", "Empieza en {0} · de {1}"),
@@ -1797,6 +1818,8 @@ object L {
         "Speed display" to listOf("Snelheidsweergave", "Tempoanzeige", "Affichage de la vitesse", "Indicador de velocidad"),
         "Your speed next to the limit" to listOf("Uw snelheid naast de limiet", "Ihr Tempo neben dem Limit", "Votre vitesse à côté de la limitation", "Su velocidad junto al límite"),
         "Speedometer ring" to listOf("Snelheidsring", "Tachoring", "Anneau du compteur", "Anillo del velocímetro"),
+        "Big speed limit sign" to listOf("Groot snelheidsbord", "Großes Tempolimit-Schild", "Grand panneau de limitation", "Señal de límite grande"),
+        "Swaps them round: the limit sign big, your speed small beside it" to listOf("Draait ze om: het snelheidsbord groot, je snelheid klein ernaast", "Vertauscht beide: das Tempolimit-Schild groß, Ihre Geschwindigkeit klein daneben", "Les inverse : le panneau de limitation en grand, votre vitesse en petit à côté", "Los intercambia: la señal de límite grande y su velocidad pequeña al lado"),
         "Fills towards the limit, turning amber then red" to listOf("Vult zich richting de limiet, eerst oranje en dan rood", "Füllt sich bis zum Limit, erst gelb, dann rot", "Se remplit vers la limite, orange puis rouge", "Se llena hacia el límite, ámbar y luego rojo"),
         "Speed limit and speedometer size" to listOf("Grootte snelheidsbord en snelheidsmeter", "Größe von Tempolimit und Tacho", "Taille de la limitation et du compteur", "Tamaño del límite y del velocímetro"),
         "On this screen (Android Auto has its own size, under Android Auto)" to listOf("Op dit scherm (Android Auto heeft een eigen grootte, onder Android Auto)", "Auf diesem Bildschirm (Android Auto hat eine eigene Größe unter Android Auto)", "Sur cet écran (Android Auto a sa propre taille, sous Android Auto)", "En esta pantalla (Android Auto tiene su propio tamaño, en Android Auto)"),
@@ -2383,6 +2406,39 @@ object L {
         "Back up or restore your settings, saved places and GPX tracks" to listOf("Maak een back-up of zet je instellingen, plaatsen en GPX-tracks terug", "Einstellungen, Orte und GPX-Tracks sichern oder wiederherstellen", "Sauvegarder ou restaurer vos réglages, lieux et traces GPX", "Haz copia o restaura tus ajustes, lugares y rutas GPX"),
         "LPG (Autogas)" to listOf("LPG (autogas)", "LPG (Autogas)", "GPL", "GLP (autogas)"),
         "Italy works by itself too, with the government's prices from each morning, updated once a day." to listOf("Italië werkt ook vanzelf, met de prijzen van de overheid van elke ochtend, eens per dag bijgewerkt.", "Italien funktioniert ebenfalls von selbst, mit den staatlichen Preisen von jedem Morgen, einmal täglich aktualisiert.", "L’Italie fonctionne aussi toute seule, avec les prix officiels de chaque matin, mis à jour une fois par jour.", "Italia también funciona sola, con los precios oficiales de cada mañana, actualizados una vez al día."),
+        "Mapbox is turning down satellite pictures for your token (too many requests). If it keeps happening, check the token is your own: one copied from someone else is shared by everyone using it. A free one is at account.mapbox.com" to listOf("Mapbox weigert satellietbeelden voor je token (te veel verzoeken). Blijft dit gebeuren, controleer dan of de token van jezelf is: een gekopieerde token wordt gedeeld door iedereen die hem gebruikt. Een gratis token krijg je op account.mapbox.com", "Mapbox lehnt Satellitenbilder für deinen Token ab (zu viele Anfragen). Passiert das öfter, prüfe, ob der Token dein eigener ist: ein kopierter wird von allen geteilt, die ihn nutzen. Einen kostenlosen gibt es auf account.mapbox.com", "Mapbox refuse les images satellite pour votre jeton (trop de requêtes). Si cela continue, vérifiez que le jeton est bien le vôtre : un jeton copié est partagé par tous ceux qui l’utilisent. Un jeton gratuit s’obtient sur account.mapbox.com", "Mapbox está rechazando las imágenes de satélite para tu token (demasiadas solicitudes). Si sigue pasando, comprueba que el token es tuyo: uno copiado lo comparten todos los que lo usan. Uno gratis en account.mapbox.com"),
+        "The map couldn't load your 3D model, so the car shows instead. Try exporting it again as a plain .glb (no Draco or KTX2 compression)" to listOf("De kaart kon je 3D-model niet laden, dus de auto wordt getoond. Exporteer het opnieuw als gewone .glb (zonder Draco- of KTX2-compressie)", "Die Karte konnte dein 3D-Modell nicht laden, daher wird das Auto gezeigt. Exportiere es erneut als einfache .glb (ohne Draco- oder KTX2-Kompression)", "La carte n’a pas pu charger votre modèle 3D, la voiture s’affiche à la place. Réexportez-le en .glb simple (sans compression Draco ni KTX2)", "El mapa no pudo cargar tu modelo 3D, así que se muestra el coche. Expórtalo de nuevo como .glb simple (sin compresión Draco ni KTX2)"),
+        "Mapbox's servers are turning down satellite pictures right now (too many requests). It's on Mapbox's side, not your token or the app: satellite should come back by itself, so try again later" to listOf("De servers van Mapbox weigeren nu satellietbeelden (te veel verzoeken). Het ligt aan Mapbox, niet aan je token of de app: satelliet zou vanzelf terug moeten komen, probeer het later opnieuw", "Die Server von Mapbox lehnen gerade Satellitenbilder ab (zu viele Anfragen). Das liegt bei Mapbox, nicht an deinem Token oder der App: Satellit sollte von selbst zurückkommen, versuch es später noch einmal", "Les serveurs de Mapbox refusent les images satellite en ce moment (trop de requêtes). Le problème vient de Mapbox, pas de votre jeton ni de l’app : le satellite devrait revenir tout seul, réessayez plus tard", "Los servidores de Mapbox están rechazando las imágenes de satélite ahora mismo (demasiadas solicitudes). Es cosa de Mapbox, no de tu token ni de la app: el satélite debería volver solo, inténtalo más tarde"),
+        "Satellite view" to listOf("Satellietweergave", "Satellitenansicht", "Vue satellite", "Vista satélite"),
+        "Live traffic and delays" to listOf("Live verkeer en vertragingen", "Live-Verkehr und Verzögerungen", "Trafic en direct et retards", "Tráfico en directo y retrasos"),
+        "Routes round the traffic" to listOf("Routes om het verkeer heen", "Routen um den Verkehr herum", "Itinéraires qui évitent les bouchons", "Rutas que evitan el tráfico"),
+        "Lanes and junction signs" to listOf("Rijstroken en knooppuntborden", "Fahrspuren und Kreuzungsschilder", "Voies et panneaux d’échangeur", "Carriles y señales de cruce"),
+        "basic" to listOf("basis", "einfach", "de base", "básico"),
+        "Address and place search" to listOf("Adressen en plaatsen zoeken", "Adress- und Ortssuche", "Recherche d’adresses et de lieux", "Búsqueda de direcciones y lugares"),
+        "Speed cameras and limits" to listOf("Flitspalen en snelheidslimieten", "Blitzer und Tempolimits", "Radars et limitations de vitesse", "Radares y límites de velocidad"),
+        "Free" to listOf("Gratis", "Kostenlos", "Gratuit", "Gratis"),
+        "Plus is on. Thank you for supporting Horizon Maps!" to listOf("Plus staat aan. Bedankt voor je steun aan Horizon Maps!", "Plus ist aktiv. Danke, dass du Horizon Maps unterstützt!", "Plus est activé. Merci de soutenir Horizon Maps !", "Plus está activado. ¡Gracias por apoyar Horizon Maps!"),
+        "Manage in Google Play" to listOf("Beheren in Google Play", "In Google Play verwalten", "Gérer dans Google Play", "Gestionar en Google Play"),
+        "Getting prices from Google Play…" to listOf("Prijzen ophalen bij Google Play…", "Preise werden von Google Play geladen…", "Récupération des prix sur Google Play…", "Obteniendo precios de Google Play…"),
+        "a year · save 20%" to listOf("per jaar · bespaar 20%", "pro Jahr · 20 % sparen", "par an · 20 % d’économie", "al año · ahorra un 20 %"),
+        "a month" to listOf("per maand", "pro Monat", "par mois", "al mes"),
+        "Start {0}-day free trial" to listOf("Start gratis proefperiode van {0} dagen", "{0} Tage kostenlos testen", "Commencer l’essai gratuit de {0} jours", "Empezar prueba gratis de {0} días"),
+        "Subscribe" to listOf("Abonneren", "Abonnieren", "S’abonner", "Suscribirse"),
+        "Cancel any time in Google Play. Without Plus, Horizon Maps keeps working on OpenStreetMap." to listOf("Altijd op te zeggen in Google Play. Zonder Plus blijft Horizon Maps werken met OpenStreetMap.", "Jederzeit in Google Play kündbar. Ohne Plus läuft Horizon Maps weiter mit OpenStreetMap.", "Résiliable à tout moment dans Google Play. Sans Plus, Horizon Maps continue de fonctionner avec OpenStreetMap.", "Cancela cuando quieras en Google Play. Sin Plus, Horizon Maps sigue funcionando con OpenStreetMap."),
+        "from {0} a month" to listOf("vanaf {0} per maand", "ab {0} pro Monat", "à partir de {0} par mois", "desde {0} al mes"),
+        "3D map and satellite, live traffic, smarter routes and full search." to listOf("3D-kaart en satelliet, live verkeer, slimmere routes en volledig zoeken.", "3D-Karte und Satellit, Live-Verkehr, klügere Routen und volle Suche.", "Carte 3D et satellite, trafic en direct, itinéraires plus malins et recherche complète.", "Mapa 3D y satélite, tráfico en directo, rutas más inteligentes y búsqueda completa."),
+        "OpenStreetMap map, search and routes (from a downloaded country pack). No traffic. Upgrade any time." to listOf("OpenStreetMap-kaart, zoeken en routes (uit een gedownload landpakket). Geen verkeer. Altijd te upgraden.", "OpenStreetMap-Karte, Suche und Routen (aus einem heruntergeladenen Länderpaket). Kein Verkehr. Jederzeit upgraden.", "Carte, recherche et itinéraires OpenStreetMap (depuis un pack pays téléchargé). Pas de trafic. Passez à Plus à tout moment.", "Mapa, búsqueda y rutas de OpenStreetMap (con un paquete de país descargado). Sin tráfico. Mejora cuando quieras."),
+        "Horizon Maps Plus is on" to listOf("Horizon Maps Plus staat aan", "Horizon Maps Plus ist aktiv", "Horizon Maps Plus est activé", "Horizon Maps Plus está activado"),
+        "Get Horizon Maps Plus" to listOf("Neem Horizon Maps Plus", "Horizon Maps Plus holen", "Obtenir Horizon Maps Plus", "Consigue Horizon Maps Plus"),
+        "Thanks for subscribing · tap to manage" to listOf("Bedankt voor je abonnement · tik om te beheren", "Danke fürs Abonnieren · tippen zum Verwalten", "Merci pour votre abonnement · touchez pour gérer", "Gracias por suscribirte · toca para gestionar"),
+        "3D map, satellite, live traffic and smarter routes" to listOf("3D-kaart, satelliet, live verkeer en slimmere routes", "3D-Karte, Satellit, Live-Verkehr und klügere Routen", "Carte 3D, satellite, trafic en direct et itinéraires plus malins", "Mapa 3D, satélite, tráfico en directo y rutas más inteligentes"),
+        "How you'd like to navigate" to listOf("Hoe je wilt navigeren", "Wie du navigieren möchtest", "Comment vous voulez naviguer", "Cómo quieres navegar"),
+        "Horizon Maps Plus or the free version" to listOf("Horizon Maps Plus of de gratis versie", "Horizon Maps Plus oder die kostenlose Version", "Horizon Maps Plus ou la version gratuite", "Horizon Maps Plus o la versión gratuita"),
+        "Plus is on: everything's ready, with no keys to set up." to listOf("Plus staat aan: alles is klaar, zonder sleutels in te stellen.", "Plus ist aktiv: alles ist bereit, ohne Schlüssel einzurichten.", "Plus est activé : tout est prêt, sans clé à configurer.", "Plus está activado: todo listo, sin claves que configurar."),
+        "With the free version, download your country in the Offline pack step: it's what plans your routes." to listOf("Download met de gratis versie je land in de stap Offline pakket: daarmee worden je routes gepland.", "Lade in der kostenlosen Version im Schritt Offline-Paket dein Land herunter: damit werden deine Routen geplant.", "Avec la version gratuite, téléchargez votre pays à l’étape Pack hors ligne : c’est lui qui calcule vos itinéraires.", "Con la versión gratuita, descarga tu país en el paso Paquete sin conexión: es lo que planifica tus rutas."),
+        "Plus is on: the map, search, routes and traffic use Horizon Maps' own accounts, so there are no keys to add." to listOf("Plus staat aan: kaart, zoeken, routes en verkeer gebruiken de eigen accounts van Horizon Maps, dus je hoeft geen sleutels toe te voegen.", "Plus ist aktiv: Karte, Suche, Routen und Verkehr nutzen die eigenen Konten von Horizon Maps, also musst du keine Schlüssel eintragen.", "Plus est activé : la carte, la recherche, les itinéraires et le trafic utilisent les comptes de Horizon Maps, aucune clé à ajouter.", "Plus está activado: el mapa, la búsqueda, las rutas y el tráfico usan las cuentas de Horizon Maps, así que no hay claves que añadir."),
+        "The free version uses OpenStreetMap, with routes from your downloaded country pack. Horizon Maps Plus adds the 3D map, satellite and live traffic, with no keys to set up." to listOf("De gratis versie gebruikt OpenStreetMap, met routes uit je gedownloade landpakket. Horizon Maps Plus voegt de 3D-kaart, satelliet en live verkeer toe, zonder sleutels in te stellen.", "Die kostenlose Version nutzt OpenStreetMap, mit Routen aus deinem heruntergeladenen Länderpaket. Horizon Maps Plus bringt 3D-Karte, Satellit und Live-Verkehr, ohne Schlüssel einzurichten.", "La version gratuite utilise OpenStreetMap, avec des itinéraires calculés depuis votre pack pays. Horizon Maps Plus ajoute la carte 3D, le satellite et le trafic en direct, sans clé à configurer.", "La versión gratuita usa OpenStreetMap, con rutas de tu paquete de país descargado. Horizon Maps Plus añade el mapa 3D, el satélite y el tráfico en directo, sin claves que configurar."),
+        "download your country in Settings › Offline maps first (the free version plans routes from it), or get Horizon Maps Plus" to listOf("download eerst je land in Instellingen › Offline kaarten (de gratis versie plant routes daarmee), of neem Horizon Maps Plus", "lade zuerst dein Land in Einstellungen › Offline-Karten herunter (die kostenlose Version plant Routen damit) oder hol dir Horizon Maps Plus", "téléchargez d’abord votre pays dans Réglages › Cartes hors ligne (la version gratuite calcule les itinéraires avec), ou prenez Horizon Maps Plus", "descarga primero tu país en Ajustes › Mapas sin conexión (la versión gratuita planifica las rutas con él) o consigue Horizon Maps Plus"),
     )
 
     private fun rowsB0(): List<Pair<String, List<String>>> = listOf(
@@ -2716,6 +2772,8 @@ object L {
         "Via {0} · " to listOf("Via {0} · ", "Por {0} · ", "Przez {0} · "),
         "Looking for other routes…" to listOf("Cerco altri percorsi…", "A procurar outros percursos…", "Szukanie innych tras…"),
         "Tap a route to switch to it, or tap it on the map" to listOf("Tocca un percorso per sceglierlo, o toccalo sulla mappa", "Toque num percurso para mudar, ou toque nele no mapa", "Dotknij trasy, aby ją wybrać, lub dotknij jej na mapie"),
+        "Tap a route to see it, then tap it again to switch" to listOf("Tocca un percorso per vederlo, poi toccalo di nuovo per sceglierlo", "Toque num percurso para o ver e toque de novo para mudar", "Dotknij trasy, aby ją zobaczyć, a potem jeszcze raz, aby ją wybrać"),
+        "Tap again to switch" to listOf("Tocca di nuovo per cambiare", "Toque de novo para mudar", "Dotknij ponownie, aby zmienić"),
         "AVERAGE SPEED CHECK AHEAD" to listOf("TUTOR PIÙ AVANTI", "CONTROLO DE VELOCIDADE MÉDIA À FRENTE", "ODCINKOWY POMIAR PRZED TOBĄ"),
         "AVERAGE SPEED CHECK" to listOf("TUTOR", "CONTROLO DE VELOCIDADE MÉDIA", "ODCINKOWY POMIAR PRĘDKOŚCI"),
         "Starts in {0} · {1} long" to listOf("Inizia tra {0} · lungo {1}", "Começa em {0} · com {1}", "Zaczyna się za {0} · długość {1}"),
@@ -3461,6 +3519,8 @@ object L {
         "Speed display" to listOf("Indicatore di velocità", "Indicador de velocidade", "Wskaźnik prędkości"),
         "Your speed next to the limit" to listOf("La tua velocità accanto al limite", "A sua velocidade ao lado do limite", "Twoja prędkość obok limitu"),
         "Speedometer ring" to listOf("Anello del tachimetro", "Anel do velocímetro", "Pierścień prędkościomierza"),
+        "Big speed limit sign" to listOf("Cartello del limite grande", "Sinal de limite grande", "Duży znak ograniczenia"),
+        "Swaps them round: the limit sign big, your speed small beside it" to listOf("Li scambia: il cartello del limite grande, la tua velocità piccola accanto", "Troca-os: o sinal de limite grande e a sua velocidade pequena ao lado", "Zamienia je miejscami: duży znak ograniczenia, mała prędkość obok"),
         "Fills towards the limit, turning amber then red" to listOf("Si riempie verso il limite, diventando arancione poi rosso", "Enche até ao limite, ficando laranja e depois vermelho", "Wypełnia się do limitu, robiąc się pomarańczowy, potem czerwony"),
         "Speed limit and speedometer size" to listOf("Dimensione limite e tachimetro", "Tamanho do limite e do velocímetro", "Rozmiar limitu i prędkościomierza"),
         "On this screen (Android Auto has its own size, under Android Auto)" to listOf("Su questo schermo (Android Auto ha la sua dimensione, in Android Auto)", "Neste ecrã (o Android Auto tem o seu próprio tamanho, em Android Auto)", "Na tym ekranie (Android Auto ma własny rozmiar, w sekcji Android Auto)"),
@@ -4047,5 +4107,38 @@ object L {
         "Back up or restore your settings, saved places and GPX tracks" to listOf("Fai il backup o ripristina impostazioni, luoghi e tracce GPX", "Faça cópia ou restaure definições, locais e trajetos GPX", "Zrób kopię lub przywróć ustawienia, miejsca i ślady GPX"),
         "LPG (Autogas)" to listOf("GPL", "GPL (autogás)", "LPG (autogaz)"),
         "Italy works by itself too, with the government's prices from each morning, updated once a day." to listOf("Anche l’Italia funziona da sola, con i prezzi ministeriali di ogni mattina, aggiornati una volta al giorno.", "Itália também funciona sozinha, com os preços oficiais de cada manhã, atualizados uma vez por dia.", "Włochy też działają same, z rządowymi cenami z każdego ranka, aktualizowanymi raz dziennie."),
+        "Mapbox is turning down satellite pictures for your token (too many requests). If it keeps happening, check the token is your own: one copied from someone else is shared by everyone using it. A free one is at account.mapbox.com" to listOf("Mapbox rifiuta le immagini satellitari per il tuo token (troppe richieste). Se continua, verifica che il token sia tuo: uno copiato è condiviso da tutti quelli che lo usano. Uno gratuito su account.mapbox.com", "O Mapbox está a recusar imagens de satélite para o seu token (demasiados pedidos). Se continuar, confirme que o token é seu: um copiado é partilhado por todos os que o usam. Um gratuito em account.mapbox.com", "Mapbox odrzuca zdjęcia satelitarne dla Twojego tokena (zbyt wiele żądań). Jeśli to się powtarza, sprawdź, czy token jest Twój: skopiowany jest współdzielony przez wszystkich, którzy go używają. Darmowy na account.mapbox.com"),
+        "The map couldn't load your 3D model, so the car shows instead. Try exporting it again as a plain .glb (no Draco or KTX2 compression)" to listOf("La mappa non è riuscita a caricare il tuo modello 3D, quindi compare l’auto. Esportalo di nuovo come .glb semplice (senza compressione Draco o KTX2)", "O mapa não conseguiu carregar o seu modelo 3D, por isso aparece o carro. Exporte-o de novo como .glb simples (sem compressão Draco ou KTX2)", "Mapa nie mogła wczytać Twojego modelu 3D, więc widać samochód. Wyeksportuj go ponownie jako zwykły .glb (bez kompresji Draco ani KTX2)"),
+        "Mapbox's servers are turning down satellite pictures right now (too many requests). It's on Mapbox's side, not your token or the app: satellite should come back by itself, so try again later" to listOf("I server di Mapbox stanno rifiutando le immagini satellitari in questo momento (troppe richieste). Il problema è di Mapbox, non del tuo token o dell’app: il satellite dovrebbe tornare da solo, riprova più tardi", "Os servidores do Mapbox estão a recusar imagens de satélite neste momento (demasiados pedidos). O problema é do Mapbox, não do seu token nem da app: o satélite deve voltar sozinho, tente mais tarde", "Serwery Mapbox odrzucają teraz zdjęcia satelitarne (zbyt wiele żądań). To problem po stronie Mapbox, nie Twojego tokena ani aplikacji: satelita powinien wrócić sam, spróbuj później"),
+        "Satellite view" to listOf("Vista satellite", "Vista de satélite", "Widok satelitarny"),
+        "Live traffic and delays" to listOf("Traffico in tempo reale e ritardi", "Trânsito em tempo real e atrasos", "Ruch na żywo i opóźnienia"),
+        "Routes round the traffic" to listOf("Percorsi che evitano il traffico", "Rotas que evitam o trânsito", "Trasy omijające korki"),
+        "Lanes and junction signs" to listOf("Corsie e cartelli agli svincoli", "Faixas e placas de cruzamento", "Pasy i znaki na skrzyżowaniach"),
+        "basic" to listOf("base", "básico", "podstawowe"),
+        "Address and place search" to listOf("Ricerca di indirizzi e luoghi", "Pesquisa de moradas e locais", "Wyszukiwanie adresów i miejsc"),
+        "Speed cameras and limits" to listOf("Autovelox e limiti di velocità", "Radares e limites de velocidade", "Fotoradary i ograniczenia prędkości"),
+        "Free" to listOf("Gratis", "Grátis", "Bezpłatnie"),
+        "Plus is on. Thank you for supporting Horizon Maps!" to listOf("Plus è attivo. Grazie per sostenere Horizon Maps!", "O Plus está ativo. Obrigado por apoiar o Horizon Maps!", "Plus jest włączony. Dziękujemy za wsparcie Horizon Maps!"),
+        "Manage in Google Play" to listOf("Gestisci in Google Play", "Gerir no Google Play", "Zarządzaj w Google Play"),
+        "Getting prices from Google Play…" to listOf("Recupero dei prezzi da Google Play…", "A obter preços do Google Play…", "Pobieranie cen z Google Play…"),
+        "a year · save 20%" to listOf("all’anno · risparmi il 20%", "por ano · poupe 20%", "rocznie · oszczędzasz 20%"),
+        "a month" to listOf("al mese", "por mês", "miesięcznie"),
+        "Start {0}-day free trial" to listOf("Inizia la prova gratuita di {0} giorni", "Começar avaliação grátis de {0} dias", "Rozpocznij {0}-dniowy bezpłatny okres próbny"),
+        "Subscribe" to listOf("Abbonati", "Subscrever", "Subskrybuj"),
+        "Cancel any time in Google Play. Without Plus, Horizon Maps keeps working on OpenStreetMap." to listOf("Annulla quando vuoi in Google Play. Senza Plus, Horizon Maps continua a funzionare con OpenStreetMap.", "Cancele quando quiser no Google Play. Sem o Plus, o Horizon Maps continua a funcionar com o OpenStreetMap.", "Anuluj w dowolnej chwili w Google Play. Bez Plus Horizon Maps nadal działa na OpenStreetMap."),
+        "from {0} a month" to listOf("da {0} al mese", "desde {0} por mês", "od {0} miesięcznie"),
+        "3D map and satellite, live traffic, smarter routes and full search." to listOf("Mappa 3D e satellite, traffico in tempo reale, percorsi più intelligenti e ricerca completa.", "Mapa 3D e satélite, trânsito em tempo real, rotas mais inteligentes e pesquisa completa.", "Mapa 3D i satelita, ruch na żywo, mądrzejsze trasy i pełne wyszukiwanie."),
+        "OpenStreetMap map, search and routes (from a downloaded country pack). No traffic. Upgrade any time." to listOf("Mappa, ricerca e percorsi OpenStreetMap (da un pacchetto del paese scaricato). Niente traffico. Passa a Plus quando vuoi.", "Mapa, pesquisa e rotas do OpenStreetMap (de um pacote do país transferido). Sem trânsito. Atualize quando quiser.", "Mapa, wyszukiwanie i trasy OpenStreetMap (z pobranego pakietu kraju). Bez ruchu drogowego. Ulepsz w każdej chwili."),
+        "Horizon Maps Plus is on" to listOf("Horizon Maps Plus è attivo", "O Horizon Maps Plus está ativo", "Horizon Maps Plus jest włączony"),
+        "Get Horizon Maps Plus" to listOf("Ottieni Horizon Maps Plus", "Obter o Horizon Maps Plus", "Zdobądź Horizon Maps Plus"),
+        "Thanks for subscribing · tap to manage" to listOf("Grazie per l’abbonamento · tocca per gestire", "Obrigado por subscrever · toque para gerir", "Dziękujemy za subskrypcję · dotknij, aby zarządzać"),
+        "3D map, satellite, live traffic and smarter routes" to listOf("Mappa 3D, satellite, traffico in tempo reale e percorsi più intelligenti", "Mapa 3D, satélite, trânsito em tempo real e rotas mais inteligentes", "Mapa 3D, satelita, ruch na żywo i mądrzejsze trasy"),
+        "How you'd like to navigate" to listOf("Come vuoi navigare", "Como quer navegar", "Jak chcesz nawigować"),
+        "Horizon Maps Plus or the free version" to listOf("Horizon Maps Plus o la versione gratuita", "Horizon Maps Plus ou a versão gratuita", "Horizon Maps Plus lub wersja bezpłatna"),
+        "Plus is on: everything's ready, with no keys to set up." to listOf("Plus è attivo: è tutto pronto, senza chiavi da impostare.", "O Plus está ativo: está tudo pronto, sem chaves para configurar.", "Plus jest włączony: wszystko gotowe, bez kluczy do ustawiania."),
+        "With the free version, download your country in the Offline pack step: it's what plans your routes." to listOf("Con la versione gratuita, scarica il tuo paese nel passaggio Pacchetto offline: è ciò che calcola i percorsi.", "Com a versão gratuita, transfira o seu país no passo Pacote offline: é ele que planeia as rotas.", "W wersji bezpłatnej pobierz swój kraj w kroku Pakiet offline: to on planuje trasy."),
+        "Plus is on: the map, search, routes and traffic use Horizon Maps' own accounts, so there are no keys to add." to listOf("Plus è attivo: mappa, ricerca, percorsi e traffico usano gli account di Horizon Maps, quindi non servono chiavi.", "O Plus está ativo: o mapa, a pesquisa, as rotas e o trânsito usam as contas do Horizon Maps, por isso não há chaves a adicionar.", "Plus jest włączony: mapa, wyszukiwanie, trasy i ruch korzystają z kont Horizon Maps, więc nie trzeba dodawać kluczy."),
+        "The free version uses OpenStreetMap, with routes from your downloaded country pack. Horizon Maps Plus adds the 3D map, satellite and live traffic, with no keys to set up." to listOf("La versione gratuita usa OpenStreetMap, con percorsi dal pacchetto del paese scaricato. Horizon Maps Plus aggiunge mappa 3D, satellite e traffico in tempo reale, senza chiavi da impostare.", "A versão gratuita usa o OpenStreetMap, com rotas do pacote do país transferido. O Horizon Maps Plus junta o mapa 3D, o satélite e o trânsito em tempo real, sem chaves para configurar.", "Wersja bezpłatna korzysta z OpenStreetMap, z trasami z pobranego pakietu kraju. Horizon Maps Plus dodaje mapę 3D, satelitę i ruch na żywo, bez kluczy do ustawiania."),
+        "download your country in Settings › Offline maps first (the free version plans routes from it), or get Horizon Maps Plus" to listOf("scarica prima il tuo paese in Impostazioni › Mappe offline (la versione gratuita calcola i percorsi con esso), oppure prendi Horizon Maps Plus", "transfira primeiro o seu país em Definições › Mapas offline (a versão gratuita planeia as rotas com ele) ou obtenha o Horizon Maps Plus", "najpierw pobierz swój kraj w Ustawienia › Mapy offline (wersja bezpłatna planuje z niego trasy) albo wybierz Horizon Maps Plus"),
     )
 }
