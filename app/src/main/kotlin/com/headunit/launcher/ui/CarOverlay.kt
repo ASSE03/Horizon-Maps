@@ -1251,8 +1251,8 @@ private fun CarChips(engine: NavEngine, actions: CarActions, rows: Int) {
         // (folded away with the arrow in the search bar)
         if (engine.prefs.b(PreferenceKeys.QUICKLIST, true) && recents.isNotEmpty() && listRows > 0) Column(Modifier.fillMaxWidth().panel(10.dp, RoundedCornerShape(24.dp), c.surface).padding(vertical = 2.dp)) {
             Row(Modifier.fillMaxWidth().carTap("saved") { actions.places() }.padding(start = 16.dp, end = 14.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("FAVORIS ET RÉCENTS", color = c.sub, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f))
-                Text(if (saved.size > rows) "Tous (${saved.size})" else "Ouvrir", color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("RÉCENTS", color = c.sub, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f))
+                Text("Ouvrir", color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
             for ((i, p) in recents.take(listRows).withIndex()) {
                 Row(Modifier.fillMaxWidth().carTap("saved-$i") { engine.startRoute(p) }.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
