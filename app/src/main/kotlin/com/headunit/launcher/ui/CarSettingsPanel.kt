@@ -163,6 +163,7 @@ internal fun CarSettingsPanel(engine: NavEngine, actions: CarActions, small: Boo
                                 prefs.put(PreferenceKeys.CAR_SPEED_STYLE, it)
                             }
                         }
+                        item { SetSwitch("st-swap", "Grand panneau de limitation", "Les inverse : le panneau de limitation en grand, votre vitesse en petit à côté", prefs.b(PreferenceKeys.SPEED_SWAP, false)) { prefs.put(PreferenceKeys.SPEED_SWAP, it) } }
                         item {
                             SetChoice("st-clock", "Horloge", listOf("auto" to "Automatique", "24" to "24 heures", "12" to "12 heures"), prefs.s(PreferenceKeys.CLOCK, "auto")) { prefs.put(PreferenceKeys.CLOCK, it) }
                         }

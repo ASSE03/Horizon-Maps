@@ -516,8 +516,15 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
 
         // ---- What's here (holding on the map): the road, its limit and the area, with Go / Add as a stop
         engine.here?.let { h ->
-            // above everything else, so the route options (which reach up this far on a phone) can't cover its buttons
-            Box(Modifier.align(Alignment.BottomCenter).zIndex(8f).padding(bottom = 96.dp)) { HereCardView(engine, h, maxH = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp - 140.dp).coerceAtLeast(200.dp)) }
+            // where Add a stop's list goes: along the bottom on a phone held upright, down the driver's side otherwise, with the
+            // map moved so the place shows in the rest of the screen. Above everything else, so nothing covers its buttons
+            // (its outline goes to the map, which centres the place in what's left clear)
+            val hereRep = Modifier.onGloballyPositioned { val r = it.boundsInParent(); engine.setHereRect(r.left / boxW, r.top / boxH, r.right / boxW, r.bottom / boxH) }
+            if (narrow) Box(Modifier.align(Alignment.BottomCenter).zIndex(8f).padding(16.dp).fillMaxWidth().then(hereRep)) {
+                HereCardView(engine, h, maxH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * 0.45f, docked = true)
+            } else Box(Modifier.align(side(Alignment.TopStart)).zIndex(8f).padding(16.dp).width(420.dp).fillMaxHeight().then(hereRep)) {
+                HereCardView(engine, h, docked = true, tall = true)
+            }
         }
 
         // ---- the routes box, folded out beside the buttons by Other routes (as in Google Maps): your route and the other ways, with
@@ -998,7 +1005,7 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                                 if (evStop != null) ImmStat("$evStop%", "à la borne", stopCol, compact = true)
                                 if (evPct != null) ImmStat("$evPct%", "à l'arrivée", evCol, compact = true)
                             }
-                        } else Row(m, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        } else Row(m, horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
                             ImmStat(Geo.fmtDur(e.secs), if (e.delayMin >= 1) "+${e.delayMin} min" else "restant", dc, compact = true)
                             ImmStat(e.arrive, "arrivée", c.text, compact = true)
                             ImmStat(Geo.fmtDist(e.dist, engine.imperial), "restants", c.text, compact = true)
@@ -1148,10 +1155,12 @@ private fun SpeedPill(engine: NavEngine, show: Boolean, k: Double) {
         Modifier.height(60.dp).widthIn(min = 60.dp).panel(6.dp, RoundedCornerShape(30.dp), Color(0xFF101114)).padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
     ) {
-        if (lim != null) SpeedLimitSign(engine, 48.dp)
+        // (Big speed limit sign: the sign fills the pill's height and your speed is smaller beside it)
+        val swap = lim != null && show && engine.prefs.b(PreferenceKeys.SPEED_SWAP, false)
+        if (lim != null) SpeedLimitSign(engine, if (swap) 54.dp else 48.dp)
         // (the same width with or without the sign, so the pill doesn't change size as the figures do)
-        if (show) Column(Modifier.widthIn(min = 48.dp).padding(horizontal = if (lim != null) 6.dp else 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("${Math.round((engine.fix?.speed ?: 0.0) * k)}", color = speedTint(engine) ?: Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+        if (show) Column(Modifier.widthIn(min = if (swap) 38.dp else 48.dp).padding(horizontal = if (lim != null) 6.dp else 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("${Math.round((engine.fix?.speed ?: 0.0) * k)}", color = speedTint(engine) ?: Color.White, fontSize = if (swap) 16.sp else 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
             Text(if (engine.imperial) "mph" else "km/h", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
         }
         // the next limit on the route, in the same pill after a thin line: a smaller sign with how far it is under it
@@ -1509,15 +1518,18 @@ private fun ImmSearch(engine: NavEngine, q: String, onQ: (String) -> Unit, locke
 
 @Composable
 private fun ImmResults(engine: NavEngine, q: String, onPicked: () -> Unit) {
+    // (a place picked: the keyboard goes, so the place's card and the map have the screen)
+    val kb = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     val c = LocalVw.current
     val shape = RoundedCornerShape(26.dp)
     val here = engine.fix?.pos
     // several branches of what was searched nearby (Lidl, Sainsbury's…): "See all N locations" at the top
     val chainN = remember(engine.results, q) { if (q.trim().length >= 2) engine.chainCount(q.trim()) else 0 }
     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp).panel(10.dp, shape, c.surface).padding(vertical = 6.dp)) {
-        if (chainN >= 2) item { SeeAllRow(engine, q.trim(), chainN) { } }
+        if (chainN >= 2 && engine.results.isNotEmpty()) item { SeeAllRow(engine, q.trim(), chainN) { } }
         items(engine.results) { p ->
-            Row(Modifier.fillMaxWidth().clickable { onPicked(); engine.openPlace(p) }.padding(horizontal = 16.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().clickable { kb?.hide(); focus.clearFocus(); onPicked(); engine.openPlace(p) }.padding(horizontal = 16.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                 // a GPX track (GitHub #162): its pink route mark; otherwise the shop's own logo where there is one
                 if (p.web.startsWith("gpx:")) Box(Modifier.size(42.dp).clip(CircleShape).background(Color(0xFFD4537E).copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Rounded.Route, null, tint = Color(0xFFD4537E), modifier = Modifier.size(22.dp))

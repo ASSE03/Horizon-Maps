@@ -297,12 +297,12 @@ fun ParkingCard(engine: NavEngine, modifier: Modifier = Modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Parking près de ${engine.dest?.name ?: "votre destination"}", color = c.sub, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Box(Modifier.size(32.dp).clip(CircleShape).clickable { engine.parkingNear = emptyList() }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(32.dp).clip(CircleShape).tapOn(engine, "park-x") { engine.parkingNear = emptyList() }, contentAlignment = Alignment.Center) {
                 Icon(Icons.Rounded.Close, "Fermer", tint = c.sub, modifier = Modifier.size(16.dp))
             }
         }
-        list.forEach { n ->
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { engine.parkAt(n) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        list.forEachIndexed { pi, n ->
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).tapOn(engine, "park-$pi") { engine.parkAt(n) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(26.dp).clip(RoundedCornerShape(7.dp)).background(Color(0xFF2E6FD8)), contentAlignment = Alignment.Center) {
                     Text("P", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Black)
                 }
@@ -1111,3 +1111,9 @@ internal fun LorryWarnCard(engine: NavEngine, modifier: Modifier = Modifier) {
         }
     }
 }
+
+
+/** A tap on the phone, or through Android Auto's tap list on the car screen (where ordinary clicks don't reach). */
+@Composable
+internal fun Modifier.tapOn(engine: NavEngine, id: String, action: () -> Unit): Modifier =
+    if (engine.isCar) carTap(id, action) else clickable(onClick = action)

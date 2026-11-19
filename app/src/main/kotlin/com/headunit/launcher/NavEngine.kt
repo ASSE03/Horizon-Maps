@@ -844,11 +844,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // a shop or business tapped on the map: its preview card (it used to only say to hold on it)
         map.onPoiTap = { name, p ->
             tappedPoi = name to p; tappedAt = android.os.SystemClock.uptimeMillis()
-            if (prefs.b(PreferenceKeys.WHATS_HERE, true) && !isCar) showHere(Place(name, "", p))
+            if (prefs.b(PreferenceKeys.WHATS_HERE, true) ) showHere(Place(name, "", p))
             else toast(if (route != null && !previewing) "$name : appui long pour l'ajouter comme étape" else "$name : appui long pour y aller", 3000)
         }
         // (with "all locations" open the map stays where it's moved, and "Search this area" shows)
         map.onUserGesture = {
+            // (moved by hand: a place card settling no longer moves the map back)
+            focusUntil = 0L
             if (chain != null) chainMoved = true else { if (following) { following = false }; altFitting = false; scheduleRecentre(12_000) }
             // moving the map with no route: the panel under the search bar tucks away so the map can be seen (TouristCreepy1884)
             if (route == null && !previewing && chain == null) homeTucked = true
@@ -1271,7 +1273,20 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (dim != mapLooksDark) mapLooksDark = dim
     }
 
+    /** The night look was picked (Always night) while the sun is up: the stars, street lamps and headlight beam stay off (#225). */
+    var daylightOutside by mutableStateOf(false)
+        private set
+
+    private fun updateDaylightOutside() {
+        val forced = if (isCar) prefs.s(PreferenceKeys.CARTHEME, "car") == "night" else prefs.s(PreferenceKeys.THEME, "auto") == "night"
+        val pos = fix?.pos ?: prefs.s(PreferenceKeys.LASTLAT, "").toDoubleOrNull()?.let { la -> prefs.s(PreferenceKeys.LASTLON, "").toDoubleOrNull()?.let { lo -> LL(la, lo) } }
+        val v = forced && pos != null && Sun.isDay(pos.lat, pos.lon, System.currentTimeMillis())
+        if (v != daylightOutside) daylightOutside = v
+        map.daylightOutside = v
+    }
+
     private fun lightPreset(dark: Boolean): String {
+        try { updateDaylightOutside() } catch (e: Throwable) { }
         // the car screen goes by its own choice (Always day / Always night on the car), not the phone's: with the phone set to Night,
         // picking Always day on the car still left the car's map dark, and the other way round
         if (isCar) when (prefs.s(PreferenceKeys.CARTHEME, "car")) { "day" -> return "day"; "night" -> return "night" }
@@ -1835,6 +1850,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             run { val ll = LimitLog.read(ctx); if (ll.isNotBlank()) { appendLine(); appendLine("Limitations (dernières) :"); appendLine(ll) } }
             // what Android Auto checks before listing the app (Play as installer, the system installer as initiating)
             appendLine("Install record: ${Updater.installRecord(ctx)}")
+            try { RouteEnds.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Last routes ended:"); append(it) } } catch (e: Throwable) { }
             if (crash != null) { appendLine(); appendLine("Last crash:"); appendLine(crash) }
             val freeze = try { FreezeWatch.file(ctx).takeIf { it.exists() }?.readText()?.take(2500) } catch (e: Exception) { null }
             if (freeze != null) { appendLine(); appendLine("Last freeze:"); appendLine(freeze) }
@@ -3245,6 +3261,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun endRoute() {
         if (walking) { walking = false; MapboxRest.walkProfile = false }
+        // (what ended a trip under way, for the problem report: a route that ends by itself, as on carlb051's Home button, #226)
+        if (route != null && !previewing) try { RouteEnds.note(ctx, if (isCar) "car" else "phone", dest?.let { d ->
+            // (which kind of place only: the report never carries places)
+            when { places.slot("home")?.let { Geo.dist(it.pos, d.pos) < 60.0 } == true -> "home"; places.slot("work")?.let { Geo.dist(it.pos, d.pos) < 60.0 } == true -> "work"; else -> "other" } }.orEmpty()) } catch (e: Throwable) { }
         stopTrackDrive()
         shortRoute = false
         // fork FR : le départ de démo ne sert qu'à ce trajet (le suivant repart de votre position)
@@ -3312,7 +3332,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun scheduleRecentre(ms: Long) {
         if (route == null || previewing) return
         val t = ++recentreToken
-        scope.launch { delay(ms); if (t == recentreToken && !following && route != null && !previewing && chain == null) recenter() }
+        scope.launch { delay(ms); if (t == recentreToken && !following && route != null && !previewing && chain == null && hereState == null) recenter() }
     }
 
     /** Shows the rest of the route on screen, then goes back to following the car after a few seconds. */
@@ -5425,7 +5445,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** The What's here card; while it's open, a red pin marks the spot on the map. */
     var here: HereCard?
         get() = hereState
-        set(v) { hereState = v; try { map.setTapPin(v?.place?.pos) } catch (e: Exception) { } }
+        set(v) {
+            val was = hereState; hereState = v; try { map.setTapPin(v?.place?.pos) } catch (e: Exception) { }
+            // a different place (or none): the searched place's building goes back to normal
+            val fp = focusPlace
+            if (fp != null && (v == null || Geo.dist(v.place.pos, fp) > 30.0)) { focusPlace = null; try { map.highlightPlace(null) } catch (e: Exception) { } }
+            // the card closed on a route with the map moved away: back to following you shortly
+            if (was != null && v == null && !following && route != null) scheduleRecentre(1_500)
+        }
 
     /**
      * The place preview (Dry-Secretary2456: like Google Maps'): what's here, then, as they arrive, the place's details from
@@ -5494,6 +5521,49 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (p.web.startsWith("gpx:") || pendingSave != null || !prefs.b(PreferenceKeys.WHATS_HERE, true)) { pickPlace(p); return }
         results = emptyList()
         showHere(p)
+        // the map goes to the place, in the middle of what the card and the search bar leave clear, with its building lit up,
+        // and stays there while the card is open
+        if (!isCar) { following = false; focusPlace = p.pos; focusUntil = android.os.SystemClock.uptimeMillis() + 4_000L; requestFocus() }
+    }
+
+    // ---- centring a searched place in the clear part of the map ----
+    private var focusPlace: LL? = null
+    private var focusUntil = 0L
+    private var focusToken = 0
+    private val hereRect = FloatArray(4)
+
+    /** The place card's outline (as parts of the screen), reported as it's laid out. */
+    fun setHereRect(l: Float, t: Float, r: Float, b: Float) {
+        val moved = Math.abs(hereRect[0] - l) + Math.abs(hereRect[1] - t) + Math.abs(hereRect[2] - r) + Math.abs(hereRect[3] - b) > 0.03f
+        hereRect[0] = l; hereRect[1] = t; hereRect[2] = r; hereRect[3] = b
+        if (moved) requestFocus()
+    }
+
+    /** (a moment after the last change, so a card or list still settling moves the map once, not several times) */
+    private fun requestFocus() {
+        if (focusPlace == null || android.os.SystemClock.uptimeMillis() > focusUntil) return
+        val t = ++focusToken
+        scope.launch { delay(250); if (t == focusToken) focusNow() }
+    }
+
+    private fun focusNow() {
+        val p = focusPlace ?: return
+        if (here == null) return
+        // what's left clear of the search bar, the map buttons, the trip card and the place card: each takes its side away
+        var l = 0f; var t = 0f; var r = 1f; var b = 1f
+        for (q in panels.toList() + listOf(hereRect)) {
+            if (q[2] - q[0] <= 0.01f || q[3] - q[1] <= 0.01f) continue
+            var nl = l; var nt = t; var nr = r; var nb = b
+            if (q[2] - q[0] > 0.6f) { if ((q[1] + q[3]) / 2 < 0.5f) nt = maxOf(t, q[3]) else nb = minOf(b, q[1]) }
+            else { if ((q[0] + q[2]) / 2 < 0.5f) nl = maxOf(l, q[2]) else nr = minOf(r, q[0]) }
+            // (something covering most of the screen, like a list still closing, is left out rather than leaving no room)
+            if (nr - nl < 0.25f || nb - nt < 0.2f) continue
+            l = nl; t = nt; r = nr; b = nb
+        }
+        try {
+            map.centreIn(p, l.toDouble(), t.toDouble(), (1f - r).toDouble(), (1f - b).toDouble())
+            map.highlightPlace(p)
+        } catch (e: Exception) { }
     }
 
     /** Saves the What's here place as a favourite (or takes it off again). */
@@ -5588,7 +5658,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Looks them up for about 7 km round you, every 5 minutes, or sooner once you've gone 4 km. */
     private fun areaIncidents(pos: LL) {
-        if (!hasKey || !prefs.b(PreferenceKeys.INCIDENTS, true) || !prefs.b(PreferenceKeys.HAZARD_ICONS, true) || simMode != 0) {
+        val dgt = dgtOn(pos)
+        if ((!hasKey && !dgt) || !prefs.b(PreferenceKeys.INCIDENTS, true) || !prefs.b(PreferenceKeys.HAZARD_ICONS, true) || simMode != 0) {
             if (nearIncidents.isNotEmpty()) { nearIncidents = emptyList(); pushHazards(hzProgress) }
             return
         }
@@ -5600,9 +5671,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val dLat = 0.065; val dLon = 0.065 / kotlin.math.cos(Math.toRadians(pos.lat)).coerceAtLeast(0.2)
         scope.launch {
             val got = withContext(Dispatchers.IO) {
-                try { TomTomRest.incidents(apiKey, pos.lon - dLon, pos.lat - dLat, pos.lon + dLon, pos.lat + dLat) } catch (e: Exception) { null }
+                val tt = if (hasKey) try { TomTomRest.incidents(apiKey, pos.lon - dLon, pos.lat - dLat, pos.lon + dLon, pos.lat + dLat) } catch (e: Exception) { null } else emptyList()
+                // Spain: the DGT's own incidents too, with the V16 beacons of broken-down cars (free, no key needed)
+                val dg = if (dgt) try { DgtIncidents.near(pos.lon - dLon, pos.lat - dLat, pos.lon + dLon, pos.lat + dLat) } catch (e: Exception) { emptyList() } else emptyList()
+                if (tt == null && dg.isEmpty()) null else (tt ?: emptyList()) to dg
             } ?: return@launch
-            nearIncidents = got.filter { it.cat.lowercase() in setOf("roadclosed", "roadworks", "laneclosed") }.take(80)
+            val tt = got.first.filter { it.cat.lowercase() in setOf("roadclosed", "roadworks", "laneclosed") }
+            nearIncidents = (tt + withoutDuplicates(got.second.filter { hazardKind(it) >= 0 }, got.first)).take(80)
             pushHazards(hzProgress)
         }
     }
@@ -5616,13 +5691,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val shown = HashSet<String>()
             for ((inc, off, _) in incMatches) {
                 if (off <= progress - 20) continue
-                val k = when (inc.cat.lowercase()) { "roadclosed" -> 2; "roadworks", "laneclosed" -> 1; else -> -1 }
+                val k = hazardKind(inc)
                 if (k >= 0) { list += inc.pts.first() to k; shown += inc.id }
             }
             // roadworks and closures round about, on the route or not (as Google Maps and Waze show them)
             for (inc in nearIncidents) {
                 if (inc.id in shown || inc.pts.isEmpty()) continue
-                val k = when (inc.cat.lowercase()) { "roadclosed" -> 2; "roadworks", "laneclosed" -> 1; else -> -1 }
+                val k = hazardKind(inc)
                 if (k >= 0) list += inc.pts.first() to k
             }
         }
@@ -5633,12 +5708,28 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         map.setHazards(list)
     }
 
+    /** Spain's DGT incidents are used here: in Spain (or, before the country is known, inside its borders). */
+    private fun dgtOn(p: LL): Boolean = prefs.b(PreferenceKeys.INCIDENTS, true) &&
+        (detectedCountry.equals("ES", true) || (detectedCountry.isBlank() && DgtIncidents.inSpain(p)))
+
+    /** The map icon for an incident: roadworks and closures from anyone; accidents, hazards and broken-down cars from the DGT. */
+    private fun hazardKind(inc: Incident): Int = when (inc.cat.lowercase()) {
+        "roadclosed" -> 2; "roadworks", "laneclosed" -> 1
+        else -> if (!inc.id.startsWith("dgt-")) -1 else when (inc.cat) { "breakdown" -> reportIcon("breakdown"); "accident" -> reportIcon("accident"); "danger" -> reportIcon("hazard"); else -> -1 }
+    }
+
+    /** The DGT incidents that TomTom (or the route) doesn't already have within 100 m, so nothing is announced twice. */
+    private fun withoutDuplicates(dgt: List<Incident>, others: List<Incident>): List<Incident> =
+        dgt.filter { d -> others.none { o -> o.pts.isNotEmpty() && Geo.dist(o.pts.first(), d.pts.first()) < 100.0 } }
+
     private fun checkIncidents(r: Route, progress: Double) {
         try { if (camerasOn()) updateRouteCams(r, progress); pushHazards(progress) } catch (e: Exception) { }
         try { pushJams(progress) } catch (e: Exception) { }
         // TomTom's incident data when there's a key; otherwise the incidents that came with a Mapbox route
         val fromRoute = (!hasKey || ttDown()) && r.incidents.isNotEmpty()
-        if ((!hasKey && !fromRoute) || simMode != 0 || !prefs.b(PreferenceKeys.INCIDENTS, true)) { incidentAhead = null; return }
+        val here = r.pts.getOrNull(r.cum.indexOfFirst { it >= progress }.coerceAtLeast(0)) ?: r.pts.firstOrNull()
+        val dgt = here != null && dgtOn(here)
+        if ((!hasKey && !fromRoute && !dgt) || simMode != 0 || !prefs.b(PreferenceKeys.INCIDENTS, true)) { incidentAhead = null; return }
         val now = System.currentTimeMillis()
         if (now - incAt > 180_000) {
             incAt = now
@@ -5653,7 +5744,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                             minLat = min(minLat, q.lat); maxLat = max(maxLat, q.lat); minLon = min(minLon, q.lon); maxLon = max(maxLon, q.lon)
                         }
                         if (!any) emptyList() else {
-                            val list = if (fromRoute) r.incidents else TomTomRest.incidents(apiKey, minLon - 0.01, minLat - 0.01, maxLon + 0.01, maxLat + 0.01)
+                            val dg = if (dgt) try { DgtIncidents.near(minLon - 0.01, minLat - 0.01, maxLon + 0.01, maxLat + 0.01) } catch (e: Exception) { emptyList() } else emptyList()
+                            val base = when {
+                                fromRoute -> r.incidents
+                                hasKey -> try { TomTomRest.incidents(apiKey, minLon - 0.01, minLat - 0.01, maxLon + 0.01, maxLat + 0.01) } catch (e: Exception) { if (dg.isEmpty()) throw e else emptyList() }
+                                else -> emptyList()
+                            }
+                            val list = base + withoutDuplicates(dg, base)
                             val out = ArrayList<Triple<Incident, Double, String>>()
                             for (inc in list) {
                                 var bestOff = -1.0; var bestD = 70.0

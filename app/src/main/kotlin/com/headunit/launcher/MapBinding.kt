@@ -981,6 +981,21 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             main0.post { reinstall() }
         }
 
+    /**
+     * Set by the engine: true when the night look has been picked (Always night) but the sun is actually up. The map stays dark,
+     * but the street lamps aren't lit and the headlight beam is off, as they would be outside (bijindas, #225).
+     */
+    var daylightOutside = false
+        set(v) {
+            if (field == v) return
+            field = v
+            // (the lamps' lit pools are only added at night, so they're put back as on a day / night switch: twice a day at most)
+            main0.post { reinstall(); try { placeBeam() } catch (e: Throwable) { } }
+        }
+
+    /** Night as far as the lights go: dark, and really after dark. */
+    private val litNight get() = nightStyle && !daylightOutside
+
 
     // ---- extra 3D features (Settings > Map), see MapExtras.kt ----
     private var facadesOn = true
@@ -1299,7 +1314,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private fun placeBeam() {
         val bv = beamView
         val p = me
-        val night = lightPreset == "night" || lightPreset == "dusk"
+        val night = (lightPreset == "night" || lightPreset == "dusk") && !daylightOutside
         if (p == null || !beamOn || !night || satellite || bv.parent == null) { bv.clear(); return }
         try {
             val g = beamGeom(p) ?: run { bv.clear(); return }
@@ -1756,7 +1771,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         lampsCentre = null
         if (!lampsOn) { lampStage = "désactivés"; return }
         Furniture.addModels(st)
-        val night = nightStyle
+        val night = litNight
         addS(st, GeoJsonSource.Builder("dl-lamps").featureCollection(empty()).build())
         addS(st, GeoJsonSource.Builder("dl-lamp-pools").featureCollection(empty()).build())
         // at night, a soft warm pool of light on the road under each lamp (about 9 m across, growing with the map as you zoom)
@@ -1785,7 +1800,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val again = force || lampRoadsNew || last == null || Geo.dist(last, c) > 120.0
         if (!again || now - lampsAt < 1200L) return
         lampsBusy = true; lampsAt = now; lampsCentre = c; lampRoadsNew = false
-        val roads = lampRoads; val gap = lampGap; val night = nightStyle
+        val roads = lampRoads; val gap = lampGap; val night = litNight
         try {
             lampExec.execute {
                 try {
@@ -2669,6 +2684,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             .iconAllowOverlap(true).iconIgnorePlacement(true).iconEmissiveStrength(1.0)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconSize(0.48))
         pushTap()
+        // (a style change, day to night say, drops the searched place's building highlight: put it back)
+        hlStyled = false; pushHl()
         flatArrow = if (im) arrowBitmapImmersive() else arrowBitmap()
         addImg(st, "dl-arrow", flatArrow!!)
         addL(st, SymbolLayer("dl-me-arrow", "dl-me")
@@ -4943,6 +4960,108 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** Shows the red pin where you tapped ([p]), or takes it away (null). */
     fun setTapPin(p: LL?) { if (p == tapAt) return; tapAt = p; pushTap() }
 
+    // ---- a searched place's building, lit up while its card is open ----
+    // On Mapbox's own map (Plus) it's the map's "selected" building colour; on the free map, the building's outline drawn over it
+    // in blue (lighter at night), and raised in blue when 3D buildings are on
+    private var hlFor: LL? = null
+    private var hlStd: com.mapbox.maps.interactions.standard.generated.StandardBuildingsFeature? = null
+    private var hlFeature: Feature? = null
+    private var hlStyled = false
+    private var hlToken = 0
+
+    fun highlightPlace(p: LL?) {
+        if (p != null && hlFor != null && Geo.dist(hlFor!!, p) < 5.0 && (hlStd != null || hlFeature != null)) return
+        val t = ++hlToken
+        // the last one back to normal
+        hlStd?.let { f -> try { mbMap.setFeatureState(f, com.mapbox.maps.interactions.standard.generated.StandardBuildingsState { select(false) }) } catch (e: Throwable) { } }
+        hlStd = null; hlFeature = null; hlFor = p; pushHl()
+        if (p == null || satellite) return
+        // (after the map has finished moving there, so the building is drawn; once more a little later if it wasn't yet)
+        main0.postDelayed({ if (t == hlToken) findHl(p, t, retry = true) }, 1_900L)
+    }
+
+    private fun findHl(p: LL, t: Int, retry: Boolean) {
+        if (!canQuery()) return
+        try {
+            val sc = mbMap.pixelForCoordinate(Point.fromLngLat(p.lon, p.lat))
+            if (sc.x < 0 || sc.y < 0 || sc.x > mapView.width || sc.y > mapView.height) return
+            val r = 10.0 * mapView.resources.displayMetrics.density
+            if (slotsOn) {
+                val box = RenderedQueryGeometry(ScreenBox(ScreenCoordinate(sc.x - r, sc.y - r), ScreenCoordinate(sc.x + r, sc.y + r)))
+                mbMap.queryRenderedFeatures(com.mapbox.maps.interactions.standard.generated.StandardBuildings(), box) { list ->
+                    main0.post {
+                        if (t != hlToken) return@post
+                        val f = list.minByOrNull { distTo(it.geometry, p) }
+                        if (f == null) { if (retry) main0.postDelayed({ if (t == hlToken) findHl(p, t, false) }, 1_500L); return@post }
+                        hlStd = f
+                        try { mbMap.setFeatureState(f, com.mapbox.maps.interactions.standard.generated.StandardBuildingsState { select(true) }) } catch (e: Throwable) { }
+                    }
+                }
+                return
+            }
+            val st = style ?: return
+            val layers = try { st.styleLayers.map { it.id }.filter { it.contains("building") && !it.startsWith("dl-hl") } } catch (e: Throwable) { emptyList() }
+            if (layers.isEmpty()) return
+            query(RectF((sc.x - r).toFloat(), (sc.y - r).toFloat(), (sc.x + r).toFloat(), (sc.y + r).toFloat()), layers, 2_500L) { list ->
+                if (t != hlToken) return@query
+                val f = list?.filter { it.geometry() is Polygon || it.geometry() is com.mapbox.geojson.MultiPolygon }?.minByOrNull { distTo(it.geometry(), p) }
+                if (f == null) { if (retry) main0.postDelayed({ if (t == hlToken) findHl(p, t, false) }, 1_500L); return@query }
+                hlFeature = f; pushHl()
+            }
+        } catch (e: Throwable) { }
+    }
+
+    /** 0 for a point inside the shape, otherwise roughly how far it is from the shape's corners (degrees, only for comparing). */
+    private fun distTo(g: com.mapbox.geojson.Geometry?, p: LL): Double {
+        val rings: List<List<Point>> = when (g) {
+            is Polygon -> g.coordinates().take(1)
+            is com.mapbox.geojson.MultiPolygon -> g.coordinates().mapNotNull { it.firstOrNull() }
+            else -> return Double.MAX_VALUE
+        }
+        var best = Double.MAX_VALUE
+        for (ring in rings) {
+            var inside = false
+            var j = ring.size - 1
+            for (i in ring.indices) {
+                val a = ring[i]; val b = ring[j]
+                if ((a.latitude() > p.lat) != (b.latitude() > p.lat) &&
+                    p.lon < (b.longitude() - a.longitude()) * (p.lat - a.latitude()) / (b.latitude() - a.latitude()) + a.longitude()) inside = !inside
+                j = i
+                best = minOf(best, Math.hypot(a.longitude() - p.lon, a.latitude() - p.lat))
+            }
+            if (inside) return 0.0
+        }
+        return best
+    }
+
+    private fun pushHl() {
+        val st = style ?: return
+        try {
+            if (!hlStyled || !st.styleSourceExists("dl-hl")) {
+                if (!st.styleSourceExists("dl-hl")) addS(st, GeoJsonSource.Builder("dl-hl").featureCollection(empty()).build())
+                // (under the labels, so street and place names stay readable on top of it)
+                val below = try { st.styleLayers.firstOrNull { it.type == "symbol" && !it.id.startsWith("dl-") }?.id } catch (e: Throwable) { null }
+                val dark = nightStyle
+                val fill = if (dark) "#85B7EB" else "#378ADD"; val edge = if (dark) "#85B7EB" else "#185FA5"
+                if (!st.styleLayerExists("dl-hl-fill")) addL(st, FillLayer("dl-hl-fill", "dl-hl").fillColor(fill).fillOpacity(0.35), below)
+                if (!st.styleLayerExists("dl-hl-3d")) addL(st, FillExtrusionLayer("dl-hl-3d", "dl-hl").fillExtrusionColor(fill).fillExtrusionOpacity(0.95)
+                    .fillExtrusionHeight(Expression.fromRaw("[\"+\",[\"to-number\",[\"coalesce\",[\"get\",\"render_height\"],[\"get\",\"height\"]],8],0.6]"))
+                    .fillExtrusionBase(Expression.fromRaw("[\"to-number\",[\"coalesce\",[\"get\",\"render_min_height\"],[\"get\",\"min_height\"]],0]")), below)
+                if (!st.styleLayerExists("dl-hl-line")) addL(st, LineLayer("dl-hl-line", "dl-hl").lineColor(edge).lineWidth(2.5), below)
+                hlStyled = true
+            }
+            // (day or night colours, as the map is now)
+            val dark = nightStyle
+            st.setStyleLayerProperty("dl-hl-fill", "fill-color", Value.valueOf(if (dark) "#85B7EB" else "#378ADD"))
+            st.setStyleLayerProperty("dl-hl-3d", "fill-extrusion-color", Value.valueOf(if (dark) "#85B7EB" else "#378ADD"))
+            st.setStyleLayerProperty("dl-hl-line", "line-color", Value.valueOf(if (dark) "#85B7EB" else "#185FA5"))
+            // (raised only when the map's buildings are 3D, so it sits on the building as drawn)
+            st.setStyleLayerProperty("dl-hl-3d", "visibility", Value.valueOf(if (buildings3d) "visible" else "none"))
+            val f = hlFeature
+            src("dl-hl")?.featureCollection(if (f == null) empty() else FeatureCollection.fromFeatures(listOf(f)))
+        } catch (e: Throwable) { }
+    }
+
     private fun pushTap() {
         val s = src("dl-tap") ?: return
         val p = tapAt
@@ -5028,6 +5147,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     }
 
     /** All the branches fitted into the part of the map beside the list (on the driver's side: left, or right when [mirrored]). */
+    /** One place, close in (street level), in the middle of the part of the screen left clear: the edges as parts of the screen covered. */
+    fun centreIn(pos: LL, left: Double, top: Double, right: Double, bottom: Double) {
+        val dLat = 0.0002; val dLon = dLat / Math.max(0.2, Math.cos(Math.toRadians(pos.lat)))
+        fitFrac(listOf(LL(pos.lat - dLat, pos.lon - dLon), LL(pos.lat + dLat, pos.lon + dLon)), left + 0.02, top + 0.02, right + 0.02, bottom + 0.02)
+    }
+
     fun fitChain(points: List<LL>, mirrored: Boolean) {
         val side = if (mapView.width > mapView.height) 0.40 else 0.06
         // (upright: the list is along the bottom and the turn card across the top, so the places go in the space between)

@@ -5,6 +5,9 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Android Auto : fiche d'un lieu, rangée des lieux enregistrés, carte de suggestion, prix dans « Ajouter un arrêt », zones et météo, parkings et aires, grand panneau de limitation.
+- Lieu cherché : la carte s'y déplace et le centre dans la partie libre de l'écran, bâtiment mis en évidence ; la fiche s'affiche sur le côté comme « Ajouter un arrêt » et le clavier se ferme.
+- Espagne : incidents en direct de la DGT et balises V16.
 - Lampadaires sur Android Auto : affichés aussi sur l'écran de la voiture, avec un interrupteur dans les réglages de la voiture (onglet Carte) et dans Réglages › Mobilier urbain 3D sur le téléphone.
 - Fiche d'un lieu : toucher un commerce ou un lieu sur la carte ouvre sa fiche (horaires, téléphone, site), avec « Y aller » et le temps de trajet.
 - Envoyer son heure d'arrivée depuis la carte de trajet.
@@ -117,6 +120,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Avis envoyés : ils disent ce qui a terminé les derniers trajets.
+- Vue des voies : lignes plus épaisses.
+- Chiffres de l'arrivée regroupés à gauche sur la carte de trajet.
+- Toujours nuit : lumières et étoiles seulement une fois la nuit tombée.
+- Incidents TomTom : la demande est corrigée.
 - Batterie à l'arrivée réglable de 1 en 1 % (appui long pour défiler).
 - Réglages en portrait : le bouton retour reste en haut.
 - Le panneau de recherche se replie quand vous déplacez la carte.
@@ -210,6 +218,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Plantage sur un résultat de recherche.
 - Faisceau des phares : il part maintenant de l'avant de la flèche, et ne clignote plus.
 - Limite des radars tronçons hors du Royaume-Uni : lue dans l'unité du pays (un « 60 » n'est plus lu en miles).
 - Mises à jour depuis l'appli : l'installateur enregistre Google Play comme source, ce que vérifie Android Auto ; une mise à jour ne fait plus disparaître l'appli d'Android Auto.
