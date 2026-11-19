@@ -418,6 +418,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             addS(st, RasterSource.Builder("dl-ortho").tiles(listOf(IGN_ORTHO)).tileSize(256).minzoom(0).maxzoom(19).attribution("© IGN").build())
             addL(st, RasterLayer("dl-ortho", "dl-ortho").inSlot("bottom").rasterOpacity(1.0).rasterFadeDuration(150.0).rasterEmissiveStrength(0.85))
         } catch (e: Throwable) { android.util.Log.w("MapBinding", "ortho: ${e.message}") }
+    }
+
     /** For the feedback report: the last piece of Mapbox's map that wouldn't load, and which map is really on screen. */
     @Volatile var lastTileError = ""
     /** Why the map wouldn't load your own 3D model (Mapbox's words), and a hook to say so on screen. */
