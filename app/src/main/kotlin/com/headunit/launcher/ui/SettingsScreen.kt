@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.headunit.launcher.BuildConfig
@@ -245,20 +246,29 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
            // (in portrait too the preview now stays at the top while the settings scroll under it, as in landscape, so a change
            // can be seen as it's made, GitHub #124. Only a really short screen still scrolls it away, to leave room for the settings)
            val pinPreview = !narrowS || androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp >= 600
+           val scroll = rememberScrollState()
            Column(Modifier.fillMaxSize()) {
+            // portrait: the back arrow and the page name sit in a bar that stays put above everything, so going back never
+            // means scrolling up first (the whole bar is the tap target)
+            if (narrowS) Row(
+                Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(RoundedCornerShape(50)).clickable { showList = true }.padding(end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(44.dp).clip(CircleShape).background(c.tile), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.ArrowBack, "Tous les réglages", tint = c.text, modifier = Modifier.size(22.dp))
+                }
+                Text(sections[cat].title, color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 12.dp))
+            }
             if (withPreview && pinPreview) SettingsMapPreview(engine, if (narrowS) 170 else 210)
             // (the on-screen keyboard takes the bottom of the screen: the settings scroll in the space above it, so the box being
             // typed in can be seen, smikkelvriend #200)
-            Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 4.dp)) {
+            Box(Modifier.fillMaxSize().imePadding()) {
+             Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 4.dp, vertical = 4.dp)) {
                 if (withPreview && !pinPreview) SettingsMapPreview(engine, 170)
-                if (narrowS) Row(Modifier.padding(bottom = 6.dp).clip(RoundedCornerShape(50)).clickable { showList = true }.padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(42.dp).clip(CircleShape).background(c.tile), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.ArrowBack, "Tous les réglages", tint = c.text, modifier = Modifier.size(22.dp))
-                    }
-                    Text("Réglages", color = c.sub, fontSize = 15.sp, modifier = Modifier.padding(start = 10.dp))
-                }
-                Text(sections[cat].title, color = c.text, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp, top = 6.dp))
-                Text(sections[cat].sub, color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp, bottom = 16.dp))
+                // (in portrait the page name is already in the bar above, so only its short description starts the page)
+                if (!narrowS) Text(sections[cat].title, color = c.text, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp, top = 6.dp))
+                Text(sections[cat].sub, color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp, top = if (narrowS) 2.dp else 0.dp, bottom = 16.dp))
                 Column(Modifier.widthIn(max = 820.dp)) {
                     when (cat) {
                         0 -> MapStyleSection(prefs, engine)
@@ -280,6 +290,15 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
                         else -> AboutSection(prefs, engine)
                     }
                 }
+             }
+             // soft edges: the settings fade out under whatever is pinned above them (and into the bottom of the screen) instead
+             // of being cut off by a hard line. Each edge only shows while there is more to scroll that way
+             val topFade by androidx.compose.animation.core.animateFloatAsState(if (scroll.value > 0) 1f else 0f, label = "topFade")
+             val bottomFade by androidx.compose.animation.core.animateFloatAsState(if (scroll.value < scroll.maxValue) 1f else 0f, label = "bottomFade")
+             Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(28.dp).graphicsLayer { alpha = topFade }
+                 .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(c.bg, c.bg.copy(alpha = 0.7f), Color.Transparent))))
+             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(28.dp).graphicsLayer { alpha = bottomFade }
+                 .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, c.bg.copy(alpha = 0.7f), c.bg))))
             }
            }
           }
@@ -1099,14 +1118,22 @@ private fun FuelSection(prefs: Prefs, engine: NavEngine) {
         }
         SFieldItem("Batterie utile (kWh)", prefs.s(PreferenceKeys.EV_BATTERY_KWH, ""), "Pour l'estimation de batterie et les arrêts recharge (60 si vide)", placeholder = "ex. 64", number = true) { s -> prefs.put(PreferenceKeys.EV_BATTERY_KWH, s.filter { it.isDigit() || it == '.' }.take(5)) }
         SFieldItem("Puissance de charge maximale (kW)", prefs.s("ev_max_kw", ""), "Pour le temps de recharge aux arrêts proposés (135 si vide). Voir la fiche technique de la voiture", placeholder = "ex. 135", number = true) { s -> prefs.put("ev_max_kw", s.filter { it.isDigit() }.take(3)) }
-        SFieldItem(if (mi) "Prix de l'électricité (pence par kWh)" else "Prix de l'électricité (centimes par kWh)", prefs.s(PreferenceKeys.EVPPK, ""), placeholder = "ex. 28", number = true) { s -> prefs.put(PreferenceKeys.EVPPK, s.filter { it.isDigit() || it == '.' || it == ',' }.take(6)) }
+        // (in currencies where a kWh or a litre costs more than a few of the main unit, rupees or kroner say, the price is asked for
+        // as it's normally written, in that currency: bijindas)
+        val cur = moneyCurrency(prefs)
+        val small = smallUnitPrices(cur)
+        val sym = try { cur.getSymbol(java.util.Locale.getDefault()) } catch (e: Exception) { cur.currencyCode }
+        SFieldItem(if (!small) "Prix de l'électricité par kWh ($sym)" else if (mi) "Prix de l'électricité (pence par kWh)" else "Prix de l'électricité (centimes par kWh)", prefs.s(PreferenceKeys.EVPPK, ""), placeholder = if (small) "ex. 28" else "", number = true) { s -> prefs.put(PreferenceKeys.EVPPK, s.filter { it.isDigit() || it == '.' || it == ',' }.take(6)) }
     } else SGroup("Coût du carburant dans les options d'itinéraire", footer = "Avec les deux renseignés, chaque itinéraire indique environ le coût en carburant.") {
         if (mi) SFieldItem("Consommation (miles par gallon)", prefs.s(PreferenceKeys.FUELMPG, ""), placeholder = "ex. 45", number = true) { s -> prefs.put(PreferenceKeys.FUELMPG, num(s).take(5)) }
         // litres per 100 km: 282.48 / UK miles per gallon
         else SFieldItem("Consommation (litres aux 100 km)", prefs.s(PreferenceKeys.FUELMPG, "").toDoubleOrNull()?.takeIf { it > 0 }?.let { fmt1(282.481 / it) } ?: "", placeholder = "ex. 6.3", number = true) { s ->
             prefs.put(PreferenceKeys.FUELMPG, num(s).toDoubleOrNull()?.takeIf { it > 0 }?.let { String.format(java.util.Locale.US, "%.2f", 282.481 / it) } ?: "")
         }
-        SFieldItem(if (mi) "Prix du carburant (pence par litre)" else "Prix du carburant (centimes par litre)", prefs.s(PreferenceKeys.FUELPPL, ""), placeholder = "ex. 1,899", number = true) { s -> prefs.put(PreferenceKeys.FUELPPL, s.filter { it.isDigit() || it == '.' || it == ',' }.take(6)) }
+        val cur = moneyCurrency(prefs)
+        val small = smallUnitPrices(cur)
+        val sym = try { cur.getSymbol(java.util.Locale.getDefault()) } catch (e: Exception) { cur.currencyCode }
+        SFieldItem(if (!small) "Prix du carburant au litre ($sym)" else if (mi) "Prix du carburant (pence par litre)" else "Prix du carburant (centimes par litre)", prefs.s(PreferenceKeys.FUELPPL, ""), placeholder = if (small) "ex. 1,899" else "", number = true) { s -> prefs.put(PreferenceKeys.FUELPPL, s.filter { it.isDigit() || it == '.' || it == ',' }.take(6)) }
     }
 }
 
@@ -1390,7 +1417,7 @@ private fun KeysSection(prefs: Prefs, engine: NavEngine) {
     if (com.headunit.launcher.Plus.offered) {
         SGroup("Comptes de carte") {
             SNote(if (com.headunit.launcher.Plus.active) "Plus est activé : la carte, la recherche, les itinéraires et le trafic utilisent les comptes de Horizon Maps, aucune clé à ajouter."
-                else "La version gratuite utilise OpenStreetMap, avec des itinéraires calculés depuis votre pack pays. Horizon Maps Plus ajoute la carte 3D, le satellite et le trafic en direct, sans clé à configurer.")
+                else "La version gratuite utilise OpenStreetMap, avec des itinéraires calculés depuis votre pack pays. Horizon Maps Plus ajoute des bâtiments et monuments 3D détaillés, le satellite et le trafic en direct, sans clé à configurer.")
         }
         return
     }

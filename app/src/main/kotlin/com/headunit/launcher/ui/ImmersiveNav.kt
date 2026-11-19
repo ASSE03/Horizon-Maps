@@ -51,6 +51,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.AddLocationAlt
 import androidx.compose.material.icons.rounded.Stop
@@ -127,6 +128,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -227,7 +229,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
     val typingLocked by remember { derivedStateOf { (engine.fix?.speed ?: 0.0) > 3.0 && engine.prefs.b(PreferenceKeys.DRIVELOCK, true) } }
     val focus = remember { FocusRequester() }
     LaunchedEffect(q) {
-        if (q.length >= 3) { delay(300); engine.search(q) } else if (q.isEmpty()) engine.results = emptyList()
+        if (q.length >= 3) { delay(500); engine.search(q, typed = true) } else if (q.isEmpty()) engine.results = emptyList()
     }
     // text shared from another app goes into the search box
     LaunchedEffect(engine.externalQuery) { engine.externalQuery?.let { q = it; engine.externalQuery = null } }
@@ -318,7 +320,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         val searchBusy = q.isNotEmpty() || engine.results.isNotEmpty() || engine.nearbyKind != null || engine.phoneDest != null || engine.shownTrack != null
         val compact = searchBtn && !routing && !previewing && !searchOpen && !searchBusy
         LaunchedEffect(searchOpen, searchBusy) { if (searchOpen && !searchBusy) { delay(20_000); searchOpen = false } }
-        LaunchedEffect(routing) { if (routing) searchOpen = false }
+        LaunchedEffect(routing) { if (routing) { searchOpen = false; engine.homeTucked = false } }
         LaunchedEffect(searchOpen) { if (searchOpen && !typingLocked) { delay(350); try { focus.requestFocus() } catch (_: Exception) {} } }
         // a phone held upright, on a route: the turn card takes the whole width and the map buttons go under it, instead of being
         // squeezed in beside it (the cards that come and go under the turn card still leave room for the buttons)
@@ -338,14 +340,16 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
             AnimatedVisibility(!routing && (!previewing || engine.pickDemoStart) && !compact, enter = fadeIn(tween(220)) + androidx.compose.animation.expandVertically(tween(260)), exit = fadeOut(tween(160)) + androidx.compose.animation.shrinkVertically(tween(220))) {
               Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ImmSearch(engine, q, { q = it }, typingLocked, focus, voice)
-                engine.phoneDest?.let { pd -> PhoneDestCard(engine, pd) }
+                // (moving the map tucks everything under the search bar away, apart from search results: [NavEngine.homeTucked])
+                val tucked = engine.homeTucked
+                if (!tucked) engine.phoneDest?.let { pd -> PhoneDestCard(engine, pd) }
                 // a GPX track you're looking at (Settings › Places & trips › GPX tracks › Show)
-                engine.shownTrack?.let { t -> TrackCard(engine, t) }
+                if (!tucked) engine.shownTrack?.let { t -> TrackCard(engine, t) }
                 val showResults = engine.results.isNotEmpty()
                 AnimatedVisibility(showResults, enter = fadeIn(tween(180)) + androidx.compose.animation.expandVertically(tween(240)), exit = fadeOut(tween(120)) + androidx.compose.animation.shrinkVertically(tween(180))) {
                     ImmResults(engine, q) { q = "" }
                 }
-                AnimatedVisibility(!showResults && q.isEmpty() && engine.nearbyKind == null, enter = fadeIn(tween(220)) + androidx.compose.animation.expandVertically(tween(260)), exit = fadeOut(tween(140)) + androidx.compose.animation.shrinkVertically(tween(200))) {
+                AnimatedVisibility(!showResults && q.isEmpty() && engine.nearbyKind == null && !tucked, enter = fadeIn(tween(220)) + androidx.compose.animation.expandVertically(tween(260)), exit = fadeOut(tween(140)) + androidx.compose.animation.shrinkVertically(tween(200))) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         // your places (Home, Work...) always stay under the search bar; while you drive with no route, the suggestion and
                         // resume cards stay too and the rest folds away
@@ -513,7 +517,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         // ---- What's here (holding on the map): the road, its limit and the area, with Go / Add as a stop
         engine.here?.let { h ->
             // above everything else, so the route options (which reach up this far on a phone) can't cover its buttons
-            Box(Modifier.align(Alignment.BottomCenter).zIndex(8f).padding(bottom = 96.dp)) { HereCardView(engine, h) }
+            Box(Modifier.align(Alignment.BottomCenter).zIndex(8f).padding(bottom = 96.dp)) { HereCardView(engine, h, maxH = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp - 140.dp).coerceAtLeast(200.dp)) }
         }
 
         // ---- the routes box, folded out beside the buttons by Other routes (as in Google Maps): your route and the other ways, with
@@ -804,7 +808,7 @@ private fun OptionsSheet(engine: NavEngine, shareEta: () -> Unit, wide: Boolean 
                         close()
                         try { if (engine.route != null || engine.previewing) engine.endRoute() } catch (e: Exception) { }
                         try { engine.stopLocation() } catch (e: Exception) { }
-                        try { act?.let { com.headunit.launcher.NavService.stop(it.applicationContext) } } catch (e: Exception) { }
+                        try { if (!com.headunit.launcher.RouteSync.carConnected()) act?.let { com.headunit.launcher.NavService.stop(it.applicationContext) } } catch (e: Exception) { }
                         try { act?.finishAndRemoveTask() } catch (e: Exception) { }
                     }.padding(vertical = 12.dp),
                     horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -948,7 +952,15 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                     if (evStop != null) ImmStat("$evStop%", "à la borne", stopCol)
                     if (evPct != null) ImmStat("$evPct%", "à l'arrivée", evCol)
                 }
+                // send your arrival time (WhatsApp, a text...): only while stopped, so nobody picks a contact while driving (#213)
+                val shareCtx = androidx.compose.ui.platform.LocalContext.current
+                val canShare = (engine.fix?.speed ?: 0.0) < 2.0
+                val share = { engine.etaShareText()?.let { t ->
+                    val i = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, t)
+                    try { shareCtx.startActivity(android.content.Intent.createChooser(i, "Envoyer l'heure d'arrivée").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (x: Exception) { }
+                } }
                 val buttons: @Composable () -> Unit = {
+                    if (canShare) ImmCircle({ share() }, 44.dp) { Icon(Icons.Rounded.Send, "Envoyer l'heure d'arrivée", tint = c.accent, modifier = Modifier.size(21.dp)) }
                     // electric: chargers along the route from here
                     // (voice and sound moved off the card: sound is a big button at the top right, voice is in Map options > This trip)
                     // add a stop (or see the stops) on the way
@@ -969,7 +981,7 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                     // all fit (an electric car adds a fourth figure and a fifth button), the buttons go on a line under the figures:
                     // squeezed onto one line the figures ran into each other ("21 min14:1216 km75")
                     val nStats = (if (evPct != null) 5 else 3) + (if (evStop != null) 1 else 0)
-                    val nButtons = if (evPct != null) 3 else 2
+                    val nButtons = (if (evPct != null) 3 else 2) + (if (canShare) 1 else 0)
                     val oneLine = maxWidth >= (nStats * 74 + nButtons * 42 + 30).dp
                     // fork FR : trop de chiffres pour une ligne (voiture électrique, sur un téléphone en portrait) : le trajet sur une
                     // ligne, la batterie sur la suivante (serrés sur une seule ligne, ils se chevauchaient)
@@ -997,6 +1009,7 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                     }
                     val smallButtons: @Composable (Modifier) -> Unit = { m ->
                         Row(m, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (canShare) ImmCircle({ share() }, 40.dp) { Icon(Icons.Rounded.Send, "Envoyer l'heure d'arrivée", tint = c.accent, modifier = Modifier.size(19.dp)) }
                             ImmCircle({ engine.stopsEditor = true }, 40.dp) { Icon(Icons.Rounded.AddLocationAlt, if (engine.via.isEmpty()) "Ajouter un arrêt" else "Arrêts", tint = c.accent, modifier = Modifier.size(20.dp)) }
                             if (evPct != null) ImmCircle({ engine.loadNearby("charging", false) }, 40.dp) { Icon(Icons.Rounded.EvStation, "Bornes plus loin", tint = Good, modifier = Modifier.size(20.dp)) }
                             Box(Modifier.size(40.dp).shadow(6.dp, CircleShape).clip(CircleShape).background(Bad).pressClick { engine.endRoute() }, contentAlignment = Alignment.Center) {
@@ -1465,8 +1478,12 @@ private fun ImmSearch(engine: NavEngine, q: String, onQ: (String) -> Unit, locke
                 if (q.isNotEmpty()) Icon(Icons.Rounded.Close, "Effacer", tint = c.sub, modifier = Modifier.padding(end = 8.dp).clickable { onQ(""); engine.results = emptyList() })
                 else Row(verticalAlignment = Alignment.CenterVertically) {
                     // folds Saved & recent up under the bar, and back down again
-                    val open = engine.prefs.b(PreferenceKeys.QUICKLIST, true)
-                    Box(Modifier.padding(end = 4.dp).size(40.dp).clip(CircleShape).clickable { engine.prefs.put(PreferenceKeys.QUICKLIST, !open) }, contentAlignment = Alignment.Center) {
+                    // (tucked away by moving the map: the arrow points down, and brings it all back)
+                    val open = engine.prefs.b(PreferenceKeys.QUICKLIST, true) && !engine.homeTucked
+                    Box(Modifier.padding(end = 4.dp).size(40.dp).clip(CircleShape).clickable {
+                        if (engine.homeTucked) { engine.homeTucked = false; engine.prefs.put(PreferenceKeys.QUICKLIST, true) }
+                        else engine.prefs.put(PreferenceKeys.QUICKLIST, !open)
+                    }, contentAlignment = Alignment.Center) {
                         Icon(if (open) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown, if (open) "Masquer enregistrés et récents" else "Afficher enregistrés et récents", tint = c.sub, modifier = Modifier.size(26.dp))
                     }
                     Box(Modifier.padding(end = 8.dp).size(44.dp).clip(CircleShape).background(c.accent).pressClick { voice() }, contentAlignment = Alignment.Center) {
@@ -1485,7 +1502,7 @@ private fun ImmSearch(engine: NavEngine, q: String, onQ: (String) -> Unit, locke
                 focusedPlaceholderColor = c.sub, unfocusedPlaceholderColor = c.sub, disabledPlaceholderColor = c.sub,
                 cursorColor = c.accent,
             ),
-            modifier = Modifier.fillMaxSize().focusRequester(focus),
+            modifier = Modifier.fillMaxSize().focusRequester(focus).onFocusChanged { if (it.isFocused) engine.homeTucked = false },
         )
     }
 } }
@@ -1500,7 +1517,7 @@ private fun ImmResults(engine: NavEngine, q: String, onPicked: () -> Unit) {
     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp).panel(10.dp, shape, c.surface).padding(vertical = 6.dp)) {
         if (chainN >= 2) item { SeeAllRow(engine, q.trim(), chainN) { } }
         items(engine.results) { p ->
-            Row(Modifier.fillMaxWidth().clickable { onPicked(); engine.pickPlace(p) }.padding(horizontal = 16.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().clickable { onPicked(); engine.openPlace(p) }.padding(horizontal = 16.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                 // a GPX track (GitHub #162): its pink route mark; otherwise the shop's own logo where there is one
                 if (p.web.startsWith("gpx:")) Box(Modifier.size(42.dp).clip(CircleShape).background(Color(0xFFD4537E).copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Rounded.Route, null, tint = Color(0xFFD4537E), modifier = Modifier.size(22.dp))

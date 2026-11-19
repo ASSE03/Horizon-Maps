@@ -1,5 +1,9 @@
 package com.headunit.launcher.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.headunit.launcher.L
 
 import androidx.compose.animation.AnimatedVisibility
@@ -196,9 +200,9 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
     // fuel estimate from the economy and pump price set in Settings > Driving (blank = not shown)
     val ev = engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV"
     val mpg = engine.prefs.s(if (ev) "evmpk" else "fuelmpg", "").toDoubleOrNull()?.takeIf { it > 0 }
-    val ppl = pricePence(engine.prefs.s(if (ev) "evppk" else "fuelppl", ""), ev)
+    val ppl = pricePence(engine.prefs.s(if (ev) "evppk" else "fuelppl", ""), ev, engine.prefs)
     val costText = if (mpg != null && ppl != null && selRoute != null)
-        (if (ev) "Recharge environ " else "Carburant environ ") + java.text.NumberFormat.getCurrencyInstance(if (engine.imperial) java.util.Locale.UK else java.util.Locale.FRANCE).format(
+        (if (ev) "Recharge environ " else "Carburant environ ") + formatMoney(engine.prefs, 
             if (ev) selRoute.len / 1609.344 / mpg * ppl / 100.0 else selRoute.len / 1609.344 / mpg * 4.54609 * ppl / 100.0) else null
     ZonesRow(engine)
     if (engine.routeWx.isNotEmpty()) {
@@ -285,10 +289,11 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         val pct = engine.prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80).coerceIn(5, 100)
         val minArr = engine.prefs.i(PreferenceKeys.EV_MIN_ARRIVE, 20)
         Text("Batterie actuelle", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 10.dp))
-        Pill("−", false, { engine.prefs.put(PreferenceKeys.EV_CHARGE_PCT, (pct - 10).coerceAtLeast(5)); engine.refreshEvPlan() })
-        Text("$pct%" + (if (com.headunit.launcher.HaBattery.lastPct == pct && System.currentTimeMillis() - com.headunit.launcher.HaBattery.lastAt < 3_600_000L) " · voiture" else ""),
-            color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
-        Pill("+", false, { engine.prefs.put(PreferenceKeys.EV_CHARGE_PCT, (pct + 10).coerceAtMost(100)); engine.refreshEvPlan() })
+        // (1% a tap, and held down it runs on: it went in tens, so 32% or 35% couldn't be set, Dry-Secretary2456)
+        val setPct = { d: Int -> engine.prefs.put(PreferenceKeys.EV_CHARGE_PCT, (engine.prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80).coerceIn(5, 100) + d).coerceIn(5, 100)) }
+        StepPill("−", { setPct(-1) }, { engine.refreshEvPlan() })
+        Text("$pct%" + (if (com.headunit.launcher.HaBattery.lastPct == pct && System.currentTimeMillis() - com.headunit.launcher.HaBattery.lastAt < 3_600_000L) " · voiture" else ""), color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+        StepPill("+", { setPct(1) }, { engine.refreshEvPlan() })
         Text("Arriver avec au moins", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 14.dp, end = 4.dp))
         for (m in listOf(10, 20, 30)) Pill("$m%", minArr == m, { engine.prefs.put(PreferenceKeys.EV_MIN_ARRIVE, m); engine.refreshEvPlan() })
         val eco = engine.prefs.b(PreferenceKeys.ROUTE_ECO, false)
@@ -344,7 +349,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
                 // Stops row, scrolled out of sight)
                 if (mpg != null && ppl != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                     Icon(if (ev) Icons.Rounded.EvStation else Icons.Rounded.LocalGasStation, null, tint = c.sub, modifier = Modifier.size(13.dp))
-                    Text((if (ev) "Recharge environ " else "Carburant environ ") + java.text.NumberFormat.getCurrencyInstance(if (engine.imperial) java.util.Locale.UK else java.util.Locale.getDefault()).format(
+                    Text((if (ev) "Recharge environ " else "Carburant environ ") + formatMoney(engine.prefs, 
                         if (ev) r.len / 1609.344 / mpg * ppl / 100.0 else r.len / 1609.344 / mpg * 4.54609 * ppl / 100.0),
                         color = c.text.copy(alpha = 0.8f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 4.dp))
                 }
@@ -833,7 +838,58 @@ internal fun DemoChoiceBtn(engine: NavEngine, modifier: Modifier = Modifier, hei
  * litre, so anything under 10 is taken as euros or pounds (smikkelvriend: 2.15 gave 3 cents for a 30-minute drive). For
  * electricity, anything under 2 (no one pays 2 cents a kWh).
  */
-internal fun pricePence(raw: String, ev: Boolean): Double? {
+internal fun pricePence(raw: String, ev: Boolean, prefs: com.headunit.launcher.Prefs? = null): Double? {
     val v = raw.trim().replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 } ?: return null
+    // (rupees, kroner, forints, yen...: the price is typed as normally written, in the main unit; bijindas: ₹107.40 came out as paise)
+    if (prefs != null && !smallUnitPrices(moneyCurrency(prefs))) return v * 100.0
     return if (v < (if (ev) 2.0 else 10.0)) v * 100.0 else v
+}
+
+/**
+ * The money fuel and charging costs are shown in: the currency of the country you're driving in (India: rupees), else the phone's.
+ * (It used to be the phone's language alone, so an Indian driver with English (UK) set saw pounds.)
+ */
+internal fun moneyCurrency(prefs: com.headunit.launcher.Prefs): java.util.Currency {
+    val cc = prefs.s(com.headunit.launcher.PreferenceKeys.COUNTRYDETECTED, "").trim().uppercase()
+    if (cc.length == 2) try { return java.util.Currency.getInstance(java.util.Locale("", cc)) } catch (e: Exception) { }
+    return try { java.util.Currency.getInstance(java.util.Locale.getDefault()) } catch (e: Exception) { java.util.Currency.getInstance("GBP") }
+}
+
+/** Currencies where a litre costs under 10 of the main unit, so the price box takes pence or cents (as it always has). */
+internal fun smallUnitPrices(c: java.util.Currency): Boolean = c.currencyCode in setOf("GBP", "EUR", "USD", "CHF", "AUD", "CAD", "NZD", "GIP", "IMP", "JEP")
+
+/** An amount of money in [moneyCurrency], written the phone's way ("£2.10", "₹225.40"). */
+internal fun formatMoney(prefs: com.headunit.launcher.Prefs, amount: Double): String {
+    val cur = moneyCurrency(prefs)
+    val loc = if (cur.currencyCode == "GBP") java.util.Locale.UK else java.util.Locale.getDefault()
+    return java.text.NumberFormat.getCurrencyInstance(loc).apply { currency = cur }.format(amount)
+}
+
+
+/**
+ * A round − or + button like [Pill]: a tap is one step, and held down it keeps stepping, faster the longer it's held. [done]
+ * runs once, when it's let go (so the charging plan is worked out again once, not at every step).
+ */
+@Composable
+private fun StepPill(text: String, step: () -> Unit, done: () -> Unit) {
+    val c = LocalVw.current
+    val scope = rememberCoroutineScope()
+    Box(
+        Modifier.clip(RoundedCornerShape(50)).background(c.tile)
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = {
+                    step()
+                    val job = scope.launch {
+                        kotlinx.coroutines.delay(450)
+                        var gap = 120L
+                        while (true) { step(); kotlinx.coroutines.delay(gap); gap = (gap - 8).coerceAtLeast(45) }
+                    }
+                    tryAwaitRelease()
+                    job.cancel()
+                    done()
+                })
+            }
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(text, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.1.sp) }
 }

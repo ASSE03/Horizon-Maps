@@ -5,6 +5,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Fiche d'un lieu : toucher un commerce ou un lieu sur la carte ouvre sa fiche (horaires, téléphone, site), avec « Y aller » et le temps de trajet.
+- Envoyer son heure d'arrivée depuis la carte de trajet.
+- Prix des carburants en Espagne (liste ouverte du ministère).
+- Coût du carburant estimé aussi sur Android Auto.
+- Satellite TomTom : avec une clé TomTom, ses photos prennent le relais quand Mapbox refuse les siennes.
 - Ajouter un arrêt en panneau latéral : les catégories listent les lieux le long de l'itinéraire dans le même panneau, avec un onglet « Moins cher » pour les prix du carburant ; sur un téléphone en portrait, le panneau est en bas et les lieux au-dessus.
 - Grand panneau de limitation : Réglages › Tailles inverse les deux, le panneau de limitation en grand et votre vitesse en petit à côté.
 - Itinéraires sur téléphone : en portrait, les choix d'itinéraire s'affichent en bas ; en paysage, à côté ; un appui montre l'itinéraire, un deuxième le choisit.
@@ -111,6 +116,12 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Batterie à l'arrivée réglable de 1 en 1 % (appui long pour défiler).
+- Réglages en portrait : le bouton retour reste en haut.
+- Le panneau de recherche se replie quand vous déplacez la carte.
+- Noms de rues en lettres étrangères prononcés.
+- Couper la voiture près de la destination termine le guidage.
+- Android Auto : la position reste active et la musique ne perd plus la main.
 - Nouvelles flèches de direction (aussi sur Android Auto), avec les routes voisines en léger ; chiffres centrés dans le rond-point et dans la limitation ; coins plus ronds.
 - Carte de direction : elle grandit depuis le milieu et ne déborde plus de l'écran.
 - Faisceau des phares plus étroit, partant de l'avant de votre propre modèle 3D.

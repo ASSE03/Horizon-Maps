@@ -284,6 +284,8 @@ class CarNavSession : Session() {
                 pendingNavWait = null
                 // unplugged: the car's engine stops, but a trip the phone is also following carries on there (with its voice back)
                 if (ClusterLink.engine === holder.engine) ClusterLink.engine = null
+                // (switched off close to the destination: you've arrived, so the trip ends here and on the phone too)
+                try { holder.engine?.let { if (it.closeToEnd()) it.endRoute() } } catch (e: Exception) { }
                 try { holder.engine?.shutdown() } catch (e: Exception) { }
                 try { if (!com.headunit.launcher.RouteSync.anyGuiding()) NavService.stop(carContext.applicationContext) } catch (e: Exception) { }
                 CarTicks.tick = null
@@ -327,6 +329,8 @@ class CarNavSession : Session() {
         // (3D buildings and trees as set on the phone: the car's map used to keep them on whatever the setting, GitHub)
         map.setView(prefs.b(PreferenceKeys.SATELLITE, false) && !com.headunit.launcher.Plus.free, prefs.b(PreferenceKeys.BUILDINGS_3D, true))
         map.treesEnabled(prefs.b(PreferenceKeys.TREES, true))
+        map.lampsEnabled(prefs.b(PreferenceKeys.LAMPS, true))
+        map.applyLampGap(prefs.s(PreferenceKeys.LAMPGAP, "40").toDoubleOrNull() ?: 40.0)
         map.setLogoCorner(prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"))
         map.setExtras(prefs.b(PreferenceKeys.FACADES, true), prefs.b(PreferenceKeys.LANDMARKS3D, true), prefs.b(PreferenceKeys.PATHS, true), prefs.b(PreferenceKeys.TERRAIN, false),
             false, prefs.b(PreferenceKeys.FURNITURE3D, true), prefs.b(PreferenceKeys.CLEARVIEW, true))
@@ -362,6 +366,10 @@ class CarNavSession : Session() {
         }
         applyTheme()
         try { engine.startLocation() } catch (e: Exception) { }
+        // the location service runs the whole time the map is on Android Auto, not only during a route: without it, driving with
+        // no route and the phone locked, Android could hold back location updates, and the arrow froze or stayed where the drive
+        // began, such as at home (timblr1989, #214)
+        try { NavService.start(carContext.applicationContext, "Android Auto") } catch (e: Exception) { }
         mapScreen?.start()
         // asked for a destination before the map was up (Android Auto opened the app for it)
         pendingNav?.let { pendingNav = null; takeNav(it) }
@@ -697,8 +705,8 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
                     try { NavService.start(holder.carContext.applicationContext, "Guidage vers ${e.dest?.name ?: "votre destination"}") } catch (x: Exception) { }
                 } else {
                     nav?.navigationEnded()
-                    // (the phone may still be guiding a trip of its own: then its background GPS service stays on)
-                    try { if (!com.headunit.launcher.RouteSync.anyGuiding()) NavService.stop(holder.carContext.applicationContext) } catch (x: Exception) { }
+                    // (the location service stays on while the map is on Android Auto, back to its plain wording)
+                    try { NavService.start(holder.carContext.applicationContext, "Android Auto") } catch (x: Exception) { }
                 }
             } catch (x: Exception) { }
         }
