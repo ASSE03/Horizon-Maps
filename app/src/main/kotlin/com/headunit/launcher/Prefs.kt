@@ -33,6 +33,8 @@ internal object PreferenceKeys {
     const val SIGNALS = "signals"
     const val HAZARD_ICONS = "hazardicons"
     const val LAMPS = "lamps"
+    /** Fork FR : lampadaires aussi sur l'écran Android Auto. */
+    const val CAR_LAMPS = "car_lamps"
     const val TREES = "trees"
     const val PATHS = "paths"
     const val RAIN_RADAR = "radar"

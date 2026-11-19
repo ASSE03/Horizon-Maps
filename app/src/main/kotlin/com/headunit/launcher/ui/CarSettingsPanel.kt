@@ -132,6 +132,13 @@ internal fun CarSettingsPanel(engine: NavEngine, actions: CarActions, small: Boo
                                 prefs.s(PreferenceKeys.CARTHEME, "sun")) { prefs.put(PreferenceKeys.CARTHEME, it); actions.themeChanged() }
                         }
                         item { SetSwitch("st-cams", "Radars", "Afficher et avertir", prefs.b("cameras", true)) { prefs.put("cameras", it) } }
+                        item {
+                            SetSwitch("st-lamps", "Lampadaires", "Le long des routes", prefs.b(PreferenceKeys.CAR_LAMPS, true)) {
+                                prefs.put(PreferenceKeys.CAR_LAMPS, it)
+                                if (it) prefs.put(PreferenceKeys.LAMPS, true)
+                                try { engine.map.lampsEnabled(it) } catch (e: Exception) { }
+                            }
+                        }
                         item { SetSwitch("st-sig", "Feux de circulation", "Sur votre itinéraire", prefs.b("signals", true)) { prefs.put("signals", it) } }
                         item {
                             val v = prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(30, 180)

@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Lampadaires sur Android Auto : affichés aussi sur l'écran de la voiture, avec un interrupteur dans les réglages de la voiture (onglet Carte) et dans Réglages › Mobilier urbain 3D sur le téléphone.
 - Fiche d'un lieu : toucher un commerce ou un lieu sur la carte ouvre sa fiche (horaires, téléphone, site), avec « Y aller » et le temps de trajet.
 - Envoyer son heure d'arrivée depuis la carte de trajet.
 - Prix des carburants en Espagne (liste ouverte du ministère).

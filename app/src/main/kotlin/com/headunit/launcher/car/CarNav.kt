@@ -329,7 +329,8 @@ class CarNavSession : Session() {
         // (3D buildings and trees as set on the phone: the car's map used to keep them on whatever the setting, GitHub)
         map.setView(prefs.b(PreferenceKeys.SATELLITE, false) && !com.headunit.launcher.Plus.free, prefs.b(PreferenceKeys.BUILDINGS_3D, true))
         map.treesEnabled(prefs.b(PreferenceKeys.TREES, true))
-        map.lampsEnabled(prefs.b(PreferenceKeys.LAMPS, true))
+        // fork FR : sur la voiture, seulement si « Lampadaires sur Android Auto » est aussi activé
+        map.lampsEnabled(prefs.b(PreferenceKeys.LAMPS, true) && prefs.b(PreferenceKeys.CAR_LAMPS, true))
         map.applyLampGap(prefs.s(PreferenceKeys.LAMPGAP, "40").toDoubleOrNull() ?: 40.0)
         map.setLogoCorner(prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"))
         map.setExtras(prefs.b(PreferenceKeys.FACADES, true), prefs.b(PreferenceKeys.LANDMARKS3D, true), prefs.b(PreferenceKeys.PATHS, true), prefs.b(PreferenceKeys.TERRAIN, false),
@@ -482,7 +483,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
             // Android Auto: keep street-lamp models and their light pools off to reduce visual clutter
             // and rendering work on the car display. This is scoped to the car map; the phone app's
             // Street lamps preference remains unchanged.
-            m.lampsEnabled(false); m.carMap = true
+            m.carMap = true
             // a touch thicker route line on the car screen, where it looked thin against the buildings
             m.routeBoost = 1.2f
             val root = FrameLayout(p.context)

@@ -442,6 +442,7 @@ private fun OnTheMapSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Mobilier urbain 3D") {
         SToggle(prefs, "Lampadaires, feux et radars en 3D", "furniture3d", true, "Modèles 3D grandeur nature avec lampes et feux allumés (3D complète). Désactivé : badges et blocs simplifiés")
         SToggle(prefs, "Lampadaires", "lamps", true, if (prefs.b(PreferenceKeys.LAMPS, true)) "Actuellement : " + engine.map.lampInfo() else null)
+        if (prefs.b(PreferenceKeys.LAMPS, true)) SToggle(prefs, "Lampadaires sur Android Auto", PreferenceKeys.CAR_LAMPS, true, "Aussi sur l'écran de la voiture (au prochain branchement, ou tout de suite depuis les réglages de la voiture)")
         if (prefs.b(PreferenceKeys.LAMPS, true)) SSlider("Espacement des lampadaires", prefs.s(PreferenceKeys.LAMPGAP, "40").toFloatOrNull() ?: 40f, 15f..120f, " m", reset = 40f) { prefs.put(PreferenceKeys.LAMPGAP, it.toString()) }
     }
 }

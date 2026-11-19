@@ -17,6 +17,7 @@ private val allSettingsIndex = listOf(
     SettingRef("Source des limitations", "MG4Dash OpenStreetMap TomTom Mapbox", "Vitesse", 6),
     SettingRef("Clé Tankerkönig (Allemagne)", "Prix des carburants en Allemagne", "Prix des carburants hors Royaume-Uni", 10),
     SettingRef("Puissance de charge maximale (kW)", "temps de recharge", "Votre voiture électrique", 10),
+    SettingRef("Lampadaires sur Android Auto", "lampadaires voiture écran", "Mobilier urbain 3D", 2),
     SettingRef("Avance de la flèche", "retard GPS décalage", "En conduisant", 8),
     SettingRef("Jour et nuit", "", "Jour et nuit", 0),
     SettingRef("La nuit commence à", "", "Jour et nuit", 0),
