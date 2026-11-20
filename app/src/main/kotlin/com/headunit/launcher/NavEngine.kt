@@ -653,7 +653,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      * instead. Without a key it's Mapbox's (with OpenStreetMap's alongside), or OpenStreetMap's alone with neither.
      */
     private fun netGeocode(country: String, q: String, near: LL?, typed: Boolean = false): List<Place> {
-        val with = prefs.s(PreferenceKeys.SEARCHWITH, "auto")
+        // search follows Keys & accounts > Routes, search and traffic > Use (the separate "Search with" setting was folded into
+        // it): Mapbox picks Mapbox's search, while Mapbox is working; Auto and TomTom ask TomTom with Mapbox's alongside, as before
+        val with = if (prefs.s(PreferenceKeys.DATAPROV, "auto") == "mapbox" && hasMapbox && System.currentTimeMillis() >= mbDownUntil) "mapbox" else "auto"
         val tomtomOk = hasKey && refusedKey != apiKey && System.currentTimeMillis() >= ttDownUntil
         if (tomtomOk && (with == "tomtom" || (with == "auto") || !hasMapbox)) {
             // with a Mapbox token too, both are asked at the same time and their results put together (jvricardo1, #192: TomTom
@@ -6386,7 +6388,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (thenOn && nxt != null) "Puis " + Geo.maneuverText(nxt.maneuver, nxt.roundExit) + (if (nxt.street.isNotBlank()) " sur ${nxt.street}" else "") else "",
                 laneSec, Geo.stepTag(cur), laneAdv, cur.roundExit, cur.sign,
                 exitNo = cur.exitNo, rbIn = cur.rbIn, rbOut = cur.rbOut, rbExits = cur.rbExits, thenGap = if (thenOn) gap else 0.0, thenExit = if (thenOn) (nxt?.roundExit ?: 0) else 0,
-                junctionPic = cur.junctionPic,
+                junctionPic = cur.junctionPic, sides = cur.sides,
                 thenStreet = if (thenOn) nxt?.street.orEmpty() else "",
                 landmark = if (d <= 500) when (lm) { 1 -> "Aux feux"; 2 -> "Aux deuxièmes feux"; 3 -> "Au stop"; else -> "" } else "",
             )
@@ -6684,7 +6686,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         for (h in pl.hz) when (h.poi.kind) {
             "bump" -> if (prefs.b(PreferenceKeys.BUMPS, true)) add("bump", h.off, "Speed bump")
             "school" -> if (prefs.b(PreferenceKeys.SCHOOLS, true)) add("school", h.off, if (school) "School · school run" else "School")
-            "crossing" -> add("crossing", h.off, "Passage piéton")
+            // (with Zebra crossings switched off in Settings › On the map, they leave the radar too: joel941703)
+            "crossing" -> if (prefs.b("zebras", true)) add("crossing", h.off, "Passage piéton")
             "rail" -> if (prefs.b(PreferenceKeys.RAILFORD, true)) add("rail", h.off, "Level crossing")
             "ford" -> if (prefs.b(PreferenceKeys.RAILFORD, true)) add("ford", h.off, "Ford")
         }

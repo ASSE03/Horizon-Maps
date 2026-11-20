@@ -152,7 +152,7 @@ internal fun CarSettingsPanel(engine: NavEngine, actions: CarActions, small: Boo
                     else -> {
                         item {
                             val v = prefs.i(PreferenceKeys.CARSCALE, 100).coerceIn(40, 300)
-                            SetStepper("st-scale", "Taille générale", "$v%", { prefs.put(PreferenceKeys.CARSCALE, (v - 10).coerceAtLeast(40)) }, { prefs.put(PreferenceKeys.CARSCALE, (v + 10).coerceAtMost(300)) })
+                            SetStepper("st-scale", "Taille générale", "$v%" + (prefs.i(PreferenceKeys.CARSCALE_MAX, 0).takeIf { it in 100..299 && v > it }?.let { " (" + "Jusqu'à $it% tient sur l'écran de cette voiture" + ")" } ?: ""), { prefs.put(PreferenceKeys.CARSCALE, (v - 10).coerceAtLeast(40)) }, { prefs.put(PreferenceKeys.CARSCALE, (v + 10).coerceAtMost(300)) })
                         }
                         item {
                             val opts = listOf("bl" to "En bas à gauche", "br" to "En bas à droite", "middle" to "Sous le virage", "top" to "En haut à droite")
@@ -167,6 +167,7 @@ internal fun CarSettingsPanel(engine: NavEngine, actions: CarActions, small: Boo
                         item {
                             SetChoice("st-clock", "Horloge", listOf("auto" to "Automatique", "24" to "24 heures", "12" to "12 heures"), prefs.s(PreferenceKeys.CLOCK, "auto")) { prefs.put(PreferenceKeys.CLOCK, it) }
                         }
+                        item { SetSwitch("st-mapui", "Barre de recherche et lieux sur la carte", "Désactivé pour une voiture à molette : toute la carte, avec Rechercher, Domicile et Travail dans Lieux (★)", prefs.b(PreferenceKeys.CAR_MAPUI, true)) { prefs.put(PreferenceKeys.CAR_MAPUI, it) } }
                         item { SetSwitch("st-home", "Bouton Domicile", "Sous la barre de recherche", prefs.b(PreferenceKeys.HOME_BTN, true)) { prefs.put(PreferenceKeys.HOME_BTN, it) } }
                         item { SetSwitch("st-work", "Bouton Travail", "Sous la barre de recherche", prefs.b(PreferenceKeys.WORK_BTN, true)) { prefs.put(PreferenceKeys.WORK_BTN, it) } }
                         val cluster = prefs.b(PreferenceKeys.CLUSTER_MAP, true)

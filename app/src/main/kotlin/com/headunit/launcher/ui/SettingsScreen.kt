@@ -367,8 +367,18 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
     if (prefs.mapSource() == "mapbox" && prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox") == "custom") CustomThemeGroup(prefs, engine)
     if (prefs.mapSource() == "mapbox") SavedThemesGroup(prefs)
     SGroup("La carte") {
-        SChoice("Source de la carte", listOf("mapbox" to "Mapbox", "tomtom" to "TomTom", "osm" to "OpenStreetMap"), prefs.mapSource(),
-            "Mapbox : la carte 3D. TomTom : la carte TomTom aux couleurs Horizon (clé TomTom nécessaire). Toutes demandent le jeton Mapbox, car c'est le moteur Mapbox qui les dessine") { prefs.put(PreferenceKeys.MAP_STYLE, it) }
+        // only the choices that work here: the free Play version is always OpenStreetMap (no choice at all), Plus can't show
+        // TomTom's map, and TomTom's map needs a TomTom key
+        if (!com.headunit.launcher.Plus.free) {
+            val src = prefs.mapSource()
+            if (com.headunit.launcher.Plus.offered)
+                SChoice("Source de la carte", listOf("mapbox" to "Mapbox", "osm" to "OpenStreetMap"), src) { prefs.put(PreferenceKeys.MAP_STYLE, it) }
+            else {
+                val withTomTom = engine.hasKey || src == "tomtom"
+                SChoice("Source de la carte", listOf("mapbox" to "Mapbox") + (if (withTomTom) listOf("tomtom" to "TomTom") else emptyList()) + listOf("osm" to "OpenStreetMap"), src,
+                    "Mapbox : la carte 3D. TomTom : la carte TomTom aux couleurs Horizon (clé TomTom requise). Toutes nécessitent le jeton Mapbox, car c'est le moteur de Mapbox qui les dessine") { prefs.put(PreferenceKeys.MAP_STYLE, it) }
+            }
+        }
         if (prefs.mapSource() == "mapbox") {
             SChoice("Niveau de détail", listOf("full" to "3D complète", "lite" to "Allégée", "lightest" to "Minimale"), prefs.mapDetail(),
                 "3D complète : bâtiments, monuments, arbres et ombres. Allégée : bâtiments plats, sans monuments ni ombres. Minimale : la carte 2D simplifiée de Mapbox, pour les autoradios lents") { prefs.put(PreferenceKeys.MAP_DETAIL, it) }
@@ -386,15 +396,24 @@ private fun LightSection(prefs: Prefs) {
         SPercent("Luminosité de nuit", "La luminosité de toute la carte la nuit. 100 % : l'éclairage de nuit de Mapbox", prefs, PreferenceKeys.NIGHT_BRIGHT, 30, 200, 100)
         SToggle(prefs, "Clair de lune la nuit", PreferenceKeys.MOONLIT, false, "Comme au crépuscule, mais sous la lune : une lumière bleue rasante avec de longues ombres douces, à la place de l'éclairage de nuit uniforme de Mapbox. Le ciel de nuit et vos couleurs restent")
         if (prefs.b(PreferenceKeys.MOONLIT, false))
-            SPercent("Intensité de la lune", "La force avec laquelle la lune éclaire les murs et projette des ombres", prefs, PreferenceKeys.MOON_STR, 0, 200, 100)
-        SToggle(prefs, "Ombres", PreferenceKeys.SHADOWS, true, "Les bâtiments et les arbres projettent des ombres. Désactivé, c'est aussi plus léger pour un autoradio lent")
-        SToggle(prefs, "Soleil à sa vraie place", PreferenceKeys.SUN_REAL, false, "Le jour, la lumière et les ombres viennent de la vraie position du soleil en ce moment")
-        SToggle(prefs, "Lumière voilée", PreferenceKeys.OVERCAST, false, "Une lumière du jour douce, sans ombres dures, plus reposante en plein soleil")
-        SToggle(prefs, "Lumière selon la météo", PreferenceKeys.WEATHER_LIGHT, false, "Une lumière du jour plus grise et plus douce quand il pleut ou neige là où vous êtes. Demande les effets météo sur la carte (Réglages › Sur la carte), qui ajoutent aussi la vraie pluie et la neige")
+            SPercent("Intensité de la lune", "Force avec laquelle la lune éclaire les murs et projette des ombres", prefs, PreferenceKeys.MOON_STR, 0, 200, 100)
+        SToggle(prefs, "Ombres", PreferenceKeys.SHADOWS, true, "Les bâtiments et arbres projettent des ombres. Désactivé allège aussi le travail d'un autoradio lent")
+        SToggle(prefs, "Soleil à sa vraie place", PreferenceKeys.SUN_REAL, false, "La lumière et les ombres viennent de la position réelle du soleil, et la nuit de la lune")
+        // (one choice for the two old switches: "Always" already covered "In rain or snow", so both on was the same as Always)
+        val overcast = if (prefs.b(PreferenceKeys.OVERCAST, false)) "always" else if (prefs.b(PreferenceKeys.WEATHER_LIGHT, false)) "wet" else "off"
+        SChoice("Lumière couverte", listOf("off" to "Désactivé", "wet" to "Par pluie ou neige", "always" to "Toujours"), overcast,
+            when (overcast) {
+                "always" -> "Lumière douce sans ombres dures, plus reposante en cas d'éblouissement"
+                "wet" -> "Une lumière plus grise et douce quand il pleut ou neige là où vous êtes. Nécessite Effets météo sur la carte (Réglages > Sur la carte), qui affiche aussi la vraie pluie et la neige"
+                else -> null
+            }) {
+            prefs.put(PreferenceKeys.OVERCAST, it == "always")
+            prefs.put(PreferenceKeys.WEATHER_LIGHT, it == "wet")
+        }
     }
-    SGroup("Vue 3D", footer = "De 30° à 65°. Auto est le choix de l'appli (54°, ou 52° avec une carte allégée). L'inclinaison selon la vitesse et la vue à plat dans les virages s'y ajoutent.") {
-        STilt("Inclinaison sur écran large", "Autoradios en paysage. Plus haut montre plus loin devant (plus à dessiner pour un autoradio lent)", prefs, PreferenceKeys.TILT_WIDE)
-        STilt("Inclinaison sur écran haut", "Écrans en portrait et téléphones", prefs, PreferenceKeys.TILT_TALL)
+    SGroup("Vue 3D", footer = "30° à 65°. Auto est le choix de l'appli (54°, ou 52° avec une carte allégée). L'inclinaison selon la vitesse et l'aplatissement aux virages s'appliquent en plus.") {
+        STilt("Inclinaison sur écran large", "Autoradios en paysage. Plus haut montre plus loin (plus à dessiner pour un appareil lent)", prefs, PreferenceKeys.TILT_WIDE)
+        STilt("Inclinaison sur écran vertical", "Écrans en portrait et téléphones", prefs, PreferenceKeys.TILT_TALL)
         STilt("Inclinaison sur Android Auto", "L'écran de la voiture", prefs, PreferenceKeys.TILT_CAR)
     }
     SGroup("3D") {
@@ -524,7 +543,7 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
             "#1FC7A6" to "Bleu canard", "#3DDC84" to "Vert", "#B5E34A" to "Vert citron", "#FFD54A" to "Jaune", "#FF9A3C" to "Orange", "#FF4D5E" to "Rouge",
             "#FF6FB5" to "Rose", "#A56BFF" to "Violet",
         ), prefs.s(PreferenceKeys.ARROW_COLOUR, "#F2F2F6")) { prefs.put(PreferenceKeys.ARROW_COLOUR, it) }
-        SSlider(if (ownShape) "Taille du modèle" else if (shapeCar) "Taille de la voiture" else if (loc == "custom") "Taille de l'image" else "Taille de la flèche", prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toFloatOrNull() ?: 240f, 100f..500f, "%", reset = 240f) { prefs.put(PreferenceKeys.ARROW_PERCENT, it.toString()) }
+        SSlider(if (ownShape) "Taille du modèle" else if (shapeCar) "Taille de la voiture" else if (loc == "custom") "Taille de l'image" else "Taille de la flèche", prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toFloatOrNull() ?: 240f, 60f..500f, "%", reset = 240f) { prefs.put(PreferenceKeys.ARROW_PERCENT, it.toString()) }
         SToggle(prefs, "Faisceau des phares la nuit", PreferenceKeys.BEAM, true, "Un doux cône de lumière sur la route devant vous la nuit, en roulant")
     }
     SGroup("Tracé de l'itinéraire") {
@@ -577,10 +596,10 @@ private fun RoutesSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Arriver du bon côté de la route", PreferenceKeys.ARRIVE_SIDE, true, "L'itinéraire vous amène du côté de la chaussée où se trouve votre destination, pour ne pas avoir à traverser. Itinéraires Mapbox et hors ligne")
     }
     SGroup("Démarrer un itinéraire") {
-        SToggle(prefs, "Démarrage auto après compte à rebours", PreferenceKeys.AUTO_START_ROUTE, true, "Lance le guidage automatiquement à la fin du compte à rebours")
-        SSlider("Durée du compte à rebours", prefs.i(PreferenceKeys.AUTO_START_SECONDS, 10).coerceIn(3, 30).toFloat(), 3f..30f, " s", sub = "Délai avant le début du guidage", steps = 26, reset = 10f) { prefs.put(PreferenceKeys.AUTO_START_SECONDS, it.coerceIn(3, 30)) }
-        SToggle(prefs, "Survoler un nouvel itinéraire", "cinematic", true, "Un survol 3D de 3 secondes avant la vue d'ensemble. Touchez la carte pour passer")
-        SToggle(prefs, "Bouton de survol de l'itinéraire", "flyover", true, "Dans les options d'itinéraire : un survol 3D de tout le trajet avant de partir")
+        SToggle(prefs, "Compte à rebours de démarrage auto", PreferenceKeys.AUTO_START_ROUTE, true, "Démarrer automatiquement la navigation à la fin du compte à rebours")
+        if (prefs.b(PreferenceKeys.AUTO_START_ROUTE, true)) SSlider("Compte à rebours", prefs.i(PreferenceKeys.AUTO_START_SECONDS, 10).coerceIn(3, 30).toFloat(), 3f..30f, " s", sub = "Délai avant le démarrage de la navigation", steps = 26, reset = 10f) { prefs.put(PreferenceKeys.AUTO_START_SECONDS, it.coerceIn(3, 30)) }
+        SToggle(prefs, "Survoler un nouvel itinéraire", "cinematic", true, "Un survol 3D de 3 secondes avant l'aperçu. Touchez la carte pour passer")
+        SToggle(prefs, "Bouton Survoler l'itinéraire", "flyover", true, "Dans les options d'itinéraire : un survol 3D de tout le trajet avant de partir")
     }
 }
 
@@ -1208,8 +1227,7 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
         if (mainAdvanced) {
             SSlider("Taille des cartes", prefs.i(PreferenceKeys.MAIN_CARD_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Cartes de direction, de trajet et d'itinéraire", steps = 15, reset = 100f) { prefs.put(PreferenceKeys.MAIN_CARD_SIZE, it) }
             SSlider("Taille des boutons", prefs.i(PreferenceKeys.MAIN_BUTTON_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Commandes à l'écran", steps = 15, reset = 100f) { prefs.put(PreferenceKeys.MAIN_BUTTON_SIZE, it) }
-            SSlider("Taille du texte", prefs.i(PreferenceKeys.MAIN_TEXT_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Échelle du texte indépendante", steps = 15, reset = 100f) { prefs.put(PreferenceKeys.MAIN_TEXT_SIZE, it) }
-            SSlider("Taille de la flèche de navigation", prefs.i(PreferenceKeys.MAIN_ARROW_SIZE, 100).toFloat(), 60f..180f, "%", sub = "Flèche de position sur la carte", steps = 11, reset = 100f) { prefs.put(PreferenceKeys.MAIN_ARROW_SIZE, it) }
+            SSlider("Taille du texte", prefs.i(PreferenceKeys.MAIN_TEXT_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Mise à l'échelle indépendante du texte", steps = 15, reset = 100f) { prefs.put(PreferenceKeys.MAIN_TEXT_SIZE, it) }
             SSlider("Taille du nom de rue", prefs.i(PreferenceKeys.ROAD_NAME_SIZE, 100).toFloat(), 70f..200f, "%", sub = "Le nom de la route où vous êtes, sous votre flèche", steps = 12, reset = 100f) { prefs.put(PreferenceKeys.ROAD_NAME_SIZE, it) }
         }
 
@@ -1296,6 +1314,9 @@ private fun AndroidAutoSection(prefs: Prefs) {
         } catch (e: Exception) { "Inconnu" }
     }
     CarTripButtonsGroup(prefs)
+    SGroup {
+        SToggle(prefs, "Barre de recherche et lieux sur la carte", PreferenceKeys.CAR_MAPUI, true, "Désactivé pour une voiture à molette : toute la carte, avec Rechercher, Domicile et Travail dans Lieux (★)")
+    }
     // Voice search from the car screen's microphone button listens through the app, which needs the microphone allowed. Android
     // only lets an app ask from its own screen (asking from the car screen is refused on newer Android), so it's asked here
     run {
@@ -1324,7 +1345,7 @@ private fun AndroidAutoSection(prefs: Prefs) {
             when (prefs.s(PreferenceKeys.CARTHEME, "sun")) { "sun" -> "Passe en mode nuit au coucher du soleil et en mode jour à son lever, là où vous êtes"; "car" -> "Suit le réglage de la voiture (ses phares ou son propre mode)"; "phone" -> "Clair ou sombre comme le téléphone"; else -> null }) { prefs.put(PreferenceKeys.CARTHEME, it) }
     }
     SGroup("Tailles sur l'écran de la voiture") {
-        SSlider("Taille générale sur l'écran de la voiture", prefs.i(PreferenceKeys.CARSCALE, 100).toFloat(), 40f..300f, "%", sub = "Échelle de base pour tout l'affichage", steps = 25, reset = 100f) { prefs.put(PreferenceKeys.CARSCALE, it) }
+        SSlider("Taille générale sur l'écran de la voiture", prefs.i(PreferenceKeys.CARSCALE, 100).toFloat(), 40f..300f, "%", sub = "Échelle de base pour tout l'affichage" + (prefs.i(PreferenceKeys.CARSCALE_MAX, 0).takeIf { it in 100..299 }?.let { " · " + "Jusqu'à $it% tient sur l'écran de cette voiture" } ?: ""), steps = 25, reset = 100f) { prefs.put(PreferenceKeys.CARSCALE, it) }
         SSlider("Taille du compteur et du panneau de limitation", prefs.i(PreferenceKeys.CAR_SPEED_SIZE, 100).toFloat(), 40f..180f, "%", sub = "Rétrécit automatiquement si la zone d'écran disponible est trop petite", reset = 100f) { prefs.put(PreferenceKeys.CAR_SPEED_SIZE, it) }
         var carAdvanced by rememberSaveable { mutableStateOf(false) }
         SItem("Tailles avancées pour l'écran de la voiture", "Réglez finement chaque élément") {

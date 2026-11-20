@@ -256,7 +256,7 @@ fun AvgSpeedCard(engine: NavEngine, modifier: Modifier = Modifier) {
             }
         }
         if (!a.ahead) Column(horizontalAlignment = Alignment.End) {
-            Text("${Math.round(a.avgMs * k)}", color = if (a.over) Bad else Good, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Text("${Math.round(a.avgMs * k)}", color = if (a.over) red else green, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             Text("moy. $unit", color = c.sub, fontSize = 11.sp)
         }
     }

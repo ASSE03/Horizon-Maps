@@ -5,6 +5,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Luminosité de la carte : un curseur dans les réglages.
+- Android Auto : un interrupteur pour masquer les commandes de la carte ; la disposition suit la vraie taille de l'écran de la voiture.
 - Android Auto : fiche d'un lieu, rangée des lieux enregistrés, carte de suggestion, prix dans « Ajouter un arrêt », zones et météo, parkings et aires, grand panneau de limitation.
 - Lieu cherché : la carte s'y déplace et le centre dans la partie libre de l'écran, bâtiment mis en évidence ; la fiche s'affiche sur le côté comme « Ajouter un arrêt » et le clavier se ferme.
 - Espagne : incidents en direct de la DGT et balises V16.
@@ -120,6 +122,12 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Flèche de rond-point : elle part de la vraie sortie (Mapbox donne maintenant chaque sortie).
+- Flèches de direction : elles montrent les vraies routes du carrefour ; la barre de progression n'apparaît qu'une fois en train de se remplir.
+- Carte de direction : plus de bandeau bleu « SORTIE » ; flèches des voies estompées de façon régulière.
+- Passages piétons : désactivés dans les réglages, ils quittent aussi le radar.
+- Réglages : une seule taille de flèche, « Lumière couverte » en un seul choix (désactivée, par pluie ou neige, toujours), la source de la carte ne propose que ce qui marche, la durée du compte à rebours se cache quand il est coupé.
+- Fenêtres flottantes et écran partagé : les barres restent visibles.
 - Avis envoyés : ils disent ce qui a terminé les derniers trajets.
 - Vue des voies : lignes plus épaisses.
 - Chiffres de l'arrivée regroupés à gauche sur la carte de trajet.

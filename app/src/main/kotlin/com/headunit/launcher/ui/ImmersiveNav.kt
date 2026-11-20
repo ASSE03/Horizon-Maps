@@ -107,6 +107,8 @@ import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Wc
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.BrightnessHigh
+import androidx.compose.material.icons.rounded.BrightnessLow
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -752,6 +754,9 @@ private fun OptionsSheet(engine: NavEngine, shareEta: () -> Unit, wide: Boolean 
                 val theme = p.s(PreferenceKeys.THEME, "auto")
                 val seg = when (theme) { "day" -> 1; "night" -> 2; else -> 0 }
                 Segments(listOf("Auto", "Jour", "Nuit"), seg) { i -> if (i != seg) p.put(PreferenceKeys.THEME, listOf("auto", "day", "night")[i]) }
+                // the map's brightness, for whichever of day and night is showing (the same settings as in Light & 3D: set each once and
+                // the map changes with the time of day, mjdshibly #236). Only on Mapbox's own map, whose light the app sets
+                if (!sat && engine.map.lightsAdjustable) MapBrightRow(p, c.dark)
                 SheetHeading("Sur la carte")
                 fun tog(key: String, def: Boolean): Pair<Boolean, () -> Unit> { val on = p.b(key, def); return on to { p.put(key, !on) } }
                 val layers = listOf(
@@ -1369,13 +1374,13 @@ internal fun ImmTurnCard(
             .clickable { engine.itineraryOpen = true },
     ) {
         if (slim) Row(Modifier.padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-            ManeuverArrow(t.maneuver, Geo.maneuverAngle(t.maneuver), Modifier.size(34.dp), roundaboutExit = t.exit, roundaboutClockwise = !engine.mirrored, exitAngle = roundaboutTurn(t.rbIn, t.rbOut))
+            ManeuverArrow(t.maneuver, Geo.maneuverAngle(t.maneuver), Modifier.size(34.dp), roundaboutExit = t.exit, roundaboutClockwise = !engine.mirrored, exitAngle = roundaboutTurn(t.rbIn, t.rbOut), sides = t.sides)
             RollText(Geo.fmtDist(t.dist, engine.imperial), Color.White, 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 10.dp))
             RoadLine(if (t.landmark.isNotBlank()) t.landmark + (if (t.street.isNotBlank()) " · " + t.street else "") else t.street, engine.ukRoadBadges, 16.sp, Modifier.padding(start = 12.dp))
         } else {
         val thenIcon = t.thenManeuver != null && engine.prefs.s(PreferenceKeys.THEN_STYLE, "row") == "icon"
         Row(Modifier.padding(start = if (compact) 12.dp else 18.dp, end = if (compact) 12.dp else 16.dp, top = if (compact) 9.dp else 16.dp, bottom = if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ManeuverArrow(t.maneuver, Geo.maneuverAngle(t.maneuver), Modifier.size(if (compact) 42.dp else 60.dp), roundaboutExit = t.exit, roundaboutClockwise = !engine.mirrored, exitAngle = roundaboutTurn(t.rbIn, t.rbOut), exitNumber = t.exit)
+            ManeuverArrow(t.maneuver, Geo.maneuverAngle(t.maneuver), Modifier.size(if (compact) 42.dp else 60.dp), roundaboutExit = t.exit, roundaboutClockwise = !engine.mirrored, exitAngle = roundaboutTurn(t.rbIn, t.rbOut), exitNumber = t.exit, sides = t.sides)
             Column(Modifier.padding(start = if (compact) 9.dp else 16.dp).weight(1f)) {
                 // at traffic lights or a stop sign: that in big ("At the lights"), and the distance moves down beside the road name
                 val lmk = t.landmark.isNotBlank()
@@ -1398,43 +1403,8 @@ internal fun ImmTurnCard(
                 Text("puis", color = Color.White.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
             }
         }
-        // Explicit slip-road / motorway-exit cue. Lane guidance alone can be ambiguous on
-        // fast roads, so make the exit manoeuvre visible in the turn card as well.
-        val maneuverUpper = t.maneuver.uppercase()
-        val exitLike = t.exitNo.isNotBlank() ||
-            t.tag.startsWith("Sortie", ignoreCase = true) ||
-            maneuverUpper.contains("EXIT") ||
-            maneuverUpper.contains("OFF_RAMP") ||
-            maneuverUpper == "TAKE_EXIT" ||
-            maneuverUpper.startsWith("MOTORWAY_EXIT")
-        // Only when the UK road sign below isn't shown: it already carries the exit, and the same thing twice on the card is clutter.
-        val signShown = engine.prefs.b(PreferenceKeys.UKSIGNS, true) && (t.sign.isNotBlank() && t.sign != t.street || t.tag.startsWith("Sortie"))
-        if (exitLike && !signShown && !maneuverUpper.startsWith("ROUNDABOUT")) {
-            val exitLabel = t.exitNo.ifBlank {
-                t.tag.replaceFirst(Regex("^Exit\\s*", RegexOption.IGNORE_CASE), "").trim().takeIf { it.isNotBlank() }.orEmpty()
-            }
-            Row(
-                Modifier.fillMaxWidth()
-                    .padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = 6.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF1554A8))
-                    .padding(horizontal = 10.dp, vertical = if (compact) 5.dp else 7.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("↗", color = Color.White, fontSize = if (compact) 19.sp else 22.sp, fontWeight = FontWeight.ExtraBold)
-                Text(
-                    if (exitLabel.isNotBlank()) "EXIT  $exitLabel" else "SORTIE / BRETELLE",
-                    color = Color.White,
-                    fontSize = if (compact) 13.sp else 15.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 7.dp)
-                )
-                Spacer(Modifier.weight(1f))
-                Text("↗", color = Color.White.copy(alpha = 0.9f), fontSize = if (compact) 18.sp else 20.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+        // (the blue "EXIT" strip that used to sit here is gone: the exit's number badge beside the road name already says it, and its
+        // arrows always pointed right, even for an exit on the left: mjdshibly #232)
         // A proper UK direction sign: blue for motorways, green for primary roads, white for local roads.
         if (engine.prefs.b(PreferenceKeys.UKSIGNS, true) && (t.sign.isNotBlank() && t.sign != t.street || t.tag.startsWith("Sortie")))
             // fork FR : style des panneaux britanniques au Royaume-Uni et en Irlande, français partout ailleurs
@@ -1468,7 +1438,10 @@ internal fun ImmTurnCard(
         footer?.invoke()
         // the progress bar sits a little way inside the card, clear of its round corners (which hid the last few seconds of it
         // when it ran along the very bottom edge, karthikeyansr)
-        Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 5.dp, bottom = 9.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.Black.copy(alpha = 0.18f))) {
+        // (only once it starts to fill, about 450 m out: an empty bar for kilometres before looked like nothing was happening,
+        // mjdshibly. Its space stays, so the card doesn't change height when it appears)
+        Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 5.dp, bottom = 9.dp).height(4.dp).clip(RoundedCornerShape(2.dp))
+            .background(if (frac > 0f) Color.Black.copy(alpha = 0.18f) else Color.Transparent)) {
             Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(Color.White.copy(alpha = 0.9f)))
         }
     }
@@ -1795,7 +1768,7 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
         ) {
             Icon(when (pr.title) { "Maison" -> Icons.Rounded.Home; "Travail" -> Icons.Rounded.Work; else -> Icons.Rounded.History }, null, tint = Color.White, modifier = Modifier.size(26.dp))
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                Text(listOfNotNull(pr.title, if (pr.mins >= 0) Geo.fmtDur(pr.mins * 60.0) else null, pr.note.ifBlank { null }).joinToString(" · "),
+                Text(listOfNotNull(L.t(pr.title), if (pr.mins >= 0) Geo.fmtDur(pr.mins * 60.0) else null, L.t(pr.note).ifBlank { null }).joinToString(" · "),
                     color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val arrive = if (pr.mins >= 0) "Arrivée vers " + com.headunit.launcher.Clock.hm(System.currentTimeMillis() + pr.mins * 60_000L) else pr.place.sub
                 Text(if (pr.delayMin >= 3) "$arrive · +${pr.delayMin} min de retard" else arrive, color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2092,5 +2065,30 @@ internal fun BadgedLine(text: String, badges: Boolean, size: androidx.compose.ui
         }
         val after = text.substring(at).trim()
         if (after.isNotEmpty()) Text(after, color = color, fontSize = size, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+    }
+}
+
+
+/**
+ * The map options panel's brightness slider: the night map's brightness at night, the day map's by day. It's saved when the slider
+ * is let go rather than at every step, as each change relights the map (and going back to exactly 100% reloads it).
+ */
+@Composable
+private fun MapBrightRow(p: com.headunit.launcher.Prefs, night: Boolean) {
+    val c = LocalVw.current
+    val key = if (night) PreferenceKeys.NIGHT_BRIGHT else PreferenceKeys.DAY_BRIGHT
+    val lo = if (night) 30f else 50f; val hi = if (night) 200f else 150f
+    var v by remember(key) { mutableStateOf(p.i(key, 100).toFloat().coerceIn(lo, hi)) }
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.BrightnessLow, null, tint = c.sub, modifier = Modifier.size(22.dp))
+        androidx.compose.material3.Slider(
+            value = v, onValueChange = { v = it }, valueRange = lo..hi,
+            onValueChangeFinished = { p.put(key, (Math.round(v / 5f) * 5).coerceIn(lo.toInt(), hi.toInt())) },
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = c.accent, inactiveTrackColor = c.tile),
+        )
+        Icon(Icons.Rounded.BrightnessHigh, null, tint = c.text, modifier = Modifier.size(22.dp))
+        Text((if (night) "Nuit" else "Jour") + " · " + (Math.round(v / 5f) * 5) + "%", color = c.sub, fontSize = 14.sp, maxLines = 1,
+            modifier = Modifier.padding(start = 10.dp).widthIn(min = 92.dp))
     }
 }

@@ -197,6 +197,10 @@ internal object PreferenceKeys {
     const val POLICEREP = "policerep"
     const val PREDICT = "predict"
     const val QUICKLIST = "quicklist"
+    /** The largest Overall size (%) the car screen last seen fits without a cramped layout (written by the car, shown in the setting). */
+    const val CARSCALE_MAX = "carscale_max"
+    /** Android Auto: the search bar, Home / Work and shortcuts drawn on the map (off for rotary-knob cars that can't tap them, #222). */
+    const val CAR_MAPUI = "car_mapui"
     /** The map in 3D (true) or flat 2D: remembered between drives, and shared by the phone / head unit and Android Auto. */
     const val VIEW_3D = "view3d"
     /** The donate card has been shown (it's shown once, a day or more after install). */
@@ -249,6 +253,8 @@ internal object PreferenceKeys {
     const val MOONLIT = "moonlit"
     /** Light and weather (Settings > Map look): night brightness and moon strength in percent (100 as Mapbox / as first made). */
     const val NIGHT_BRIGHT = "nightbright"
+    /** How bright the day map is (%), as Night brightness is for the night one: the map options panel's slider sets whichever is showing. */
+    const val DAY_BRIGHT = "daybright"
     const val MOON_STR = "moonstr"
     const val SHADOWS = "shadows"
     const val SUN_REAL = "sunreal"
@@ -535,7 +541,7 @@ fun Prefs.locatorSpec(): Pair<String, String> {
  * default doesn't make an enormous arrow there), times the car screen's own "Navigation arrow size".
  */
 fun Prefs.carArrowScale(): Float =
-    ((s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(1f, 5f) * 0.9f * (i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(30, 180) / 100f)
+    ((s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(0.6f, 5f) * 0.9f * (i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(30, 180) / 100f)
 
 /** Settings > Map > Map detail: "full", "lite" or "lightest" (the old "Light map" switch counts as lite). */
 fun Prefs.mapDetail(): String = s(PreferenceKeys.MAP_DETAIL, if (b(PreferenceKeys.MAP_LITE, false)) "lite" else "full")
