@@ -583,7 +583,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         // when notification access is given. Only while something plays (or for a few minutes after a pause). It goes in the free
         // space at the bottom between the trip card and the speedometer; where that's too narrow (or on a portrait screen, or with
         // the trip card in the middle) it sits just above the trip card instead
-        val mediaOn = engine.prefs.b(PreferenceKeys.MEDIA_BAR, true)
+        val mediaOn = engine.prefs.b(PreferenceKeys.MEDIA_BAR, false)
         FollowMedia(mediaOn)
         val mediaShow = mediaOn && com.headunit.launcher.MediaNow.showing() && !previewing && engine.arrival == null && engine.here == null &&
             engine.chain == null && !engine.chainBusy && !engine.itineraryOpen && !altFocus
@@ -617,6 +617,10 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         }
         if (!mediaShow && mediaHPx != 0) androidx.compose.runtime.SideEffect { mediaHPx = 0 }
         val mediaLift = if (mediaShow && mediaHPx > 0) with(dens) { mediaHPx.toDp() } + 10.dp else 0.dp
+        // (the road name pill when cruising, drawn in App, goes above the bar however tall it is: it overlapped on a phone
+        // held sideways, where the bar with the song's name is taller than the room it was given, GitHub #277)
+        val mediaBottomReach = if (mediaShow && mediaHPx > 0) with(dens) { mediaHPx.toDp() } + 16.dp else 0.dp
+        androidx.compose.runtime.SideEffect { if (engine.mediaLiftDp != mediaBottomReach.value) engine.mediaLiftDp = mediaBottomReach.value }
 
         // ---- bottom centre: re-centre once you have panned away, or zoomed in / out with the buttons (it puts the zoom back to automatic)
         AnimatedVisibility(
@@ -1130,15 +1134,9 @@ private fun SpeedWithNext(engine: NavEngine) {
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             val num = "${(Math.round(nx.first * k / 5.0) * 5)}"
-            val numSize = with(androidx.compose.ui.platform.LocalDensity.current) { 13.dp.toSp() }
             // the same kind of sign as the main one: the red ring, or the black-bordered board in the US and Canada
-            if (engine.limitSignStyle != "round") Box(Modifier.size(width = 28.dp, height = 34.dp).clip(RoundedCornerShape(4.dp)).background(Color.White)
-                .border(2.5.dp, Color(0xFF151515), RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) {
-                Text(num, color = Color.Black, fontSize = numSize, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
-            }
-            else Box(Modifier.size(34.dp).clip(CircleShape).background(Color.White).border(4.dp, Color(0xFFE0202A), CircleShape), contentAlignment = Alignment.Center) {
-                Text(num, color = Color.Black, fontSize = numSize, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
-            }
+            // (drawn exactly like the main sign, just smaller)
+            LimitSignFace(num.toInt(), engine.limitSignStyle, if (engine.limitSignStyle != "round") 40.dp else 36.dp)
             Text("dans ${Geo.fmtDist(nx.second, engine.imperial)}", color = c.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
         if (!atTop) SpeedBlock(engine)
@@ -1174,14 +1172,7 @@ private fun SpeedPill(engine: NavEngine, show: Boolean, k: Double) {
             Box(Modifier.padding(start = if (lim != null || show) 4.dp else 0.dp, end = 8.dp).width(1.dp).height(34.dp).background(Color.White.copy(alpha = 0.22f)))
             Column(Modifier.padding(end = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 val num = "${(Math.round(nx.first * k / 5.0) * 5)}"
-                val numSize = with(androidx.compose.ui.platform.LocalDensity.current) { 12.dp.toSp() }
-                if (engine.limitSignStyle != "round") Box(Modifier.size(width = 26.dp, height = 30.dp).clip(RoundedCornerShape(4.dp)).background(Color.White)
-                    .border(2.dp, Color(0xFF151515), RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) {
-                    Text(num, color = Color.Black, fontSize = numSize, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
-                }
-                else Box(Modifier.size(30.dp).clip(CircleShape).background(Color.White).border(3.5.dp, Color(0xFFE0202A), CircleShape), contentAlignment = Alignment.Center) {
-                    Text(num, color = Color.Black, fontSize = numSize, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
-                }
+                LimitSignFace(num.toInt(), engine.limitSignStyle, if (engine.limitSignStyle != "round") 34.dp else 30.dp)
                 Text(Geo.fmtDist(nx.second, engine.imperial), color = Color.White.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
             }
         }

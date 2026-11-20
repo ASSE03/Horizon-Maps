@@ -475,8 +475,10 @@ private fun OnTheMapSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Appui long sur la carte") {
         SToggle(prefs, "Qu'y a-t-il ici", PreferenceKeys.WHATS_HERE, true, "Un appui long sur la carte montre d'abord la route, sa limitation et le lieu, avec Y aller et Ajouter une étape. Désactivé : on y va directement, comme avant")
     }
-    SGroup("Favoris") {
-        SToggle(prefs, "Favoris sur la carte", PreferenceKeys.FAVS_ON_MAP, true, "Vos lieux enregistrés en étoiles. Touchez-en une pour y aller")
+    SGroup("Lieux enregistrés") {
+        SToggle(prefs, "Lieux enregistrés sur la carte", PreferenceKeys.FAVS_ON_MAP, true, "Domicile, Travail, favoris et lieux étoilés. Touchez-en un pour y aller")
+        if (prefs.b(PreferenceKeys.FAVS_ON_MAP, true))
+            SSlider("Icônes des lieux enregistrés", prefs.i(PreferenceKeys.SAVED_ICON_SIZE, 100).coerceIn(50, 250).toFloat(), 50f..250f, "%", steps = 39, reset = 100f) { prefs.put(PreferenceKeys.SAVED_ICON_SIZE, it) }
     }
     SGroup("Trafic") {
         SToggle(prefs, "Trafic en direct", "traffic", true)
@@ -811,7 +813,7 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
         SToggle(prefs, "Ignorer les hausses sur un petit tronçon", "limithold", true, "Une limite plus haute n'est prise qu'après 200 m dessus : un petit tronçon mal renseigné (un 90 entre un 50 et un 70) n'est ni affiché ni annoncé. Les baisses sont prises tout de suite")
         SToggle(prefs, "50 en agglomération", "towncap", true, "Entre les panneaux d'entrée et de sortie d'une agglomération (d'après OpenStreetMap), une limite à 80 ou 90 lue sur la carte est ramenée à 50 : c'est presque toujours une erreur de la carte")
-        SToggle(prefs, "Prochaine limitation", PreferenceKeys.NEXT_LIMIT, true, "Un petit panneau au-dessus de la limitation avec la suivante sur votre itinéraire et sa distance, à partir d'environ 800 m")
+        SToggle(prefs, "Prochaine limitation", PreferenceKeys.NEXT_LIMIT, true, "La prochaine limitation sur votre trajet, en panneau sur la carte là où elle change et en petit à côté de votre panneau avec la distance, dès 800 m environ")
         SChoice("Source des limitations", listOf("mg4" to "Comme MG4Dash", "mix" to "MG4Dash + TomTom", "auto" to "TomTom et Mapbox"), prefs.s("limitsrc", "mg4"),
             when (prefs.s("limitsrc", "mg4")) {
                 "mg4" -> "OpenStreetMap seul, avec les paquets France de MG4Dash (jeton GitHub ayant accès à MG4Dash-SWI68), sinon par petites zones gardées 60 jours"
@@ -900,6 +902,27 @@ private fun PlacesSection(engine: NavEngine) {
     var openGroups by remember { mutableStateOf(setOf<String>()) }
     var renamingGroup by remember { mutableStateOf<String?>(null) }
     val groups = remember(raw) { pl.groups() }
+    var importingGoogle by remember { mutableStateOf(false) }
+    val googleMapsPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) {
+            importingGoogle = false
+        } else {
+            Thread {
+                val outcome = try {
+                    val json = importContext.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    val places = com.headunit.launcher.GoogleMapsImport.parse(json)
+                    // (into Your places, in a Google Maps group and not starred, so 50 imported places don't fill the row next to
+                    // Home and Work: GitHub #261)
+                    if (places.isEmpty()) null else pl.importToPlaces(places, "Google Maps")
+                } catch (_: Throwable) { null }
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    importingGoogle = false
+                    if (outcome == null) engine.toast("Aucun lieu enregistré trouvé dans ce fichier", 3500)
+                    else engine.toast("${outcome.first} importés dans Vos lieux, dans le groupe Google Maps · déjà enregistrés ${outcome.second}", 5000)
+                }
+            }.start()
+        }
+    }
     SGroup("Vos lieux", footer = "Ceux avec une étoile s’affichent à côté de Domicile et Travail sous la barre de recherche ; touchez une étoile pour changer. Tous sont dans la recherche et le raccourci Vos lieux.") {
         if (mine.isEmpty()) SNote("Pas encore de lieux à vous.")
         @Composable
@@ -958,33 +981,7 @@ private fun PlacesSection(engine: NavEngine) {
         }
         mine.forEachIndexed { i, lp -> if (lp.group.isBlank()) placeRow(i, lp, false) }
         SItem("Ajouter un lieu") { SButton("Ajouter", primary = true) { adding = true } }
-    }
-    if (adding) AddPlaceDialog(engine, null) { adding = false }
-    val favRaw = engine.prefs.s(PreferenceKeys.PLACES_FAVOURITES, "")
-    val favs = remember(favRaw) { pl.favourites() }
-    var renamingFav by remember { mutableStateOf<Place?>(null) }
-    var slotFor by remember { mutableStateOf<Place?>(null) }
-    var importingGoogle by remember { mutableStateOf(false) }
-    val googleMapsPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) {
-            importingGoogle = false
-        } else {
-            Thread {
-                val outcome = try {
-                    val json = importContext.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    val places = com.headunit.launcher.GoogleMapsImport.parse(json)
-                    if (places.isEmpty()) null else pl.importFavourites(places)
-                } catch (_: Throwable) { null }
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    importingGoogle = false
-                    if (outcome == null) engine.toast("Aucun lieu enregistré trouvé dans ce fichier", 3500)
-                    else engine.toast("${outcome.first} importés · ${outcome.second} déjà enregistrés", 4500)
-                }
-            }.start()
-        }
-    }
-    SGroup("Favoris") {
-        SItem("Importer depuis Google Maps", "Choisissez le fichier Saved Places.json de Google Takeout") {
+        SItem("Importer depuis Google Maps", "Choisissez un fichier Saved Places.json de Google Takeout. Les lieux vont ici dans un groupe Google Maps") {
             SButton(if (importingGoogle) "Importation…" else "Choisir", primary = true) {
                 if (!importingGoogle) {
                     importingGoogle = true
@@ -993,7 +990,27 @@ private fun PlacesSection(engine: NavEngine) {
                 }
             }
         }
+    }
+    if (adding) AddPlaceDialog(engine, null) { adding = false }
+    val favRaw = engine.prefs.s(PreferenceKeys.PLACES_FAVOURITES, "")
+    val storedFavs = remember(favRaw) { pl.favourites() }
+    var favSortNearest by rememberSaveable { mutableStateOf(false) }
+    val hereForFavs = engine.fix?.pos
+    val favs = remember(storedFavs, favSortNearest, hereForFavs, L.lang) {
+        if (favSortNearest && hereForFavs != null) storedFavs.sortedBy { Geo.dist(hereForFavs, it.pos) }
+        else {
+            val collator = java.text.Collator.getInstance(L.locale)
+            storedFavs.sortedWith { a, b -> collator.compare(a.name, b.name) }
+        }
+    }
+    var renamingFav by remember { mutableStateOf<Place?>(null) }
+    var slotFor by remember { mutableStateOf<Place?>(null) }
+    SGroup("Favoris") {
 
+        if (favs.size > 1) SItem("Trier les favoris") {
+            SButton("A–Z", primary = !favSortNearest) { favSortNearest = false }
+            SButton("Le plus proche", primary = favSortNearest) { favSortNearest = true }
+        }
         if (favs.isEmpty()) SNote("Aucun favori pour l'instant. Touchez l'étoile d'une destination pour l'ajouter.")
         favs.forEach { f ->
             when {
@@ -1012,9 +1029,14 @@ private fun PlacesSection(engine: NavEngine) {
                 else -> SItemStacked(f.name, f.sub) {
                     SButton("Renommer") { renamingFav = f }
                     SButton("Définir Domicile / Travail") { slotFor = f }
+                    SButton("Déplacer vers Vos lieux") { pl.moveFavouriteToPlaces(f); engine.toast("${f.name} déplacé vers Vos lieux", 2500) }
                     SButton("Retirer", danger = true) { pl.toggleFavourite(f) }
                 }
             }
+        }
+        // (favourites are best kept short, as they all show next to Home and Work: the rest can go to Your places in one go, GitHub #261)
+        if (favs.size > 1) SItem("Déplacer tous les favoris vers Vos lieux", "Dans un groupe Favoris, pour qu'ils quittent la rangée à côté de Domicile et Travail") {
+            SButton("Tout déplacer") { val n = pl.moveAllFavouritesToPlaces("Favoris"); engine.toast("$n déplacé vers Vos lieux", 2500) }
         }
         if (favs.size > 1) SItem("Supprimer tous les favoris") { SButton("Tout supprimer", danger = true) { pl.clearFavourites() } }
     }
@@ -1339,8 +1361,8 @@ private fun WhileDrivingSection(prefs: Prefs) {
         SToggle(prefs, "Moins de boutons en conduisant", "drivesimple", true)
         SToggle(prefs, "Horloge sur la carte", PreferenceKeys.CLOCK_MAP, false, "L’heure, avec le compteur de vitesse. Pratique quand la barre d’état de l’autoradio est masquée")
         SToggle(prefs, "Bloquer la saisie en conduisant", "drivelock", true, "La recherche vocale fonctionne toujours")
-        SToggle(prefs, "Commandes multimédia", PreferenceKeys.MEDIA_BAR, true, "Précédent, lecture / pause et suivant en bas de l'écran pendant que de la musique ou la radio joue sur cet appareil, depuis n'importe quelle appli")
-        if (prefs.b(PreferenceKeys.MEDIA_BAR, true) && com.headunit.launcher.MediaNow.songInfoPossible) {
+        SToggle(prefs, "Commandes multimédia", PreferenceKeys.MEDIA_BAR, false, "Précédent, lecture / pause et suivant en bas de l'écran pendant que de la musique ou la radio joue sur cet appareil, depuis n'importe quelle appli")
+        if (prefs.b(PreferenceKeys.MEDIA_BAR, false) && com.headunit.launcher.MediaNow.songInfoPossible) {
             val ctx = androidx.compose.ui.platform.LocalContext.current
             // (checked again every couple of seconds while this shows, so it changes when you come back from Android's page)
             var granted by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.headunit.launcher.MediaNow.accessGranted(ctx)) }

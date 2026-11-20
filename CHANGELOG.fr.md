@@ -5,6 +5,12 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Limitations à venir sur la carte : un panneau lisible là où la limitation change sur l'itinéraire, assorti au panneau principal (Réglages › Vitesse › Limitations à venir).
+- Domicile, Travail et favoris sur la carte, avec un curseur de taille.
+- Trier les favoris : de A à Z ou le plus proche ; « Déplacer vers Vos lieux ».
+- « Utiliser ma position actuelle » pour Domicile et Travail.
+- Radar tronçon : barre de progression sur la carte de vitesse moyenne.
+- Android Auto : le GPS de la voiture est utilisé quand il est disponible.
 - Section Météo dans les réglages : toutes les options météo réunies, avec la pluie, la neige et le brouillard sur la carte réglables séparément.
 - Météo du Met Office (Royaume-Uni) avec votre propre clé.
 - Importer vos lieux enregistrés de Google Maps : Réglages › Favoris › Importer depuis Google Maps (fichier Saved Places.json de Google Takeout).
@@ -126,6 +132,14 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Signal faible : un message juste quand le téléphone est connecté mais que le service d'itinéraire ne répond pas.
+- Dangers signalés sur l'autre sens d'une route à chaussées séparées : beaucoup moins d'alertes inutiles.
+- Voies et zoom sur les voies : plus de clignotement à l'approche des sorties d'autoroute.
+- Démo à 2× ou plus : la vue suit les virages.
+- Point d'arrivée sur un chemin piéton : l'itinéraire va jusqu'à la route publique la plus proche.
+- Coût du carburant tenant sur les cartes d'itinéraire, nom de la route au-dessus de la barre multimédia, Android Auto qui se recentre en repartant.
+- Flèche de nouveau près du milieu quand le panneau des récents se replie.
+- Commandes multimédia désactivées par défaut sur une nouvelle installation (vous gardez votre réglage).
 - Android Auto : les récents ne passent plus sous le bouton du son, qui peut être masqué ; autres itinéraires mieux présentés.
 - Carte TomTom : noms en français.
 - Incidents Mapbox : jamais en anglais (« Police » ou « Incident »).

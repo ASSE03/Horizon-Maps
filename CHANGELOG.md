@@ -4,6 +4,62 @@ Everything that has changed in Horizon Nav, newest first. Each version lists wha
 
 ## Unreleased
 
+### New
+- Upcoming speed limits you can read: the sign on the route where the limit changes is now the same sign as your main one (the red ring, or the white board in the US and Canada), about twice the size, on a white halo, and road names move out of its way instead of covering it. The small sign by your limit with how far it is now looks like the main one too. Both are under Settings › Alerts › Upcoming speed limits
+- Home, Work and starred places on the map: as well as your favourites, Home (a house on blue), Work (a briefcase on amber) and the starred places in Your places now show on the map, and a tap opens the place with Go. Settings › On the map › Saved places has one "Saved places icons" slider for the size of them all
+- The faded roads on the turn arrow sit at tidy angles: the arrow is drawn at a set angle for each kind of turn, but the other roads came at their real angles, so one could stick out at an odd angle beside it. They're now set to the nearest 45 degrees, on the side they really are
+
+### New
+- Android Auto follows the car again by itself: if the map was moved by hand and the car then drives off, it goes back to following the car after a few seconds, so the arrow doesn't drive off the screen (thanks to fjunakovic)
+
+### Improved
+- Media controls are off on a new install (Settings › While driving › Media controls to turn them on). Anyone who already has the app keeps them as they were
+
+### Fixed
+- The "next 3 km" hazard card no longer grows to fill half the screen: in languages with long names (Polish "Próg zwalniający"), its "next 3 km" was squeezed to a letter or two per line, so the card got very tall and jumped in size as the distance counted down. It now stays on one line, and a long name is cut short instead (thanks to ChrisSantosGarage)
+- The demo drive at 2x and faster: the view now turns as fast as the demo takes the bends, instead of falling behind and showing the fields beside the route (thanks to jhahvhi)
+- TomTom's map now shows names in the app's language where TomTom has them (it stayed in the local language, Arabic in the UAE, as the label translation only worked on Mapbox's map) (thanks to zaheerhakim)
+- The arrow stays in the middle when the recents panel folds away: with just the search bar left at the top, the arrow was pushed further to the side than with the whole panel down. Anything that ends above the arrow now leaves it centred
+- The map no longer zooms in and out on the way to a motorway exit: the lanes on the turn card kept vanishing and coming back between about 1.9 and 1 km before the junction (the road under you was sometimes not read in time), and the closer lane view's zoom came and went with them. Once a junction is known to be on a motorway, it stays that way (thanks to jhahvhi)
+- Fuel cost on the route cards: "≈ £2.10" in place of "Fuel about £2.10", as the pump icon already says what it is, so the amount isn't cut off with two or three routes side by side (thanks to clayts450)
+- The road name pill now sits above the media controls however tall they are: on a phone held sideways, with the song's name showing, they overlapped (thanks to desko1973)
+- Problem reports on Xiaomi phones say when the phone's own cleaner closed the app as the screen locked, in place of "closed by you"
+
+### New
+- Speed cameras beep again just before you pass: after the warning about 500 m ahead, a short second beep comes about 4 seconds before the camera (thanks to joel941703-hash)
+- Home and Work from where you are: Set Home and Set Work have a Use where I am now button, showing the address it found, so you can save it while parked outside without typing the address (thanks to jvricardo1)
+- Average speed checks show how far through you are: a bar under the distance left fills as you go, green, amber when you need to ease off for the rest, and red over the limit (thanks to joel941703-hash)
+- Move favourites to Your places: each favourite has Move to Your places, and Move all puts every one in a Favourites group there, so the row next to Home and Work stays short (thanks to Dixet)
+
+### Improved
+- Google Maps import goes into Your places: the places are filed in a Google Maps group, not starred, so 50 imported places fold into one row instead of filling the tiles next to Home and Work. The import button is now under Your places (thanks to Dixet and Xundey)
+- Your places list: the groups are in A–Z order, and the places are A–Z until the app knows where you are (then nearest first) (thanks to Dixet)
+- "Weak signal" in place of "No signal" when the phone is connected but the route service can't be reached, and the problem report now lists the last few connection problems with Android's own reason, to find out why (thanks to jerzdevil22)
+- Malayalam: SUV, USA, the UK road signs and living turn card switches, Import Google Maps, the search bar settings and Recent destinations, in the wording suggested (thanks to bijindas)
+
+### Fixed
+- Routes to a spot held on the map no longer go down footpaths or into private sites to get close: when the spot isn't on a road open to cars (a footpath, a pedestrian street, a park or a works site), the route goes to the nearest public road and says how far away that is. Car parks and ordinary roads are left as they are (thanks to karthikeyansr-lgtm)
+- Problem reports say how the app really ended: Android's own record (swiped away, closed for low memory, crashed in the map's code, not responding) is now in the report, and swiping the app away no longer shows as "closed by Android" or counts towards turning the drawing down (thanks to joel941703-hash)
+- A favourite's star on its card: a place saved a little way from where it shows on the map (often the case with imported places) showed an empty star, and tapping it took the favourite away. The card now finds it the same way the star does (thanks to Dixet)
+
+### Fixed
+- Malayalam Light & 3D settings: refine the Moonlight at night and 3D hills and valleys labels using the reviewer's suggested wording (thanks to the tester who asked for it).
+
+### Fixed
+- Opposite-direction hazards and cameras: tighten route matching for directionless point alerts and require line incidents to follow the route's direction, reducing false warnings from nearby carriageways (thanks to the tester who asked for it).
+
+### Improved
+- Speed-limit changes on the map: show a road-sign marker at the route position of the next posted speed-limit change, alongside the existing distance countdown (thanks to the tester who asked for it).
+
+### Improved
+- Favourites sorting: show saved favourites alphabetically by default, with an A–Z / Nearest choice in Places & trips; Android Auto favourites are alphabetised too (thanks to the tester who asked for it).
+
+### New
+- Tamil language: add Tamil to the language selector and automatic phone-language detection, with core navigation and interface translations and English fallback for untranslated text (thanks to the tester who asked for it).
+
+### Improved
+- Android Auto built-in GPS: use the car's Car App API 3 location feed when the head unit provides it, while keeping phone GPS as an automatic fallback (thanks to the tester who asked for it).
+
 ### Improved
 - TomTom map labels: use the app-selected language for translated place and road names, with the original name as fallback (thanks to the tester who asked for it).
 

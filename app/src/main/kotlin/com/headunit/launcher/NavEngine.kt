@@ -724,6 +724,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var camPos: LL? = null
     private var cameras: List<LL> = emptyList()
     private val camAlerted = HashSet<LL>()
+    /** Cameras already given the second, close-up beep (just before you pass them, GitHub #268). */
+    private val camNearBeeped = HashSet<LL>()
     private var drove = false
     private var stillSince = 0L
     private var posSavedAt = 0L
@@ -736,6 +738,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var tripDest = ""
 
     init {
+        NetHealth.appCtx = ctx.applicationContext
         EuFuel.filesDir = ctx.filesDir
         CarTrains.filesDir = ctx.filesDir   // (the car-train lines, for Avoid car trains)   // (Italy's fuel price list is kept on the device)
         // the language for directions (Settings > Sound & voice > Language): before the voice starts, so it starts in it
@@ -858,6 +861,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         map.onUserGesture = {
             // (moved by hand: a place card settling no longer moves the map back)
             focusUntil = 0L
+            gestureAt = android.os.SystemClock.elapsedRealtime()
             if (chain != null) chainMoved = true else { if (following) { following = false }; altFitting = false; scheduleRecentre(12_000) }
             // moving the map with no route: the panel under the search bar tucks away so the map can be seen (TouristCreepy1884)
             if (route == null && !previewing && chain == null) homeTucked = true
@@ -1466,7 +1470,20 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         lm = null
     }
 
-    override fun onLocationChanged(l: Location) = handleLocation(l, false)
+    /** Location supplied by the Android Auto host's vehicle GPS (Car App API 3). */
+    @Volatile private var carLocationAt = 0L
+    fun onCarLocation(location: Location) {
+        if (!isCar) return
+        carLocationAt = System.currentTimeMillis()
+        val copy = Location(location).apply { provider = LocationManager.GPS_PROVIDER }
+        handleLocation(copy, false)
+    }
+
+    override fun onLocationChanged(l: Location) {
+        // Keep phone GPS registered as a fallback, but don't let it overwrite a newer car-hardware fix.
+        if (isCar && System.currentTimeMillis() - carLocationAt < 5000L) return
+        handleLocation(l, false)
+    }
     // Android 10 and older have no built-in versions of these: without them the app crashed as soon as GPS was switched off or on
     override fun onProviderDisabled(provider: String) {}
     override fun onProviderEnabled(provider: String) {}
@@ -1920,6 +1937,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             appendLine("Install record: ${Updater.installRecord(ctx)}")
             try { RouteEnds.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Last routes ended:"); append(it) } } catch (e: Throwable) { }
             try { SoundLog.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Music lowered and given back:"); append(it) } } catch (e: Throwable) { }
+            try { NetHealth.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Connection problems:"); append(it) } } catch (e: Throwable) { }
+            try { SessionWatch.exitHistory(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("How the app last ended (Android's record):"); append(it) } } catch (e: Throwable) { }
             if (crash != null) { appendLine(); appendLine("Last crash:"); appendLine(crash) }
             val freeze = try { FreezeWatch.file(ctx).takeIf { it.exists() }?.readText()?.take(2500) } catch (e: Exception) { null }
             if (freeze != null) { appendLine(); appendLine("Last freeze:"); appendLine(freeze) }
@@ -2846,14 +2865,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         mine.map { cp -> Nearby(cp.place.copy(name = cp.label), here?.let { Geo.dist(it, cp.place.pos) } ?: 0.0, "") to cp.group } +
                             favs.map { f -> Nearby(f, here?.let { Geo.dist(it, f.pos) } ?: 0.0, "") to "" }
                     }
-                    if (folder != null) all.filter { it.second == folder }.map { it.first }.sortedBy { it.dist }
+                    // nearest first; A–Z when there's no position yet, and the folders always A–Z (GitHub #261)
+                    val collator = java.text.Collator.getInstance(L.locale)
+                    val order: Comparator<Nearby> = if (here != null) compareBy<Nearby> { it.dist } else Comparator<Nearby> { a, b -> collator.compare(a.place.name, b.place.name) }
+                    if (folder != null) all.filter { it.second == folder }.map { it.first }.sortedWith(order)
                     else {
                         val folders = all.map { it.second }.filter { it.isNotBlank() }.distinct().map { g ->
                             val n = all.count { it.second == g }
                             Nearby(Place(g, "", here ?: LL(0.0, 0.0), "folder:$g"), -1.0,
                                 if (tracks) (if (n == 1) "1 trace" else "$n traces") else (if (n == 1) "1 lieu" else "$n lieux"))
                         }
-                        folders + all.filter { it.second.isBlank() }.map { it.first }.sortedBy { it.dist }
+                        folders.sortedWith { a, b -> collator.compare(a.place.name, b.place.name) } + all.filter { it.second.isBlank() }.map { it.first }.sortedWith(order)
                     }
                 } catch (e: Exception) { emptyList() }
             }
@@ -3007,7 +3029,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             } catch (e: Exception) {
                 val m = e.message ?: ""
                 if (m.contains("signal")) {
-                    toast("Pas de réseau : cet itinéraire démarrera tout seul dès qu'il y aura une connexion", 6000)
+                    // the phone says it's connected, but the route services couldn't be reached (a weak signal out in the country,
+                    // or the services being slow): "No signal" read as wrong there (GitHub #269). The real reason goes in the
+                    // problem report (Connection problems)
+                    toast(if (online()) "Signal faible : le service d'itinéraire est injoignable. Nouvel essai automatique…" + NetHealth.clockHint()
+                        else "Pas de réseau : cet itinéraire démarrera seul dès qu'il y aura une connexion", 6000)
                     if (waitingFor !== to) waitForSignal(to, departInMin, keepVia)
                 } else toast("Échec du calcul d'itinéraire : $m", 6000)
             } finally { busy = false }
@@ -3355,7 +3381,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         turnArrowKey = -1; map.setTurnArrow(emptyList())
         clearLiveAlts(); liveSaid.clear(); radar = emptyList(); radarSig = 0; bendsFor = null; bends = emptyList()
         flushRoads()
-        sessionAvoid.clear(); closuresAvoided.clear(); altListOpen = false; nextLimit = null; routeZones = emptyList(); avgInfo = null; avgIn = null; servicesAhead = emptyList(); barEvents = emptyList()
+        sessionAvoid.clear(); closuresAvoided.clear(); altListOpen = false; nextLimit = null; map.setSpeedChange(null, null); routeZones = emptyList(); avgInfo = null; avgIn = null; servicesAhead = emptyList(); barEvents = emptyList()
         rawServices = emptyList(); servicesFor = null; rawHz = emptyList(); rawAvg = emptyList(); hzWinRoute = null; hzWinEnd = -1.0; avgWinRoute = null; avgWinEnd = -1.0; avgCacheFor = null
         placed = null; placedSig = 0; avgAlerted.clear(); hzAlerted.clear(); zoneAlerted.clear(); stopsEditor = false
         map.setVias(emptyList()); chargeVias = emptyList()
@@ -3596,7 +3622,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val sc = secs[m]
             if (at < sc.off) hi = m - 1 else if (at >= sc.end) lo = m + 1 else { hit = sc; break }
         }
-        if (hit == null) { nextLimit = null; return }      // no posted limit known for this stretch: the map data takes over
+        if (hit == null) { nextLimit = null; map.setSpeedChange(null, null); return }      // no posted limit known for this stretch: the map data takes over
         // the next change ahead, within about half a mile (shown small above the limit sign)
         var nx: Pair<Double, Double>? = null
         for (sc in secs) {
@@ -3606,8 +3632,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (kotlin.math.abs(sc.ms - hit.ms) > 0.5) { nx = sc.ms to (sc.off - at); break }
         }
         val shown = nextLimit
-        if (nx == null) { if (shown != null) nextLimit = null }
-        else if (shown == null || kotlin.math.abs(shown.first - nx.first) > 0.1 || kotlin.math.abs(shown.second - nx.second) > 15.0) nextLimit = nx
+        if (nx == null) {
+            if (shown != null) nextLimit = null
+            map.setSpeedChange(null, null)
+        } else {
+            if (shown == null || kotlin.math.abs(shown.first - nx.first) > 0.1 || kotlin.math.abs(shown.second - nx.second) > 15.0) nextLimit = nx
+            val targetOff = (at + nx.second).coerceIn(0.0, r.len)
+            val point = routePointAt(r, targetOff)
+            val value = kotlin.math.round(nx.first * (if (imperial) 2.23694 else 3.6)).toInt().toString()
+            // (Settings › Alerts › Upcoming speed limits switches the sign on the map off along with the one by the speedometer)
+            if (prefs.b(PreferenceKeys.NEXT_LIMIT, true)) map.setSpeedChange(point, value, limitSignStyle) else map.setSpeedChange(null, null)
+        }
         routeLimitAt = System.currentTimeMillis()
         pendHits = 0; pendLimit = -2.0
         // fork FR : les limitations de l'itinéraire passent parfois à la valeur suivante trop tôt (sortie d'agglomération). Si la
@@ -3626,6 +3661,21 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         checkLimitChange(ms, false)
         limitOkAt = routeLimitAt; limitOkPos = p.pos
+    }
+
+    /** Finds the exact map coordinate at a distance along the route. */
+    private fun routePointAt(r: Route, off: Double): LL? {
+        if (r.pts.size < 2 || r.cum.size != r.pts.size) return r.pts.firstOrNull()
+        var lo = 0; var hi = r.cum.lastIndex
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (r.cum[mid] < off) lo = mid + 1 else hi = mid
+        }
+        val i = (lo - 1).coerceIn(0, r.pts.lastIndex - 1)
+        val span = r.cum[i + 1] - r.cum[i]
+        val t = if (span > 0.0) ((off - r.cum[i]) / span).coerceIn(0.0, 1.0) else 0.0
+        val a = r.pts[i]; val b = r.pts[i + 1]
+        return LL(a.lat + (b.lat - a.lat) * t, a.lon + (b.lon - a.lon) * t)
     }
 
     private fun updateRoadInfo(p: Fix) {
@@ -4542,7 +4592,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // après un virage à angle droit, la flèche pointant sur le côté
         val sharp = !glideOnRoute && abs(d) > 35.0
         val step = d * (1.0 - Math.exp(-dt / (if (sharp) 0.55 else 1.05)))
-        val maxStep = (if (camCatchUp) 140.0 else if (sharp) 75.0 else 32.0) * dt
+        val maxStep = (if (camCatchUp) 140.0 else if (sharp) 75.0 * max(1, simMode) else 32.0 * max(1, simMode)) * dt
         camB = ((camB + step.coerceIn(-maxStep, maxStep)) % 360.0 + 360.0) % 360.0
         // nothing has moved (parked, or waiting at lights): don't ask the map to draw the same picture again,
         // which lets it sit idle instead of redrawing every frame (a big saving in heat and battery)
@@ -4598,6 +4648,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             else if (idleSince == 0L) idleSince = nowI
             else if (nowI - idleSince > 30 * 60_000L) { idleSince = 0L; scope.launch { try { endRoute() } catch (e: Exception) { } } }
         }
+        // on Android Auto: the map moved by hand and then the car drives off (over about 10 mph, 5 seconds after the last touch):
+        // back to following the car, so it doesn't drive off the screen and need a tap on Re-centre while driving (GitHub #273).
+        // With a route it also goes back by itself 12 seconds after the last touch, as before
+        if (newFix && isCar && !following && gestureAt > 0L && p.speed > 4.5 && simMode == 0 && !previewing && chain == null && hereState == null &&
+            android.os.SystemClock.elapsedRealtime() - gestureAt > 5_000L) { gestureAt = 0L; try { recenter() } catch (e: Exception) { } }
         // the GPS's direction is only worth anything when moving: slowing for a red light it swings about, and the arrow turned
         // into the car park or plaza beside the road. Below walking pace the last good direction is kept
         if (newFix && p.speed > 2.5) goodHead = p.heading
@@ -4759,7 +4814,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         onRouteNow = onR
         if (onR) curProg = guideProg
         if (onR && newFix) try { applyRouteLimit(r, guideProg, p) } catch (e: Exception) { }
-        else if (!onR && nextLimit != null) nextLimit = null
+        else if (!onR && nextLimit != null) { nextLimit = null; map.setSpeedChange(null, null) }
         updateGuidance(guideProg, onR && android.os.SystemClock.elapsedRealtime() - gFullAt < 1500L)
         syncPulse()
     }
@@ -4956,7 +5011,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // Not navigating (on the phone / head unit screen): the arrow sits in the middle of the clear map between the search panel and
         // the buttons, whatever height they reach to, so it's always in the middle of what's left of the map.
         // (Android Auto too: there the outlines are measured within the part of the screen its own buttons leave clear)
-        tLeft = if (!navigating && !previewing) idleShift(bottomCover > 0.0)
+        tLeft = if (!navigating && !previewing) idleShift(bottomCover > 0.0, (1.0 + pad) / 2.0)
                 else if (bottomCover <= 0.0) arrowShift((1.0 + pad) / 2.0) else 0.0
         // "Keep the arrow to the side" (GitHub): on a wide screen the arrow stays where the cards put it when they fold away, rather
         // than gliding back to the middle (the side the cards were last on; at first the usual side for this screen)
@@ -5015,7 +5070,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      * on the other (as a part of the screen width; positive moves it right). Portrait: the search panel is above the arrow, so only the
      * buttons count. Kept small, so it's a gentle nudge off centre rather than a jump.
      */
-    private fun idleShift(portrait: Boolean): Double {
+    private fun idleShift(portrait: Boolean, arrowY: Double = 0.5): Double {
         var left = 0.0; var right = 1.0
         for ((i, p) in panels.withIndex()) {
             if (p[2] - p[0] < 0.02 || p[3] - p[1] < 0.02) continue
@@ -5023,7 +5078,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (i == 0 && (portrait || p[2] - p[0] > 0.6f)) continue // full-width in portrait: it's above the arrow, not beside it
             // only along the top (the search bar on its own, with Home / Work and the rest folded away): it's above the arrow, not
             // beside it, so the arrow stays in the middle, as in Waze (GitHub #79: it stayed off to the side)
-            if (p[3] < 0.3f) continue
+            // That's judged against where the arrow actually is (low on the screen when tilted): a folded-away recents panel, the
+            // search bar alone, reached a little past a fixed 30% on a short car screen and still pushed the arrow well over, more
+            // than the full panel did. Anything that ends clearly above the arrow now leaves it in the middle
+            if (p[3] < 0.3f || p[3] < arrowY - 0.12) continue
             if (p[0] + p[2] < 1.0) left = max(left, p[2].toDouble()) else right = minOf(right, p[0].toDouble())
         }
         if (right - left < 0.2) return 0.0
@@ -5248,6 +5306,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     }
                     // a camera that checks the other carriageway (it's known which way it points): not on your route
                     val cd = Overpass.camDir[Overpass.camKey(c)]
+                    // Directionless camera records are ambiguous on divided roads: require a tighter route-line match.
+                    if (cd == null && bestD > 17.0) off = -1.0
                     if (off >= 0 && cd != null && bi >= 0 && bi + 1 < pts.size && abs(angDiff(cd, Geo.bearing(pts[bi], pts[bi + 1]))) > 75.0) off = -1.0
                     // (the same camera mapped twice, on the road and beside it, is one camera: one alert)
                     if (off >= 0 && out.none { abs(it.second - off) < 40.0 && Geo.dist(it.first, c) < 60.0 }) out += c to off
@@ -5636,6 +5696,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     /** Saves the What's here place as a favourite (or takes it off again). */
+    /**
+     * Where you are now, as a place to save as Home or Work (GitHub #263): the road and town from Mapbox when there's signal, or
+     * just the spot ("Your location") without. Null with no GPS fix yet.
+     */
+    suspend fun placeHereNow(): Place? {
+        val p = fix?.pos ?: return null
+        val tok = mbToken
+        val info = withContext(Dispatchers.IO) { try { if (tok.isNotBlank() && online()) MapboxRest.whatsHere(tok, p) else null } catch (e: Exception) { null } }
+        val road = info?.road.orEmpty(); val area = info?.place.orEmpty()
+        return Place(road.ifBlank { area.ifBlank { "Votre position" } }, if (road.isNotBlank()) area else "", p)
+    }
+
     fun hereSave(): Boolean {
         val h = here ?: return false
         val name = h.place.name.takeIf { it != "Repère posé" } ?: h.road.ifBlank { "Lieu enregistré" }
@@ -5667,7 +5739,20 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val h = here ?: return
         here = null
         // (while choosing a route too: a stop held on the map goes on the route being planned)
-        if (asStop && route != null && dest != null) addStop(h.place) else startRoute(h.place)
+        // held on a footpath, a pedestrian street, a track, a road closed to the public or away from any road (a park, a works
+        // site): the route goes to the nearest public road instead of along paths and private roads to get as close as it can
+        // (GitHub #256). Car parks and ordinary roads are left as they are
+        val offRoad = h.roadClass.isBlank() || h.roadClass in MapboxRest.NOT_FOR_CARS
+        val tok = mbToken
+        if (!offRoad || tok.isBlank() || !online()) { if (asStop && route != null && dest != null) addStop(h.place) else startRoute(h.place); return }
+        scope.launch {
+            val snapped = withContext(Dispatchers.IO) { MapboxRest.publicRoadNear(tok, h.place.pos) }
+            val to = if (snapped != null && Geo.dist(snapped, h.place.pos) > 15.0) {
+                toast("Cet endroit n'est pas sur une route ouverte aux voitures : l'itinéraire va à la route publique la plus proche, à ${Geo.fmtDist(Geo.dist(snapped, h.place.pos), imperial)}", 5000)
+                h.place.copy(pos = snapped)
+            } else h.place
+            if (asStop && route != null && dest != null) addStop(to) else startRoute(to)
+        }
     }
 
     /** Road closures the route is being kept off this trip (id to the closed road's points). */
@@ -5822,12 +5907,30 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                             val list = base + withoutDuplicates(dg, base)
                             val out = ArrayList<Triple<Incident, Double, String>>()
                             for (inc in list) {
-                                var bestOff = -1.0; var bestD = 70.0
-                                val q = inc.pts.first()
-                                for (n in r.pts.indices) {
-                                    if (r.cum[n] < progress - 200 || r.cum[n] > progress + 40_000) continue
-                                    val d = Geo.dist(r.pts[n], q)
-                                    if (d < bestD) { bestD = d; bestOff = r.cum[n] }
+                                var bestOff = -1.0
+                                // A point incident has no direction metadata: require it to be very close to this route.
+                                // A line incident must also follow the route's direction; nearby parallel roads are not enough.
+                                val line = inc.pts
+                                val threshold = if (line.size >= 2) 32.0 else 20.0
+                                var bestD = threshold
+                                for (j in line.indices) {
+                                    val q = line[j]
+                                    val incHeading = when {
+                                        line.size < 2 -> null
+                                        j < line.lastIndex -> Geo.bearing(q, line[j + 1])
+                                        else -> Geo.bearing(line[j - 1], q)
+                                    }
+                                    for (k in 0 until r.pts.lastIndex) {
+                                        if (r.cum[k + 1] < progress - 200 || r.cum[k] > progress + 40_000) continue
+                                        val d = Geo.dist(r.pts[k], q)
+                                        if (d >= bestD) continue
+                                        if (incHeading != null) {
+                                            val routeHeading = Geo.bearing(r.pts[k], r.pts[k + 1])
+                                            if (abs(angDiff(incHeading, routeHeading)) > 65.0) continue
+                                        }
+                                        bestD = d
+                                        bestOff = r.cum[k]
+                                    }
                                 }
                                 if (bestOff >= 0) out += Triple(inc, bestOff, incidentLabel(inc))
                             }
@@ -6408,8 +6511,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val street = if (arriving) (dest?.name ?: "Destination") + (if (side.isNotEmpty()) " · ${Geo.sideFr(side)}" else "") else cur.street.ifBlank { Geo.maneuverText(cur.maneuver, cur.roundExit).replaceFirstChar { it.uppercase() } }
             // several lane sections can touch one junction (the road often widens on the approach): use the one with the most lanes, then the nearest to the junction
             // on motorways and dual carriageways the lanes are looked at (and shown, and spoken) much earlier, as there's further to move over
-            val fastRoad = cur.exitNo.isNotBlank() || (fix?.let { f -> try { map.roadAt(f.pos, f.heading)?.cls } catch (e: Throwable) { null } }?.let { it.startsWith("motorway") || it.startsWith("trunk") } == true)
-            laneFast = fastRoad
+            // Kept once seen for this junction: the road under you is read off the map each time, and when that read came back
+            // empty (often, on a slower phone or at speed) the lanes on the turn card vanished between 1.9 and 1 km, and the lane
+            // view's closer zoom came and went with them, so the map kept zooming in and out (GitHub #271, video)
+            val seenFast = cur.exitNo.isNotBlank() || (fix?.let { f -> try { map.roadAt(f.pos, f.heading)?.cls } catch (e: Throwable) { null } }?.let { it.startsWith("motorway") || it.startsWith("trunk") } == true)
+            val fastRoad = seenFast || (laneFastFor == cur.off && laneFast)
+            laneFast = fastRoad; laneFastFor = cur.off
             val realSec = if (d < (if (fastRoad) 1900 else 1000) && !arriving) r.lanes.filter {
                 // a section has to run up to this junction: one ending well before it belongs to a junction on the way (an
                 // earlier slip road), and lit its exit lane as if that were the turn to take
@@ -7521,7 +7628,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     val allowed = (cur.end - avgEnterProg) / lim - secs
                     if (allowed > 1.0) left / allowed else 0.0
                 } else null
-                avgInfo = AvgInfo(avg, lim, left, over, false, 0.0, safe)
+                avgInfo = AvgInfo(avg, lim, left, over, false, 0.0, safe, lenM = cur.end - cur.start)
             } else {
                 if (avgIn != null) { avgIn = null; toast("Fin du radar tronçon", 2500) }
                 val next = pl.avg.filter { it.start > progress && it.start - progress < 1200.0 }.minByOrNull { it.start }
@@ -7652,6 +7759,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Turn-by-turn guidance is spoken only in "all" mode; alerts are also spoken in "alerts only". */
     /** True for the engine running the Android Auto screen. */
+    /** How far the media bar at the bottom of the phone's map reaches up (dp, 0 when it's not showing), so the road name pill can sit above it (GitHub #277). */
+    var mediaLiftDp by mutableStateOf(0f)
+    /** When the map was last moved by hand (elapsed ms), for going back to following the car once it drives off (GitHub #273). */
+    @Volatile private var gestureAt = 0L
     @Volatile var isCar = false
 
     /** The phone keeps quiet while the car screen is connected: the car says the directions and alerts. */
@@ -8020,6 +8131,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Paints the lane arrows on the road ahead of the junction (approximate: placed across the route line). */
     /** Set when you're on a motorway or dual carriageway: lane guidance then starts further out. */
     private var laneFast = false
+    /** The junction (its distance along the route) [laneFast] was worked out for. */
+    private var laneFastFor = -1.0
     private var earlyLaneFor = -1.0
 
     private fun updateLaneMarks(r: Route, cur: Step, sec: LaneSec?, d: Double) {

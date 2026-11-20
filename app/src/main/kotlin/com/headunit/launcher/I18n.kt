@@ -5,7 +5,7 @@ import androidx.compose.runtime.setValue
 import java.util.Locale
 
 /**
- * The app's language: English, Dutch, German, French, Spanish, Italian, Portuguese, Polish, Thai, Japanese, Indonesian, Bulgarian, Slovenian, Romanian, Basque, Traditional Chinese, Greek, Czech, Finnish, Simplified Chinese, Slovak, Danish, Croatian, Malay or Hungarian. "auto" follows the phone (English when the phone's language
+ * The app's language: English, Dutch, German, French, Spanish, Italian, Portuguese, Polish, Thai, Japanese, Indonesian, Bulgarian, Slovenian, Romanian, Basque, Traditional Chinese, Greek, Czech, Finnish, Simplified Chinese, Slovak, Danish, Croatian, Malay, Hungarian or Tamil. "auto" follows the phone (English when the phone's language
  * isn't one of these). Text is looked up by its English wording: [t] gives the phrase in the chosen language, with {0}, {1}…
  * filled in from the arguments; a phrase with no translation yet stays in English.
  */
@@ -15,7 +15,7 @@ object L {
         "ro" to "Română", "eu" to "Euskara", "zh" to "繁體中文", "zhhk" to "繁體中文（香港・粵語）",
         "el" to "Ελληνικά", "cs" to "Čeština", "fi" to "Suomi",
         "zhs" to "简体中文", "sk" to "Slovenčina", "da" to "Dansk", "hr" to "Hrvatski", "ms" to "Bahasa Melayu", "hu" to "Magyar",
-        "tr" to "Türkçe", "sr" to "Srpski", "ar" to "العربية", "he" to "עברית", "ur" to "اردو", "sv" to "Svenska", "bs" to "Bosanski", "kn" to "ಕನ್ನಡ", "mr" to "मराठी", "nb" to "Norsk bokmål", "ru" to "Русский", "uk" to "Українська", "vi" to "Tiếng Việt", "ml" to "മലയാളം", "esar" to "Español (Argentina)", "esmx" to "Español (México)")
+        "tr" to "Türkçe", "sr" to "Srpski", "ar" to "العربية", "he" to "עברית", "ur" to "اردو", "sv" to "Svenska", "bs" to "Bosanski", "kn" to "ಕನ್ನಡ", "mr" to "मराठी", "nb" to "Norsk bokmål", "ru" to "Русский", "uk" to "Українська", "vi" to "Tiếng Việt", "ml" to "മലയാളം", "ta" to "தமிழ்", "esar" to "Español (Argentina)", "esmx" to "Español (México)")
 
     /** Arabic, Hebrew and Urdu read right to left: the cards and settings are laid out that way round. */
     val rtl: Boolean get() = lang == "ar" || lang == "he" || lang == "ur"
@@ -32,7 +32,7 @@ object L {
         "bg" -> Locale("bg", "BG"); "sl" -> Locale("sl", "SI"); "ro" -> Locale("ro", "RO"); "eu" -> Locale("eu", "ES")
         "el" -> Locale("el", "GR"); "cs" -> Locale("cs", "CZ"); "fi" -> Locale("fi", "FI")
         "zhs" -> Locale("zh", "CN"); "sk" -> Locale("sk", "SK"); "da" -> Locale("da", "DK"); "hr" -> Locale("hr", "HR"); "ms" -> Locale("ms", "MY"); "hu" -> Locale("hu", "HU")
-        "tr" -> Locale("tr", "TR"); "sr" -> Locale("sr", "RS"); "sv" -> Locale("sv", "SE"); "bs" -> Locale("bs", "BA"); "kn" -> Locale("kn", "IN"); "mr" -> Locale("mr", "IN"); "nb" -> Locale("nb", "NO"); "ru" -> Locale("ru", "RU"); "uk" -> Locale("uk", "UA"); "vi" -> Locale("vi", "VN"); "ml" -> Locale("ml", "IN"); "esar" -> Locale("es", "AR"); "esmx" -> Locale("es", "MX")
+        "tr" -> Locale("tr", "TR"); "sr" -> Locale("sr", "RS"); "sv" -> Locale("sv", "SE"); "bs" -> Locale("bs", "BA"); "kn" -> Locale("kn", "IN"); "mr" -> Locale("mr", "IN"); "nb" -> Locale("nb", "NO"); "ru" -> Locale("ru", "RU"); "uk" -> Locale("uk", "UA"); "vi" -> Locale("vi", "VN"); "ml" -> Locale("ml", "IN"); "ta" -> Locale("ta", "IN"); "esar" -> Locale("es", "AR"); "esmx" -> Locale("es", "MX")
         "he" -> Locale("he", "IL"); "ur" -> Locale("ur", "PK")
         // (Arabic: the phone's own country when it's set to Arabic, Saudi Arabia otherwise)
         "ar" -> Locale.getDefault().takeIf { it.language == "ar" } ?: Locale("ar", "SA")
@@ -67,7 +67,7 @@ object L {
      */
     val voiceLocales: List<Locale> get() = if (lang == "zhhk") listOf(Locale("yue", "HK"), Locale.forLanguageTag("yue-Hant-HK"), Locale("zh", "HK")) else listOf(locale)
 
-    val mapboxLang: String get() = when (lang) { "zh", "zhhk" -> "zh-Hant"; "zhs" -> "zh-Hans"; "ur", "kn", "mr", "ml" -> "en"; "esar", "esmx" -> "es"; else -> lang }
+    val mapboxLang: String get() = when (lang) { "zh", "zhhk" -> "zh-Hant"; "zhs" -> "zh-Hans"; "ur", "kn", "mr", "ml", "ta" -> "en"; "esar", "esmx" -> "es"; else -> lang }
 
     /** The Google Play edition is called Horizon Maps, so it can be told apart from the GitHub one (Horizon Nav). */
     private val playName = BuildConfig.STORE == "play"
@@ -717,7 +717,7 @@ object L {
         val keys3 = listOf("th", "ja", "id")
         val keys4 = listOf("bg")
         val keys5 = listOf("sl")
-        val m = (keys + keys2 + keys3 + keys4 + keys5 + listOf("ro", "eu", "zh", "el", "cs", "fi", "zhs", "sk", "da", "hr", "ms", "hu", "tr", "sr", "ar", "he", "ur", "sv", "bs", "kn", "mr", "nb", "ru", "uk", "vi", "ml", "esar", "esmx", "zhhk")).associateWith { HashMap<String, String>() }
+        val m = (keys + keys2 + keys3 + keys4 + keys5 + listOf("ro", "eu", "zh", "el", "cs", "fi", "zhs", "sk", "da", "hr", "ms", "hu", "tr", "sr", "ar", "he", "ur", "sv", "bs", "kn", "mr", "nb", "ru", "uk", "vi", "ml", "ta", "esar", "esmx", "zhhk")).associateWith { HashMap<String, String>() }
         for ((en, tr) in rows) for ((i, k) in keys.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows2) for ((i, k) in keys2.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows3) for ((i, k) in keys3.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
@@ -751,9 +751,11 @@ object L {
         addOwn(m, "uk", I18nUk.rows())
         addOwn(m, "vi", I18nVi.rows())
         addOwn(m, "ml", I18nMl.rows())
+        addOwn(m, "ta", I18nTa.rows())
         addOwn(m, "esar", I18nEsAr.rows())
         addOwn(m, "esmx", I18nEsMx.rows())
         for (code in m.keys) addOwn(m, code, I18nMapDiagnostics.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nFavouriteSort.rows(code))
         m
     }
 
@@ -2475,6 +2477,24 @@ object L {
         "Plus is on: everything's ready, with no keys to set up." to listOf("Plus staat aan: alles is klaar, zonder sleutels in te stellen.", "Plus ist aktiv: alles ist bereit, ohne Schlüssel einzurichten.", "Plus est activé : tout est prêt, sans clé à configurer.", "Plus está activado: todo listo, sin claves que configurar."),
         "With the free version, download your country in the Offline pack step: it's what plans your routes." to listOf("Download met de gratis versie je land in de stap Offline pakket: daarmee worden je routes gepland.", "Lade in der kostenlosen Version im Schritt Offline-Paket dein Land herunter: damit werden deine Routen geplant.", "Avec la version gratuite, téléchargez votre pays à l’étape Pack hors ligne : c’est lui qui calcule vos itinéraires.", "Con la versión gratuita, descarga tu país en el paso Paquete sin conexión: es lo que planifica tus rutas."),
         "Plus is on: the map, search, routes and traffic use Horizon Maps' own accounts, so there are no keys to add." to listOf("Plus staat aan: kaart, zoeken, routes en verkeer gebruiken de eigen accounts van Horizon Maps, dus je hoeft geen sleutels toe te voegen.", "Plus ist aktiv: Karte, Suche, Routen und Verkehr nutzen die eigenen Konten von Horizon Maps, also musst du keine Schlüssel eintragen.", "Plus est activé : la carte, la recherche, les itinéraires et le trafic utilisent les comptes de Horizon Maps, aucune clé à ajouter.", "Plus está activado: el mapa, la búsqueda, las rutas y el tráfico usan las cuentas de Horizon Maps, así que no hay claves que añadir."),
+        "Weak signal: the route service couldn't be reached. Trying again by itself…" to listOf("Zwak signaal: de routedienst was niet bereikbaar. Probeert het zelf opnieuw…", "Schwaches Signal: Der Routendienst war nicht erreichbar. Neuer Versuch läuft automatisch…", "Signal faible : le service d'itinéraire est injoignable. Nouvel essai automatique…", "Señal débil: no se pudo contactar con el servicio de rutas. Se reintentará solo…"),
+        "Imported {0} into Your places, in the Google Maps group · already saved {1}" to listOf("{0} geïmporteerd in Uw plaatsen, in de groep Google Maps · al opgeslagen {1}", "{0} in Ihre Orte importiert, in der Gruppe Google Maps · bereits gespeichert {1}", "{0} importés dans Vos lieux, dans le groupe Google Maps · déjà enregistrés {1}", "{0} importados en Sus lugares, en el grupo Google Maps · ya guardados {1}"),
+        "Choose a Saved Places.json file from Google Takeout. The places go in a Google Maps group here" to listOf("Kies een bestand Saved Places.json uit Google Takeout. De plaatsen komen hier in een groep Google Maps", "Wählen Sie eine Datei Saved Places.json aus Google Takeout. Die Orte kommen hier in eine Gruppe Google Maps", "Choisissez un fichier Saved Places.json de Google Takeout. Les lieux vont ici dans un groupe Google Maps", "Elija un archivo Saved Places.json de Google Takeout. Los lugares van aquí en un grupo Google Maps"),
+        "Move to Your places" to listOf("Naar Uw plaatsen", "Zu Ihre Orte verschieben", "Déplacer vers Vos lieux", "Mover a Sus lugares"),
+        "{0} moved to Your places" to listOf("{0} verplaatst naar Uw plaatsen", "{0} zu Ihre Orte verschoben", "{0} déplacé vers Vos lieux", "{0} movido a Sus lugares"),
+        "Move every favourite to Your places" to listOf("Alle favorieten naar Uw plaatsen", "Alle Favoriten zu Ihre Orte verschieben", "Déplacer tous les favoris vers Vos lieux", "Mover todos los favoritos a Sus lugares"),
+        "In a Favourites group there, so they leave the row next to Home and Work" to listOf("Daar in een groep Favorieten, zodat ze uit de rij naast Thuis en Werk gaan", "Dort in einer Gruppe Favoriten, damit sie aus der Reihe neben Zuhause und Arbeit verschwinden", "Dans un groupe Favoris, pour qu'ils quittent la rangée à côté de Domicile et Travail", "En un grupo Favoritos allí, para que salgan de la fila junto a Casa y Trabajo"),
+        "Move all" to listOf("Alles verplaatsen", "Alle verschieben", "Tout déplacer", "Mover todo"),
+        "Use where I am now" to listOf("Gebruik waar ik nu ben", "Aktuellen Standort verwenden", "Utiliser ma position actuelle", "Usar donde estoy ahora"),
+        "Your location" to listOf("Uw locatie", "Ihr Standort", "Votre position", "Su ubicación"),
+        "or" to listOf("of", "oder", "ou", "o"),
+        "End camera" to listOf("Eindcamera", "Endkamera", "Caméra de fin", "Cámara final"),
+        "That spot isn't on a road open to cars: the route goes to the nearest public road, {0} away" to listOf("Die plek ligt niet aan een weg voor auto's: de route gaat naar de dichtstbijzijnde openbare weg, {0} verderop", "Diese Stelle liegt an keiner für Autos offenen Straße: Die Route führt zur nächsten öffentlichen Straße, {0} entfernt", "Cet endroit n'est pas sur une route ouverte aux voitures : l'itinéraire va à la route publique la plus proche, à {0}", "Ese punto no está en una vía abierta a coches: la ruta va a la carretera pública más cercana, a {0}"),
+        "Saved places on the map" to listOf("Opgeslagen plaatsen op de kaart", "Gespeicherte Orte auf der Karte", "Lieux enregistrés sur la carte", "Lugares guardados en el mapa"),
+        "Home, Work, favourites and starred places. Tap one to go there" to listOf("Thuis, Werk, favorieten en plaatsen met een ster. Tik erop om erheen te gaan", "Zuhause, Arbeit, Favoriten und markierte Orte. Antippen, um hinzufahren", "Domicile, Travail, favoris et lieux étoilés. Touchez-en un pour y aller", "Casa, Trabajo, favoritos y lugares con estrella. Toque uno para ir allí"),
+        "Saved places icons" to listOf("Pictogrammen opgeslagen plaatsen", "Symbole gespeicherter Orte", "Icônes des lieux enregistrés", "Iconos de lugares guardados"),
+        "Upcoming speed limits" to listOf("Komende snelheidslimieten", "Kommende Tempolimits", "Limitations à venir", "Próximos límites de velocidad"),
+        "The next limit on your route, as a sign on the map where it changes and a small one by your limit sign with how far it is, from about half a mile away" to listOf("De volgende limiet op uw route, als bord op de kaart waar hij verandert en klein naast uw limietbord met de afstand, vanaf ongeveer 800 m", "Das nächste Tempolimit auf Ihrer Route, als Schild auf der Karte, wo es wechselt, und klein neben Ihrem Schild mit der Entfernung, ab etwa 800 m", "La prochaine limitation sur votre trajet, en panneau sur la carte là où elle change et en petit à côté de votre panneau avec la distance, dès 800 m environ", "El siguiente límite de su ruta, como señal en el mapa donde cambia y en pequeño junto a su señal con la distancia, desde unos 800 m"),
         "The free version uses OpenStreetMap, with routes from your downloaded country pack. Horizon Maps Plus adds detailed 3D buildings and landmarks, satellite and live traffic, with no keys to set up." to listOf("De gratis versie gebruikt OpenStreetMap, met routes uit je gedownloade landpakket. Horizon Maps Plus voegt gedetailleerde 3D-gebouwen en bezienswaardigheden, satelliet en live verkeer toe, zonder sleutels in te stellen.", "Die kostenlose Version nutzt OpenStreetMap, mit Routen aus deinem heruntergeladenen Länderpaket. Horizon Maps Plus bringt detaillierte 3D-Gebäude und Wahrzeichen, Satellit und Live-Verkehr, ohne Schlüssel einzurichten.", "La version gratuite utilise OpenStreetMap, avec des itinéraires calculés depuis votre pack pays. Horizon Maps Plus ajoute des bâtiments et monuments 3D détaillés, le satellite et le trafic en direct, sans clé à configurer.", "La versión gratuita usa OpenStreetMap, con rutas de tu paquete de país descargado. Horizon Maps Plus añade edificios y monumentos 3D detallados, el satélite y el tráfico en directo, sin claves que configurar."),
         "In rain or snow" to listOf("Bij regen of sneeuw", "Bei Regen oder Schnee", "Par pluie ou neige", "Con lluvia o nieve"),
         "A greyer, softer daylight when it's raining or snowing where you are" to listOf("Grijzer, zachter daglicht als het regent of sneeuwt waar je bent", "Graueres, weicheres Tageslicht, wenn es bei dir regnet oder schneit", "Une lumière du jour plus grise et plus douce quand il pleut ou neige là où vous êtes", "Una luz de día más gris y suave cuando llueve o nieva donde estás"),
@@ -4242,6 +4262,24 @@ object L {
         "Plus is on: everything's ready, with no keys to set up." to listOf("Plus è attivo: è tutto pronto, senza chiavi da impostare.", "O Plus está ativo: está tudo pronto, sem chaves para configurar.", "Plus jest włączony: wszystko gotowe, bez kluczy do ustawiania."),
         "With the free version, download your country in the Offline pack step: it's what plans your routes." to listOf("Con la versione gratuita, scarica il tuo paese nel passaggio Pacchetto offline: è ciò che calcola i percorsi.", "Com a versão gratuita, transfira o seu país no passo Pacote offline: é ele que planeia as rotas.", "W wersji bezpłatnej pobierz swój kraj w kroku Pakiet offline: to on planuje trasy."),
         "Plus is on: the map, search, routes and traffic use Horizon Maps' own accounts, so there are no keys to add." to listOf("Plus è attivo: mappa, ricerca, percorsi e traffico usano gli account di Horizon Maps, quindi non servono chiavi.", "O Plus está ativo: o mapa, a pesquisa, as rotas e o trânsito usam as contas do Horizon Maps, por isso não há chaves a adicionar.", "Plus jest włączony: mapa, wyszukiwanie, trasy i ruch korzystają z kont Horizon Maps, więc nie trzeba dodawać kluczy."),
+        "Weak signal: the route service couldn't be reached. Trying again by itself…" to listOf("Segnale debole: il servizio percorsi non è raggiungibile. Riprova da solo…", "Sinal fraco: não foi possível contactar o serviço de rotas. A tentar de novo sozinho…", "Słaby sygnał: nie udało się połączyć z usługą tras. Ponowna próba automatycznie…"),
+        "Imported {0} into Your places, in the Google Maps group · already saved {1}" to listOf("{0} importati in I tuoi luoghi, nel gruppo Google Maps · già salvati {1}", "{0} importados para Os seus locais, no grupo Google Maps · já guardados {1}", "Zaimportowano {0} do Twoich miejsc, w grupie Google Maps · już zapisane {1}"),
+        "Choose a Saved Places.json file from Google Takeout. The places go in a Google Maps group here" to listOf("Scegli un file Saved Places.json da Google Takeout. I luoghi vanno qui in un gruppo Google Maps", "Escolha um ficheiro Saved Places.json do Google Takeout. Os locais ficam aqui num grupo Google Maps", "Wybierz plik Saved Places.json z Google Takeout. Miejsca trafią tutaj do grupy Google Maps"),
+        "Move to Your places" to listOf("Sposta in I tuoi luoghi", "Mover para Os seus locais", "Przenieś do Twoich miejsc"),
+        "{0} moved to Your places" to listOf("{0} spostato in I tuoi luoghi", "{0} movido para Os seus locais", "{0} przeniesiono do Twoich miejsc"),
+        "Move every favourite to Your places" to listOf("Sposta tutti i preferiti in I tuoi luoghi", "Mover todos os favoritos para Os seus locais", "Przenieś wszystkie ulubione do Twoich miejsc"),
+        "In a Favourites group there, so they leave the row next to Home and Work" to listOf("In un gruppo Preferiti, così escono dalla fila accanto a Casa e Lavoro", "Num grupo Favoritos, para saírem da fila ao lado de Casa e Trabalho", "Tam w grupie Ulubione, by zniknęły z rzędu obok Dom i Praca"),
+        "Move all" to listOf("Sposta tutto", "Mover tudo", "Przenieś wszystko"),
+        "Use where I am now" to listOf("Usa dove sono ora", "Usar onde estou agora", "Użyj miejsca, w którym jestem"),
+        "Your location" to listOf("La tua posizione", "A sua localização", "Twoja lokalizacja"),
+        "or" to listOf("oppure", "ou", "lub"),
+        "End camera" to listOf("Telecamera finale", "Câmara final", "Kamera końcowa"),
+        "That spot isn't on a road open to cars: the route goes to the nearest public road, {0} away" to listOf("Quel punto non è su una strada aperta alle auto: il percorso va alla strada pubblica più vicina, a {0}", "Esse ponto não fica numa estrada aberta a carros: o percurso vai até à estrada pública mais próxima, a {0}", "To miejsce nie leży przy drodze dla aut: trasa prowadzi do najbliższej drogi publicznej, {0} dalej"),
+        "Saved places on the map" to listOf("Luoghi salvati sulla mappa", "Locais guardados no mapa", "Zapisane miejsca na mapie"),
+        "Home, Work, favourites and starred places. Tap one to go there" to listOf("Casa, Lavoro, preferiti e luoghi con stella. Toccane uno per andarci", "Casa, Trabalho, favoritos e locais com estrela. Toque num para ir até lá", "Dom, Praca, ulubione i miejsca z gwiazdką. Dotknij, aby tam jechać"),
+        "Saved places icons" to listOf("Icone dei luoghi salvati", "Ícones dos locais guardados", "Ikony zapisanych miejsc"),
+        "Upcoming speed limits" to listOf("Prossimi limiti di velocità", "Próximos limites de velocidade", "Nadchodzące ograniczenia prędkości"),
+        "The next limit on your route, as a sign on the map where it changes and a small one by your limit sign with how far it is, from about half a mile away" to listOf("Il prossimo limite sul percorso, come cartello sulla mappa dove cambia e piccolo accanto al tuo cartello con la distanza, da circa 800 m", "O próximo limite no percurso, como sinal no mapa onde muda e em pequeno junto ao seu sinal com a distância, a partir de uns 800 m", "Następne ograniczenie na trasie, jako znak na mapie w miejscu zmiany i mały obok Twojego znaku z odległością, od ok. 800 m"),
         "The free version uses OpenStreetMap, with routes from your downloaded country pack. Horizon Maps Plus adds detailed 3D buildings and landmarks, satellite and live traffic, with no keys to set up." to listOf("La versione gratuita usa OpenStreetMap, con percorsi dal pacchetto del paese scaricato. Horizon Maps Plus aggiunge edifici e monumenti 3D dettagliati, satellite e traffico in tempo reale, senza chiavi da impostare.", "A versão gratuita usa o OpenStreetMap, com rotas do pacote do país transferido. O Horizon Maps Plus junta edifícios e monumentos 3D detalhados, o satélite e o trânsito em tempo real, sem chaves para configurar.", "Wersja bezpłatna korzysta z OpenStreetMap, z trasami z pobranego pakietu kraju. Horizon Maps Plus dodaje szczegółowe budynki i zabytki 3D, satelitę i ruch na żywo, bez kluczy do ustawiania."),
         "In rain or snow" to listOf("Con pioggia o neve", "Com chuva ou neve", "Przy deszczu lub śniegu"),
         "A greyer, softer daylight when it's raining or snowing where you are" to listOf("Una luce diurna più grigia e morbida quando piove o nevica dove sei", "Uma luz do dia mais cinzenta e suave quando chove ou neva onde está", "Bardziej szare, łagodniejsze światło dzienne, gdy u ciebie pada deszcz lub śnieg"),

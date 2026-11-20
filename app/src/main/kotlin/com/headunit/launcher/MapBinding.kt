@@ -40,7 +40,6 @@ import com.mapbox.maps.applyDefaultParams
 import com.mapbox.maps.toCameraOptions
 import com.mapbox.maps.toMapboxImage
 import com.mapbox.maps.extension.style.expressions.generated.Expression
-import com.mapbox.maps.extension.localization.localizeLabels
 import com.mapbox.maps.extension.style.layers.Layer
 import com.mapbox.maps.extension.style.layers.addLayer
 import com.mapbox.maps.extension.style.layers.addLayerBelow
@@ -336,7 +335,41 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** Applies the app's selected language to the loaded TomTom vector style's translated labels. */
     fun setTomTomLabelLanguage(locale: Locale) {
         if (wantedStyle?.contains("/assets/styles/") != true) return
-        try { style?.localizeLabels(locale) } catch (e: Throwable) { android.util.Log.w("MapBinding", "TomTom label language", e) }
+        style?.let { tomTomLabels(it, locale) }
+    }
+
+    /**
+     * TomTom's map in the app's language (GitHub #243, #278: still in Arabic in the UAE). Mapbox's own label translation only
+     * touches Mapbox's map data, so it did nothing to TomTom's. TomTom's tiles carry each name as "name" (the local language)
+     * and "name_<language>" ("name_en", "name_zh-Hant"), so every label that shows "name" is pointed at the app's language
+     * first, then the local name where there's no translation. The original text is remembered, so changing language again works.
+     */
+    private val ttFieldOrig = HashMap<String, String>()
+    private fun tomTomLabels(st: Style, locale: Locale) {
+        try {
+            val lang = locale.language.ifBlank { "en" }
+            val tag = locale.toLanguageTag()
+            val script = locale.script
+            val keys = LinkedHashSet<String>().apply {
+                if (script.isNotBlank()) add("name_$lang-$script")
+                if (tag.contains('-') && tag != lang) add("name_$tag")
+                if (lang == "zh") add(if (locale.country in setOf("TW", "HK", "MO")) "name_zh-Hant" else "name_zh-Hans")
+                add("name_$lang")
+                if (lang == "nb" || lang == "nn") add("name_no")
+            }
+            val coalesce = "[\"coalesce\"," + keys.joinToString(",") { "[\"get\",\"$it\"]" } + ",[\"get\",\"name\"]]"
+            for (info in st.styleLayers) {
+                if (info.type != "symbol") continue
+                val id = info.id
+                if (id.startsWith("dl-")) continue
+                val orig = ttFieldOrig[id] ?: try { st.getStyleLayerProperty(id, "text-field").value.toJson() } catch (e: Throwable) { null }?.also { ttFieldOrig[id] = it } ?: continue
+                if (!orig.contains("\"name\"")) continue
+                val json = orig.replace(Regex("\\[\\s*\"get\"\\s*,\\s*\"name\"\\s*\\]"), coalesce)
+                if (json == orig) continue
+                val v = com.mapbox.bindgen.Value.fromJson(json).value ?: continue
+                st.setStyleLayerProperty(id, "text-field", v)
+            }
+        } catch (e: Throwable) { android.util.Log.w("MapBinding", "TomTom label language", e) }
     }
 
     /** Asks for a map style (a Mapbox style address such as [Style.STANDARD]). Loading the same one again does nothing. */
@@ -746,7 +779,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             mbMap.loadStyle(if (standard) wrapperJson(url) else url) { st ->
                 if (token != styleToken) return@loadStyle
                 style = st
-                if (url.contains("/assets/styles/")) try { st.localizeLabels(L.locale) } catch (e: Throwable) { android.util.Log.w("MapBinding", "TomTom label language", e) }
+                if (url.contains("/assets/styles/")) { ttFieldOrig.clear(); tomTomLabels(st, L.locale) }
                 try { install(st) } catch (e: Throwable) { android.util.Log.w("MapBinding", "install failed", e) }
                 onStyleLoaded?.invoke()
             }
@@ -827,11 +860,17 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
      * Shows [list] (each place and its name) as stars, with the name under each; [small] (while navigating) shows smaller stars
      * with no names, so they don't crowd the route. An empty list hides them. Only sent again when something changed.
      */
-    fun setFavourites(list: List<Pair<LL, String>>, small: Boolean) {
-        if (list == favs && small == favsSmall) return
-        favs = list; favsSmall = small
+    /**
+     * Your saved places on the map: [list] is each place, its name and its kind ("home", "work" or "fav", a star), [scale] the
+     * size set in Settings › On the map › Saved places icons (1 = normal). Smaller and without names while navigating ([small]).
+     */
+    fun setFavourites(list: List<Pair<LL, String>>, small: Boolean, kinds: List<String> = emptyList(), scale: Float = 1f) {
+        if (list == favs && small == favsSmall && kinds == favKinds && scale == favScale) return
+        favs = list; favsSmall = small; favKinds = kinds; favScale = scale
         main0.post { pushFavs() }
     }
+    private var favKinds: List<String> = emptyList()
+    private var favScale = 1f
 
     private fun pushFavs() {
         val st = style ?: return
@@ -839,8 +878,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             val fs = ArrayList<Feature>()
             for ((i, f) in favs.withIndex()) {
                 val (pos, name) = f
-                val id = "dl-fav-" + (if (favsSmall) "s" else name.hashCode().toString()) + "-" + (if (nightStyle) "n" else "d")
-                if (favImgs.add(id)) addImg(st, id, favBitmap(if (favsSmall) "" else name))
+                val kind = favKinds.getOrNull(i) ?: "fav"
+                val id = "dl-fav-" + kind + "-" + (if (favsSmall) "s" else name.hashCode().toString()) + "-" + (if (nightStyle) "n" else "d") + "-" + Math.round(favScale * 100)
+                if (favImgs.add(id)) addImg(st, id, favBitmap(if (favsSmall) "" else name, kind))
                 fs += Feature.fromGeometry(Point.fromLngLat(pos.lon, pos.lat)).also { it.addStringProperty("img", id); it.addNumberProperty("i", i) }
             }
             src("dl-favs")?.featureCollection(FeatureCollection.fromFeatures(fs))
@@ -848,9 +888,10 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     }
 
     /** A yellow star in a white-edged circle, with [name] in a small tag under it (none when blank). The star is the middle. */
-    private fun favBitmap(name: String): Bitmap {
+    private fun favBitmap(name: String, kind: String = "fav"): Bitmap {
         val dm = mapView.resources.displayMetrics
-        val d = dm.density
+        // (Settings › On the map › Saved places icons: everything in the picture grows or shrinks together)
+        val d = dm.density * favScale.coerceIn(0.5f, 2.5f)
         val r = (if (name.isEmpty()) 9f else 12f) * d
         val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12f * d; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = 0xFF3B2A00.toInt() }
         val label = if (name.length > 22) name.take(21) + "…" else name
@@ -865,6 +906,31 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         paint.color = 0x55000000; cv.drawCircle(cx, cy + 1.5f * d, r + 1.5f * d, paint)
         paint.color = 0xFFFFFFFF.toInt(); cv.drawCircle(cx, cy, r + 1.5f * d, paint)
+        // Home and Work: a house on blue and a briefcase on amber, like their tiles under the search bar, with a white name tag
+        if (kind == "home" || kind == "work") {
+            val home = kind == "home"
+            paint.color = if (home) 0xFF3D7BF0.toInt() else 0xFFE39B1B.toInt(); cv.drawCircle(cx, cy, r, paint)
+            paint.color = 0xFFFFFFFF.toInt()
+            val k = r * 0.5f
+            if (home) {
+                cv.drawPath(Path().apply { moveTo(cx, cy - k * 1.05f); lineTo(cx + k * 1.05f, cy - k * 0.05f); lineTo(cx - k * 1.05f, cy - k * 0.05f); close() }, paint)
+                cv.drawRect(cx - k * 0.72f, cy - k * 0.1f, cx + k * 0.72f, cy + k * 0.85f, paint)
+                paint.color = if (home) 0xFF3D7BF0.toInt() else 0xFFE39B1B.toInt()
+                cv.drawRect(cx - k * 0.2f, cy + k * 0.25f, cx + k * 0.2f, cy + k * 0.85f, paint)
+            } else {
+                cv.drawRoundRect(RectF(cx - k * 0.95f, cy - k * 0.45f, cx + k * 0.95f, cy + k * 0.8f), k * 0.18f, k * 0.18f, paint)
+                val hp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); style = Paint.Style.STROKE; strokeWidth = k * 0.2f }
+                cv.drawRoundRect(RectF(cx - k * 0.4f, cy - k * 0.85f, cx + k * 0.4f, cy - k * 0.35f), k * 0.12f, k * 0.12f, hp)
+            }
+            if (label.isNotEmpty()) {
+                val top = cy + r + 3 * d
+                val rect = RectF(cx - tw / 2 - 7 * d, top, cx + tw / 2 + 7 * d, top + tagH)
+                paint.color = 0xF2FFFFFF.toInt(); cv.drawRoundRect(rect, 6 * d, 6 * d, paint)
+                text.color = if (home) 0xFF0B2A63.toInt() else 0xFF5A3A00.toInt()
+                cv.drawText(label, cx - tw / 2, top + tagH / 2 - (text.ascent() + text.descent()) / 2, text)
+            }
+            return b
+        }
         paint.color = 0xFFFFC83D.toInt(); cv.drawCircle(cx, cy, r, paint)
         // the five-pointed star
         val star = Path()
@@ -891,7 +957,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         if (list.isEmpty()) return null
         // (the stars only show from zoom 10)
         if ((try { mbMap.cameraState.zoom } catch (e: Throwable) { 15.0 }) < 10.0) return null
-        val reach = 26f * mapView.resources.displayMetrics.density
+        val reach = 26f * mapView.resources.displayMetrics.density * favScale.coerceIn(0.8f, 2.5f)
         var best: Int? = null
         var bd = reach * reach
         for ((i, f) in list.withIndex()) {
@@ -2684,10 +2750,13 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // a lorry's height, weight and width limits ahead: a road sign with the limit, red when the lorry doesn't fit
         limImgs.clear()
         addS(st, GeoJsonSource.Builder("dl-lim").featureCollection(empty()).build())
+        // (always shown, and the map's own road names and labels keep out of their way instead of being written over them; the
+        // speed limit sign has its own size, the lorry signs as before)
         addL(st, SymbolLayer("dl-lim", "dl-lim")
-            .iconImage(Expression.get("img")).iconAllowOverlap(true).iconIgnorePlacement(true)
+            .iconImage(Expression.get("img")).iconAllowOverlap(true).iconIgnorePlacement(false)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
-            .iconSize(zoomed(1.0, 8 to 0.3, 12 to 0.4, 15 to 0.6, 18 to 0.8)))
+            .iconSize(Expression.switchCase(Expression.eq(Expression.get("k"), Expression.literal(0)),
+                zoomed(1.0, 10 to 0.75, 14 to 0.9, 17 to 1.0), zoomed(1.0, 8 to 0.3, 12 to 0.4, 15 to 0.6, 18 to 0.8))))
         pushLimits()
         addS(st, GeoJsonSource.Builder("dl-cams").featureCollection(empty()).build())
         // fork FR : sous l'icône des radars à sens unique, une flèche dans le sens contrôlé
@@ -3124,12 +3193,22 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
 
     /** A lorry's limits on the map: where, the sign's text ("4.1m", "7.5t"), and whether the lorry is over it (red). */
     @Volatile private var limits: List<Triple<LL, String, Boolean>> = emptyList()
+    @Volatile private var speedChange: Pair<LL, String>? = null
     /** The sign pictures already added to the current map style (they go when the style changes). */
     private val limImgs = HashSet<String>()
 
     fun setLimits(list: List<Triple<LL, String, Boolean>>) {
         main0.post { if (list != limits) { limits = list; pushLimits() } }
     }
+
+    /** The next posted speed-limit change, pinned to its position along the route. */
+    fun setSpeedChange(pos: LL?, text: String?, board: String = "round") {
+        val next = if (pos != null && !text.isNullOrBlank()) pos to text else null
+        main0.post { if (next != speedChange || board != limitBoard) { speedChange = next; limitBoard = board; pushLimits() } }
+    }
+    /** How speed limit signs look here: "round" (the red ring), "us" or "ca" (the white board), like the main sign. */
+    @Volatile private var limitBoard = "round"
+
 
     private fun pushLimits() {
         val st = style ?: return
@@ -3139,10 +3218,69 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             for ((p, text, over) in limits.take(60)) {
                 val id = "dl-lim-" + (if (over) "r-" else "w-") + text
                 if (limImgs.add(id)) addImg(st, id, limitBitmap(text, over))
-                feats += Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)).also { it.addStringProperty("img", id) }
+                feats += Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)).also { it.addStringProperty("img", id); it.addNumberProperty("k", 1) }
+            }
+            // the next speed limit change on the route: the main sign's own look, larger, with a white halo (it was too small,
+            // and covered by the road names)
+            speedChange?.let { (p, text) ->
+                val id = "dl-lim-sp-$limitBoard-$text"
+                if (limImgs.add(id)) addImg(st, id, routeLimitBitmap(text, limitBoard))
+                feats += Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)).also { it.addStringProperty("img", id); it.addNumberProperty("k", 0) }
             }
             s.featureCollection(FeatureCollection.fromFeatures(feats))
         } catch (e: Throwable) { }
+    }
+
+    /**
+     * The next speed limit on the route, drawn like the main sign: the domed roundel with its shaded red ring, or the US / Canada
+     * board, on a white halo so it stands out from the map. Sized for the screen's density (the old one was a fixed 104 pixels,
+     * tiny on a sharp screen).
+     */
+    private fun routeLimitBitmap(text: String, board: String): Bitmap {
+        val d = mapView.resources.displayMetrics.density
+        val tf = if (android.os.Build.VERSION.SDK_INT >= 28) android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, 900, false) else android.graphics.Typeface.DEFAULT_BOLD
+        val n0 = text.toIntOrNull() ?: 0
+        fun p(col: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = col }
+        if (board == "us" || board == "ca") {
+            val w = (44f * d).toInt(); val h = (54f * d).toInt(); val m = 3f * d
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val c = Canvas(bmp)
+            c.drawRoundRect(RectF(m, m + 1.5f * d, w - m, h - m + 1.5f * d), 7f * d, 7f * d, p(0x55000000))
+            c.drawRoundRect(RectF(0f, 0f, w.toFloat(), h - 1.5f * d), 8f * d, 8f * d, p(0xFFFFFFFF.toInt()))
+            c.drawRoundRect(RectF(m, m, w - m, h - m - 1.5f * d), 6f * d, 6f * d, p(0xFF151515.toInt()))
+            c.drawRoundRect(RectF(m + 2f * d, m + 2f * d, w - m - 2f * d, h - m - 3.5f * d), 4.5f * d, 4.5f * d, p(0xFFFFFFFF.toInt()))
+            val small = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF151515.toInt(); textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD; textSize = 6.2f * d }
+            val big = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF111111.toInt(); textAlign = Paint.Align.CENTER; typeface = tf; textSize = (if (n0 >= 100) 15f else 19f) * d }
+            if (board == "ca") c.drawText("MAXIMUM", w / 2f, 15f * d, small)
+            else { c.drawText("SPEED", w / 2f, 13.5f * d, small); c.drawText("LIMIT", w / 2f, 20.5f * d, small) }
+            c.drawText(text, w / 2f, 42f * d, big)
+            return bmp
+        }
+        val size = (54f * d).toInt()
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val cx = size / 2f; val cy = size / 2f - 1f * d
+        val halo = size / 2f - 1.5f * d
+        val r = halo - 3f * d
+        c.drawCircle(cx, cy + 1.5f * d, halo, p(0x55000000))
+        c.drawCircle(cx, cy, halo, p(0xFFFFFFFF.toInt()))
+        c.drawCircle(cx, cy, r, p(0xFF7A0A14.toInt()))
+        c.drawCircle(cx, cy, r * 0.965f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = android.graphics.LinearGradient(0f, cy - r, 0f, cy + r, intArrayOf(0xFFFF5A5F.toInt(), 0xFFE0142B.toInt(), 0xFFB30C1F.toInt()), null, android.graphics.Shader.TileMode.CLAMP)
+        })
+        val face = r * 0.74f
+        c.drawCircle(cx, cy, face + r * 0.03f, p(0x33000000))
+        c.drawCircle(cx, cy, face, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = android.graphics.RadialGradient(cx - face * 0.25f, cy - face * 0.35f, face * 1.5f,
+                intArrayOf(0xFFFFFFFF.toInt(), 0xFFF1F1F3.toInt(), 0xFFE1E2E6.toInt()), null, android.graphics.Shader.TileMode.CLAMP)
+        })
+        val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF111111.toInt(); textAlign = Paint.Align.CENTER; typeface = tf; letterSpacing = -0.03f
+            textSize = 2f * r * (if (n0 >= 100) 0.31f else 0.39f)
+        }
+        val b = android.graphics.Rect(); tp.getTextBounds(text, 0, text.length, b)
+        c.drawText(text, cx, cy - (b.top + b.bottom) / 2f, tp)
+        return bmp
     }
 
     /** A round limit sign: white with a red ring and the limit in black, or filled red when the lorry is over the limit. */
