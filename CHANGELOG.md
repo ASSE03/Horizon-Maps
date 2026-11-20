@@ -4,7 +4,35 @@ Everything that has changed in Horizon Nav, newest first. Each version lists wha
 
 ## Unreleased
 
+### Improved
+- TomTom map labels: use the app-selected language for translated place and road names, with the original name as fallback (thanks to the tester who asked for it).
+
+### Added
+- Map settings: add an optional HD lane data diagnostic message, off by default and only shown in Demo mode; lane guidance itself is unaffected (thanks to the tester who asked for it).
+
+### Fixed
+- Malayalam map settings: add the suggested Malayalam labels for font names and map providers, and refine the translations for The map and HD roads (thanks to the tester who asked for it).
+
 ### New
+- Google Maps favourites import: import individual saved places from a Google Takeout Saved Places.json file, preserving names and coordinates and skipping duplicates; favourites are no longer limited to 20 (thanks to the tester who asked for it)
+
+### Fixed
+- Android Auto alternative routes: fix the missing Compose layout import so the release build compiles (thanks to the tester who asked for it)
+
+### Improved
+- Android Auto alternative routes: keep the route text at a readable size on short screens, scrolling the list when space is limited instead of shrinking the whole panel (thanks to the tester who asked for it)
+
+### Fixed
+- Malayalam: translate the Android Auto setting label as “അൻഡ്രോയിഡ് ഓട്ടോ” (thanks to the tester who asked for it)
+
+### New
+- Favourites on the map: your saved places show as yellow stars with their names (smaller, without names, while navigating). Tap one for its card, with Go. Switch it off in Settings › On the map › Favourites on the map (thanks to Xundey)
+- Name a favourite as you save it: after tapping the star on a place's card, a box filled in with its name lets you call it something of your own straight away (thanks to Xundey)
+- Weather from the Met Office: in the UK, a free Met Office key (Settings › Keys & accounts › Weather) gives the current weather for rain on the map, the light and weather advice, usually more accurately than before. If it fails, the app carries on with Open-Meteo (thanks to yurividal)
+- Settings › Weather: everything the weather changes is now in one place, with rain, snow and fog on the map each switched on or off separately (thanks to yurividal)
+- Android Auto: Sound button on the map: a switch in Settings › Android Auto (and the car's own settings) to leave the sound button off the map when not navigating, for more room (thanks to yurividal)
+- Vietnamese: the whole app in Tiếng Việt, on the phone, head unit and Android Auto, with spoken directions ("Sau 200 mét, rẽ trái", "tại vòng xuyến, đi theo lối ra thứ 2"). Picked by itself on a phone set to Vietnamese, or in Settings › Sound & voice › Language (thanks to hi3utr)
+- Malayalam: the whole app in മലയാളം, on the phone, head unit and Android Auto, with spoken directions. Picked by itself on a phone set to Malayalam, or in Settings › Sound & voice › Language. Needs a Malayalam voice on the phone for the spoken directions (thanks to bijindas)
 - Map brightness in Map options: a slider under Day and Night sets how bright the map is, for whichever of day and night is showing. Set each once and the brightness changes with the time of day. Day brightness is new; night brightness is the one in Settings › Light & 3D (thanks to mjdshibly)
 - Android Auto: Search bar and places on the map: a switch in Settings › Android Auto (and in the car's own settings) to leave the search bar, Home and Work and the shortcut buttons off the map when you're not navigating. For cars with a rotary knob and no touchscreen, which can't reach them: the map gets the whole screen, and Places (★) in Android Auto's own buttons still has Search, Home, Work and your saved places (thanks to wass0035)
 - Español (México): Spanish for Mexico and most of Latin America, with tú ("gira a la derecha", "toma la salida"), glorieta, gasolinera and tráfico, and a Mexican voice. Picked by itself on phones set to Spanish in Mexico, Central and South America (Argentina and Uruguay keep their own) and the US, or in Settings › Sound & voice › Language (thanks to the tester who asked for it)
@@ -65,6 +93,10 @@ Everything that has changed in Horizon Nav, newest first. Each version lists wha
 - Reorder your shortcuts: Settings › Places & trips › Shortcuts under the search bar now has a "Your order" list with up and down arrows to move each one
 
 ### Improved
+- Android Auto: Overall size goes much further: the size was held at the most that kept the screen on the roomy side of every layout change, and the ones that only change the spacing held it to about 112-134% on most cars, whatever was set. The layout is now picked from the screen at 100%, the spacing grows smoothly, and the size is only held back where the cards would no longer fit (thanks to magnazan)
+- Android Auto: the "Then…" line wraps: a long street name on the next-turn line now goes onto a second line before it's cut short (thanks to fjunakovic)
+- Map names in the app's language: place and road names on the map follow the app's language where Mapbox has them, instead of the phone's, so with the app in English the map no longer shows Arabic names in the UAE (thanks to zaheerhakim)
+- Traffic incidents in your language: TomTom's incident descriptions now come in the app's language where TomTom has it, and Mapbox's (only ever in English) are named in your language as an incident or police, so "Police directing traffic" no longer shows in English in Polish (thanks to desko1973)
 - One arrow size: the arrow had two size sliders, one in Your arrow & route line and one in Screen & sizes, and they multiplied each other, so turning both up made the arrow huge. There's now just Arrow size; if you'd changed both, they're combined so your arrow stays the size it was
 - Overcast light is one choice: Off, In rain or snow, or Always, in place of the Overcast light and Weather light switches, which overlapped (Overcast on made Weather light do nothing)
 - Map source only offers what works: the free version always uses OpenStreetMap, so the choice is gone there; Plus offers Mapbox and OpenStreetMap; and TomTom's map shows once a TomTom key is entered
@@ -147,6 +179,12 @@ Everything that has changed in Horizon Nav, newest first. Each version lists wha
 - Map preview in Settings on a phone: on the map pages (Map style, Light & 3D, On the map, Your arrow) the live preview now stays at the top while you scroll the settings, as it does in landscape, so you can see each change as you make it
 
 ### Fixed
+- False freeze reports: when a phone went to sleep or Android paused the app in the background, the problem report could record a "freeze" that never happened. Those are now ignored, so a freeze in the report is a real one (thanks to Dotancom)
+- Android Auto: Recent places running under the sound button: the suggestion card and Recent rows now fit the room actually left above the bottom-left buttons (thanks to yurividal)
+- Music stays quiet after an alert: the beep and the spoken alert each lowered the music and gave it back separately, and some cars through Android Auto kept it lowered. They now share one hold, given back once when both are done, and never held for more than 90 seconds. The problem report also shows when the music was lowered and given back (thanks to ajg0001)
+- Android Auto: stars, street lamps and headlights by day: with a car (or Android Auto) that keeps the screen dark all day, they now wait for sunset where you are, as on the phone (thanks to bijindas)
+- Android Auto: turns missing from the car's own displays: the turn arrow sent to the dashboard and head-up display is back to the plain arrow for each kind of turn, as the picture sent for a few versions made the turn disappear on VW's display (thanks to desko1973)
+- Android Auto: other route cards too small: the cards on other routes ("3 min faster") came out about a third of their size on the car screen and couldn't be read; they're now the same size as on the phone (thanks to desko1973)
 - Search with Mapbox: Keys & accounts › Use now covers search as it says, so Mapbox there searches with Mapbox too. The separate Search with setting, which could disagree with it, is gone
 - Android Auto sizes above 150%: raising Overall size made the app think the car screen was smaller, so it switched to the cramped small-screen layouts (squashed cards, missing labels, a smaller speedometer) and kept more and more room for Android Auto's own buttons. The layout is now chosen from the screen's real size, Android Auto's buttons get the same room at any size, and Overall size goes only as far as that layout still fits; the setting says how far that is ("Up to 160% fits this car's screen"). Text that can't fit is cut off neatly, and the stop number badge grows with Text size (thanks to magnazan, for the detailed report)
 - Faded lane arrows: in the big lane picture the faded arrows (lanes not to use) had brighter patches where their lines joined and where two arrows share a stem. Each lane's arrows are now drawn as one shape, so the faded ones are evenly faded (thanks to mjdshibly)

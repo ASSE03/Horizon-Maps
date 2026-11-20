@@ -142,7 +142,7 @@ internal object Sky {
      * The haze towards the horizon to match the weather (Open-Meteo code): a light grey haze when it's overcast, thicker in rain or
      * snow, thick in fog. Clear weather (or null) leaves Mapbox's own sky, which already glows at dawn and dusk.
      */
-    fun atmosphere(st: Style, code: Int?, night: Boolean, satellite: Boolean = false) {
+    fun atmosphere(st: Style, code: Int?, night: Boolean, sunUp: Boolean = false, satellite: Boolean = false) {
         try {
             // fork FR : en vue satellite, le brouillard recouvrait les photos et les routes (seuls les noms restaient visibles)
             val c = if (satellite) -1 else code ?: -1
@@ -152,6 +152,14 @@ internal object Sky {
                 3 -> 1
                 else -> 0
             }
+            // the night look by day (Always night, or a car that's dark all day): Mapbox's own night sky has stars, so a plain dark
+            // sky stands in, with none (#225)
+            if (kind == 0 && night && sunUp) {
+                st.setAtmosphere(com.mapbox.maps.extension.style.atmosphere.generated.atmosphere {
+                    color("#2A2F3D"); highColor("#1C2131"); horizonBlend(0.15); spaceColor("#0B0E17"); starIntensity(0.0)
+                })
+                return
+            }
             if (kind == 0) { try { st.removeAtmosphere() } catch (e: Throwable) { }; return }
             val col = if (night) "#2A2F3D" else when (kind) { 3 -> "#D3D6DB"; 2 -> "#C2C7CF"; else -> "#CDD3DB" }
             val high = if (night) "#1C2131" else when (kind) { 3 -> "#C9CDD3"; 2 -> "#A9B1BD"; else -> "#B9C4D2" }
@@ -159,7 +167,7 @@ internal object Sky {
             val rg = when (kind) { 3 -> listOf(1.0, 6.0); 2 -> listOf(1.2, 7.0); else -> listOf(1.5, 10.0) }
             st.setAtmosphere(com.mapbox.maps.extension.style.atmosphere.generated.atmosphere {
                 color(col); highColor(high); horizonBlend(if (kind == 3) 0.3 else 0.15); range(rg)
-                spaceColor(if (night) "#0B0E17" else high); starIntensity(if (night && kind < 2) 0.15 else 0.0)
+                spaceColor(if (night) "#0B0E17" else high); starIntensity(if (night && kind < 2 && !sunUp) 0.15 else 0.0)
             })
         } catch (e: Throwable) { android.util.Log.w("MapExtras", "sky: ${e.message}") }
     }

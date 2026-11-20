@@ -5,6 +5,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Section Météo dans les réglages : toutes les options météo réunies, avec la pluie, la neige et le brouillard sur la carte réglables séparément.
+- Météo du Met Office (Royaume-Uni) avec votre propre clé.
+- Importer vos lieux enregistrés de Google Maps : Réglages › Favoris › Importer depuis Google Maps (fichier Saved Places.json de Google Takeout).
+- Favoris sur la carte : vos lieux enregistrés en étoiles (désactivable), et un nom à donner en les enregistrant.
 - Luminosité de la carte : un curseur dans les réglages.
 - Android Auto : un interrupteur pour masquer les commandes de la carte ; la disposition suit la vraie taille de l'écran de la voiture.
 - Android Auto : fiche d'un lieu, rangée des lieux enregistrés, carte de suggestion, prix dans « Ajouter un arrêt », zones et météo, parkings et aires, grand panneau de limitation.
@@ -122,6 +126,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Android Auto : les récents ne passent plus sous le bouton du son, qui peut être masqué ; autres itinéraires mieux présentés.
+- Carte TomTom : noms en français.
+- Incidents Mapbox : jamais en anglais (« Police » ou « Incident »).
+- Détection de blocage : plus de fausse alerte quand Android a mis l'appli en pause.
 - Flèche de rond-point : elle part de la vraie sortie (Mapbox donne maintenant chaque sortie).
 - Flèches de direction : elles montrent les vraies routes du carrefour ; la barre de progression n'apparaît qu'une fois en train de se remplir.
 - Carte de direction : plus de bandeau bleu « SORTIE » ; flèches des voies estompées de façon régulière.

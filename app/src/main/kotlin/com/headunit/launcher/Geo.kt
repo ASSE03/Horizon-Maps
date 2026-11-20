@@ -1,5 +1,7 @@
 package com.headunit.launcher
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -622,7 +624,14 @@ object TomTomRest {
     }
 
     fun incidents(key: String, minLon: Double, minLat: Double, maxLon: Double, maxLat: Double): List<Incident> {
-        val url0 = "$API/traffic/incidents/details?apiVersion=2&timeValidity=present&bbox=$minLon,$minLat,$maxLon,$maxLat"
+        // the incident's words ("Police directing traffic") in the app's language where TomTom has it, English otherwise (desko1973,
+        // #240: they came in English in Polish). Only languages TomTom's traffic service lists, as an unknown one could fail the request
+        val ttLang = when (com.headunit.launcher.L.lang) {
+            "ar" -> "ar"; "cs" -> "cs-CZ"; "da" -> "da-DK"; "de" -> "de-DE"; "el" -> "el-GR"; "es", "esar", "esmx" -> "es-ES"; "fi" -> "fi-FI"
+            "fr" -> "fr-FR"; "he" -> "he-IL"; "hu" -> "hu-HU"; "id" -> "id-ID"; "it" -> "it-IT"; "nb" -> "nb-NO"; "nl" -> "nl-NL"; "pl" -> "pl-PL"
+            "pt" -> "pt-PT"; "ro" -> "ro-RO"; "ru" -> "ru-RU"; "sk" -> "sk-SK"; "sv" -> "sv-SE"; "tr" -> "tr-TR"; else -> "en-GB"
+        }
+        val url0 = "$API/traffic/incidents/details?apiVersion=2&timeValidity=present&language=$ttLang&bbox=$minLon,$minLat,$maxLon,$maxLat"
         // (Horizon Maps Plus: through the key server, which adds the real key)
         val via = if (key == com.headunit.launcher.KeyServer.TT) com.headunit.launcher.KeyServer.tomtomVia("$url0&key=$key") else null
         val c = URL(via?.first ?: url0).also { com.headunit.launcher.Net.check() }.openConnection() as HttpURLConnection
@@ -786,7 +795,22 @@ object TomTomRest {
 object Weather {
     data class Now(val tempC: Double, val code: Int)
 
-    fun fetch(p: LL): Now? = try {
+    /** The current weather where you are, one copy for the phone and Android Auto (see NavEngine.weather). */
+    var shared by androidx.compose.runtime.mutableStateOf<Now?>(null)
+    /** When it was last asked for, and with which Met Office key ("" = Open-Meteo). */
+    @Volatile var sharedAt = 0L
+    @Volatile var sharedKey = ""
+
+    /** Current weather: the Met Office when a key is set (Settings > Keys), Open-Meteo otherwise or if that fails. */
+    fun fetch(p: LL, metOfficeKey: String = ""): Now? {
+        if (metOfficeKey.isNotBlank()) try {
+            val m = MetOffice.now(p, metOfficeKey)
+            return Now(m.tempC, m.wmo)
+        } catch (e: Exception) { /* logged and shown in Settings; Open-Meteo below */ }
+        return openMeteo(p)
+    }
+
+    private fun openMeteo(p: LL): Now? = try {
         // the weather code alone often said "cloudy" while it was raining (it's the hour's summary): the rain and snow actually
         // falling now, and in this quarter hour, are asked for too, and rain or snow is shown whenever any is coming down
         val url = "https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}" +

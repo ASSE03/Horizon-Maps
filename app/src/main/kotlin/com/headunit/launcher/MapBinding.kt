@@ -5,6 +5,7 @@ import androidx.compose.runtime.setValue
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import java.util.Locale
 import android.content.Context
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -39,6 +40,7 @@ import com.mapbox.maps.applyDefaultParams
 import com.mapbox.maps.toCameraOptions
 import com.mapbox.maps.toMapboxImage
 import com.mapbox.maps.extension.style.expressions.generated.Expression
+import com.mapbox.maps.extension.localization.localizeLabels
 import com.mapbox.maps.extension.style.layers.Layer
 import com.mapbox.maps.extension.style.layers.addLayer
 import com.mapbox.maps.extension.style.layers.addLayerBelow
@@ -329,6 +331,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         MapboxOptions.accessToken = want
         // the token changed: load the style again with it
         if (t.isNotEmpty()) { loadedStyle = null; wantedStyle?.let { loadStyle(it) } }
+    }
+
+    /** Applies the app's selected language to the loaded TomTom vector style's translated labels. */
+    fun setTomTomLabelLanguage(locale: Locale) {
+        if (wantedStyle?.contains("/assets/styles/") != true) return
+        try { style?.localizeLabels(locale) } catch (e: Throwable) { android.util.Log.w("MapBinding", "TomTom label language", e) }
     }
 
     /** Asks for a map style (a Mapbox style address such as [Style.STANDARD]). Loading the same one again does nothing. */
@@ -738,6 +746,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             mbMap.loadStyle(if (standard) wrapperJson(url) else url) { st ->
                 if (token != styleToken) return@loadStyle
                 style = st
+                if (url.contains("/assets/styles/")) try { st.localizeLabels(L.locale) } catch (e: Throwable) { android.util.Log.w("MapBinding", "TomTom label language", e) }
                 try { install(st) } catch (e: Throwable) { android.util.Log.w("MapBinding", "install failed", e) }
                 onStyleLoaded?.invoke()
             }
@@ -805,6 +814,93 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             pendingQueries.remove(c)
             if (!finished) { try { c.cancel() } catch (e: Throwable) { }; finish(null) }
         }, timeoutMs)
+    }
+
+    // ---- your favourites as stars on the map (Settings > On the map > Favourites on the map; Xundey, #249) ----
+    @Volatile private var favs: List<Pair<LL, String>> = emptyList()
+    @Volatile private var favsSmall = false
+    private val favImgs = HashSet<String>()
+    /** A star tapped: which one, by its place in the list given to [setFavourites]. */
+    var onFavTap: ((Int) -> Unit)? = null
+
+    /**
+     * Shows [list] (each place and its name) as stars, with the name under each; [small] (while navigating) shows smaller stars
+     * with no names, so they don't crowd the route. An empty list hides them. Only sent again when something changed.
+     */
+    fun setFavourites(list: List<Pair<LL, String>>, small: Boolean) {
+        if (list == favs && small == favsSmall) return
+        favs = list; favsSmall = small
+        main0.post { pushFavs() }
+    }
+
+    private fun pushFavs() {
+        val st = style ?: return
+        try {
+            val fs = ArrayList<Feature>()
+            for ((i, f) in favs.withIndex()) {
+                val (pos, name) = f
+                val id = "dl-fav-" + (if (favsSmall) "s" else name.hashCode().toString()) + "-" + (if (nightStyle) "n" else "d")
+                if (favImgs.add(id)) addImg(st, id, favBitmap(if (favsSmall) "" else name))
+                fs += Feature.fromGeometry(Point.fromLngLat(pos.lon, pos.lat)).also { it.addStringProperty("img", id); it.addNumberProperty("i", i) }
+            }
+            src("dl-favs")?.featureCollection(FeatureCollection.fromFeatures(fs))
+        } catch (e: Throwable) { }
+    }
+
+    /** A yellow star in a white-edged circle, with [name] in a small tag under it (none when blank). The star is the middle. */
+    private fun favBitmap(name: String): Bitmap {
+        val dm = mapView.resources.displayMetrics
+        val d = dm.density
+        val r = (if (name.isEmpty()) 9f else 12f) * d
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12f * d; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = 0xFF3B2A00.toInt() }
+        val label = if (name.length > 22) name.take(21) + "…" else name
+        val tw = if (label.isEmpty()) 0f else text.measureText(label)
+        val tagH = if (label.isEmpty()) 0f else 18f * d
+        val w = maxOf(2 * r + 6 * d, tw + 14 * d)
+        val half = r + 3 * d + (if (label.isEmpty()) 0f else 3 * d + tagH)
+        val b = Bitmap.createBitmap(w.toInt() + 2, (half * 2).toInt() + 2, Bitmap.Config.ARGB_8888)
+        b.density = dm.densityDpi
+        val cv = Canvas(b)
+        val cx = b.width / 2f; val cy = b.height / 2f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = 0x55000000; cv.drawCircle(cx, cy + 1.5f * d, r + 1.5f * d, paint)
+        paint.color = 0xFFFFFFFF.toInt(); cv.drawCircle(cx, cy, r + 1.5f * d, paint)
+        paint.color = 0xFFFFC83D.toInt(); cv.drawCircle(cx, cy, r, paint)
+        // the five-pointed star
+        val star = Path()
+        val ro = r * 0.62f; val ri = ro * 0.45f
+        for (k in 0 until 10) {
+            val a = Math.toRadians(-90.0 + k * 36.0)
+            val rr = if (k % 2 == 0) ro else ri
+            val x = cx + (rr * Math.cos(a)).toFloat(); val y = cy + (rr * Math.sin(a)).toFloat()
+            if (k == 0) star.moveTo(x, y) else star.lineTo(x, y)
+        }
+        star.close()
+        paint.color = 0xFF6B4A00.toInt(); cv.drawPath(star, paint)
+        if (label.isNotEmpty()) {
+            val top = cy + r + 3 * d
+            val rect = RectF(cx - tw / 2 - 7 * d, top, cx + tw / 2 + 7 * d, top + tagH)
+            paint.color = 0xF2FFFFFF.toInt(); cv.drawRoundRect(rect, 6 * d, 6 * d, paint)
+            cv.drawText(label, cx - tw / 2, top + tagH / 2 - (text.ascent() + text.descent()) / 2, text)
+        }
+        return b
+    }
+
+    private fun favAt(sp: android.graphics.PointF): Int? {
+        val list = favs
+        if (list.isEmpty()) return null
+        // (the stars only show from zoom 10)
+        if ((try { mbMap.cameraState.zoom } catch (e: Throwable) { 15.0 }) < 10.0) return null
+        val reach = 26f * mapView.resources.displayMetrics.density
+        var best: Int? = null
+        var bd = reach * reach
+        for ((i, f) in list.withIndex()) {
+            val px = try { mbMap.pixelForCoordinate(Point.fromLngLat(f.first.lon, f.first.lat)) } catch (e: Throwable) { continue }
+            val dx = px.x.toFloat() - sp.x; val dy = px.y.toFloat() - sp.y
+            val dd = dx * dx + dy * dy
+            if (dd < bd) { bd = dd; best = i }
+        }
+        return best
     }
 
     /** Google-style destination pin: red teardrop with a white centre. */
@@ -1052,7 +1148,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     fun setSky(code: Int?) {
         if (code == skyCode && style != null) return
         skyCode = code
-        main0.post { style?.let { Sky.atmosphere(it, skyCode, nightStyle, satellite) } }
+        main0.post { style?.let { Sky.atmosphere(it, skyCode, nightStyle, daylightOutside, satellite) } }
     }
 
     /** The weather where you are now (Open-Meteo code), for rain or snow on the map; null for none. */
@@ -1067,7 +1163,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // hills and valleys (not on the classic 2D map)
         Sky.terrain(st, terrainOn && mapDetail != "lightest")
         drawsWeather = Sky.weather(st, weatherCode)
-        Sky.atmosphere(st, skyCode, nightStyle, satellite)
+        Sky.atmosphere(st, skyCode, nightStyle, daylightOutside, satellite)
         if (furnitureOn && MapStylePolicy.supportsFullDetailFeatures(mapDetail)) {
             Furniture.addModels(st)
             addS(st, GeoJsonSource.Builder("dl-signals-m").featureCollection(signalModels).build())
@@ -2620,6 +2716,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             .iconSize(zoomed(1.0, 13 to 0.45, 16 to 0.7, 18 to 0.9)))
         addL(st, SymbolLayer("dl-parked-l", "dl-parked").iconImage("dl-car-pin").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0).iconSize(zoomed(1.0, 10 to 0.4, 15 to 0.55, 18 to 0.7)))
+        // your favourites as stars (from zoom 10, so a zoomed-out map isn't covered in them)
+        favImgs.clear()
+        addS(st, GeoJsonSource.Builder("dl-favs").featureCollection(empty()).build())
+        addL(st, SymbolLayer("dl-favs-l", "dl-favs").iconImage(Expression.get("img")).iconAllowOverlap(true).iconIgnorePlacement(true)
+            .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0).minZoom(10.0).iconSize(zoomed(1.0, 10 to 0.75, 14 to 0.9, 17 to 1.0)))
+        pushFavs()
         if (im) {
             addImg(st, "dl-pin", pinBitmap())
             addL(st, SymbolLayer("dl-dest-dot", "dl-dest")
@@ -3441,6 +3543,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val tw = maxOf(tp.measureText(top), sp.measureText(sub))
         val w = (tw + 26f * d).toInt(); val bh = 50f * d; val tail = 9f * d
         val b = Bitmap.createBitmap(w + (6 * d).toInt(), (bh + tail + 6 * d).toInt(), Bitmap.Config.ARGB_8888)
+        // marked with the map's own screen density: left unmarked it took the phone's, so on the car screen (a lower density) the
+        // card came out about a third of its size and couldn't be read (desko1973, #240)
+        b.density = mapView.resources.displayMetrics.densityDpi
         val c = Canvas(b)
         val ox = 3f * d; val oy = 3f * d
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (green) 0xFF1E9E5A.toInt() else if (day) 0xFFF7F8FB.toInt() else 0xFF2B3142.toInt() }
@@ -5182,6 +5287,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         flyDone?.let { d -> flyDone = null; flyToken++; try { mapView.camera.cancelAllAnimators() } catch (e: Throwable) { }; d(); return true }
         // a number-plate camera: say what it is
         alprAt(sp)?.let { a -> onAlprTap?.invoke(a.second); return true }
+        // one of your favourites: its place card, with Go
+        if (onFavTap != null) favAt(sp)?.let { i -> onFavTap?.invoke(i); return true }
         // one of your own reports: offer to remove it
         if (onReportTap != null) reportBadgeAt(sp)?.let { p -> onReportTap?.invoke(p); return true }
         if (liveLines.isEmpty()) return false

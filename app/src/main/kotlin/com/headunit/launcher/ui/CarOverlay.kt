@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -270,16 +271,14 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
         val user = engine.prefs.i(PreferenceKeys.CARSCALE, 100).coerceIn(40, 300) / 100f
         // the screen in the units it would have at 100%
         val rawW = maxWidth.value * user; val rawH = maxHeight.value * user
-        var cap = Float.MAX_VALUE
-        // (each layout switch below is worked out from the size: keep on the roomier side of every one the screen is on at 100%)
-        if (rawW >= 900f) cap = minOf(cap, rawW / 900f)
-        if (rawH >= 460f) cap = minOf(cap, rawH / 460f)
-        if (rawH >= 330f) cap = minOf(cap, rawH / 330f)
-        if (rawW >= 600f) cap = minOf(cap, rawW / 600f)
-        if (rawW >= 1050f) cap = minOf(cap, rawW / 1050f)
+        // The layout (side by side or stacked, short or roomy) is now picked from the screen at 100% (in CarScreenBody), so the size
+        // no longer has to stay on the roomy side of every layout switch: that held 240% down to about 112-134% on most cars, as the
+        // switches that only change the spacing bound first (magnazan, #242). The only limit left is that the cards still have room:
+        // the screen, in the enlarged units, stays at least 560 wide and 300 high.
+        val cap = minOf(rawW / 560f, rawH / 300f).coerceAtLeast(1f)
         val eff = if (user <= 1f) user else minOf(user, cap).coerceAtLeast(1f)
         // (the most this screen fits, for the setting to say)
-        val most = (Math.floor((if (cap == Float.MAX_VALUE) 3f else cap.coerceAtMost(3f)) * 20.0) * 5).toInt().coerceAtLeast(100)
+        val most = (Math.floor(cap.coerceAtMost(3f) * 20.0) * 5).toInt().coerceAtLeast(100)
         androidx.compose.runtime.SideEffect { if (engine.prefs.i(PreferenceKeys.CARSCALE_MAX, 0) != most) engine.prefs.put(PreferenceKeys.CARSCALE_MAX, most) }
         val d = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(d.density * eff / user, d.fontScale)) {
@@ -310,14 +309,18 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         // Infer constrained/split-screen surfaces from the actual available Compose area rather than device model.
         // Android Auto reports its usable surface here, so a split-screen map naturally trips these thresholds.
         val aspect = maxWidth.value / maxHeight.value.coerceAtLeast(1f)
+        // the screen's size at 100% (or as made smaller): which layout to use is picked from this, not from the enlarged units, so a
+        // bigger Overall size makes everything bigger in the same layout instead of switching to the cramped small-screen one (#242)
+        val layoutW = maxWidth * sizeScale.coerceAtLeast(1f)
+        val layoutH = maxHeight * sizeScale.coerceAtLeast(1f)
         // Include shorter usable areas common in split-screen Android Auto and ultra-wide dashboards.
         // Use the available content bounds, not physical display dimensions, so insets are respected.
-        val lowVertical = maxHeight < 460.dp
-        val narrow = maxWidth < 900.dp
+        val lowVertical = layoutH < 460.dp
+        val narrow = layoutW < 900.dp
         val wideLandscape = aspect > 2.0f
         val compact = lowVertical || narrow || wideLandscape
         // only a really short screen leaves the junction close-up and advice off (a 7-inch 800 x 480 unit counts as compact, but has room)
-        val tiny = maxHeight < 330.dp
+        val tiny = layoutH < 330.dp
         // short, wide screens (a 7-inch 800 x 480 unit) are laid out side by side, not stacked: stacked, the cards took the whole
         // width and ran into each other and the speed (#67)
         val shortWide = lowVertical && aspect >= 1.4f
@@ -325,7 +328,7 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         // the layout for the space Android Auto actually leaves (the same car gets the roomy layout full-screen and a small one in
         // a split-screen tile): "short" keeps the essentials and one row of shortcuts; "tile" (split screen) only the turn, a
         // one-line trip strip and the speed. Text stays its normal size: the layout gets simpler instead of smaller
-        val tile = tiny || (maxWidth < 600.dp && lowVertical)
+        val tile = tiny || (layoutW < 600.dp && lowVertical)
         val short = !tile && lowVertical
         val small = tile || short
         // Android Auto's split screen: the surface stays full size and only the tile's part of it is visible
@@ -346,12 +349,9 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         val insT = with(dens) { (a?.top ?: 0).toDp() }
         val insR = with(dens) { (wPx - (a?.right ?: wPx.toInt())).coerceAtLeast(0f).toDp() }
         val insB = with(dens) { (hPx - (a?.bottom ?: hPx.toInt())).coerceAtLeast(0f).toDp() }
-        val edge = when {
-            maxWidth < 600.dp -> 8.dp
-            portrait -> 10.dp
-            maxWidth < 1050.dp -> 16.dp
-            else -> 24.dp
-        }
+        // the space round the edge: from 8 on a small screen to 24 on a wide one, smoothly (it used to jump at set widths, and those
+        // jumps were among the limits that held the Overall size back)
+        val edge = if (portrait && layoutW >= 600.dp) 10.dp else (8f + 16f * ((layoutW.value - 600f) / 450f).coerceIn(0f, 1f)).dp
         val left = insL + edge
         // Wide screens: level with Android Auto's buttons (top right); narrow/tall screens: below them.
         val topTarget = if (portrait) insT + edge else insT.coerceAtMost(12.dp) + edge
@@ -395,7 +395,7 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         val topW = if (portrait) {
             (maxWidth - left - rightTop - tempGap).coerceAtLeast(0.dp).coerceAtMost(600.dp)
         } else {
-            minOf(if (maxWidth < 1050.dp) 380.dp else 440.dp, maxWidth * 0.38f)
+            minOf((380f + 60f * ((layoutW.value - 1000f) / 100f).coerceIn(0f, 1f)).dp, maxWidth * 0.38f)
         }
         // (the turn card's width, which the trip card under it on the same side takes too, so the two line up)
         val turnCardW = if (portrait) topW else if (small) minOf(340.dp, maxWidth * 0.42f) else minOf(420.dp, maxWidth * 0.36f)
@@ -416,6 +416,8 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
             engine.setPanel(i, (r.left - vL) / vW, (r.top - vT) / vH, (r.right - vL) / vW, (r.bottom - vT) / vH)
         // (Search bar and places on the map switched off: nothing drawn top left with no route, so the map has the whole screen)
         val mapUi = engine.prefs.b(PreferenceKeys.CAR_MAPUI, true)
+        // (the sound button when not navigating can be left off: Settings > Android Auto)
+        val soundBtn = engine.prefs.b(PreferenceKeys.CAR_SOUND_BTN, true)
         val topShown = !portrait && !arriving && ((engine.route == null && mapUi) || (guiding && engine.turn != null))
         val colShown = !portrait && !previewing && !arriving
         val stackShown = portrait && !previewing && !arriving
@@ -514,7 +516,14 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         // not navigating: the app's search bar and quick chips, top left (tap them as in the app)
         // as many saved places as fit above the sound pill / speed (0 to 3), so the list never runs into what's below it
         // (worked out here: the screen's height can't be read from inside the column below)
-        val savedRows = ((maxHeight - top - bottom - 242.dp - 96.dp) / 58.dp).toInt().coerceIn(0, 3)
+        // The height the chips under the bar may take: down to the column at the bottom left (the sound pill at its button size,
+        // the speed, hazards), all measured. Fixed guesses (242 + 96 dp) used to leave out the green suggestion card and the button
+        // size, so on a short screen Recent ran under "Alerts only". CarChips fits the suggestion and Recent rows into it.
+        var chipsPx by remember { mutableStateOf(0) }
+        val chipsBudget = with(dens) {
+            if (topBlockH == 0 || chipsPx == 0) 0.dp
+            else (maxHeight - top - bottom - bottomColH.toDp() - 10.dp - (topBlockH - chipsPx).toDp()).coerceAtLeast(0.dp)
+        }
         // (a car with a rotary knob and no touchscreen can't reach any of this: Settings › Android Auto can leave it off, and
         // Places (★) in Android Auto's own buttons has Search, Home, Work and the rest, wass0035 #222)
         if (engine.route == null && !arriving && !covered && mapUi) Column(Modifier.padding(start = left, top = top).width(topW).onSizeChanged { topBlockH = it.height }.onGloballyPositioned { if (topShown) report(0, it.boundsInRoot()) },
@@ -537,7 +546,7 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
             }
             // (folded away, with everything in it, by the arrow in the bar)
             if (engine.prefs.b(PreferenceKeys.QUICKLIST, true) && !tile) {
-                if (short) CarChipsCompact(engine, actions) else CarChips(engine, actions, savedRows)
+                if (short) CarChipsCompact(engine, actions) else Box(Modifier.onSizeChanged { chipsPx = it.height }) { CarChips(engine, actions, chipsBudget) }
             }
         }
 
@@ -598,7 +607,7 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
                 // your speed on the right above it
                 var tripPx by remember { mutableStateOf(0) }
                 // (while guiding, the sound button is on the trip card)
-                if (!guiding && !small) CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) {
+                if (!guiding && !small && soundBtn) CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) {
                     ImmRound(engine.soundIcon(), "sound", { engine.cycleSound() }, Modifier.align(Alignment.TopEnd).padding(end = rightTop, top = top + below))
                 }
                 Column(
@@ -636,7 +645,7 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
                 ) {
                     if (guiding) CompositionLocalProvider(LocalDensity provides Density(dens.density * cardScale, dens.fontScale)) { FasterCard(engine, Modifier.widthIn(max = 520.dp)) }
                     // (while guiding, the sound button is on the trip card instead of a pill of its own)
-                    if (!guiding && !small) CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) { SoundPill(engine) }
+                    if (!guiding && !small && soundBtn) CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) { SoundPill(engine) }
                     hazards()
                     if (carSpeedLeft) {
                         // bottom left (picked, or a short screen (#67)): the speed stays put in the bottom-left corner, with the one-line trip strip beside it
@@ -727,16 +736,11 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         // just zoomed the map out to the grey routes. On the right, under Android Auto's buttons and beside its zoom buttons;
         // drawn smaller when it's taller than the room there (as the arrival card is)
         if (altsOpen) {
-            // (its full-size height is worked back from the size it's drawn at, which comes out a pixel or so different at each
-            // scale: only a real change counts, or the scale kept chasing its own rounding and the box wiggled)
-            var boxH by remember { mutableStateOf(0f) }
+            // Keep the route text at its normal size on short car screens; the list scrolls within the room available.
             val boxTop = if (portrait) top + below else insT + 6.dp
             val room = (maxHeight - boxTop - bottom).coerceAtLeast(1.dp)
-            val fit = if (boxH > 0f) (room.value / boxH).coerceIn(0.5f, 1f) else 1f
             Box(Modifier.align(Alignment.TopEnd).padding(end = insR + 8.dp, top = boxTop, bottom = bottom)) {
-                CompositionLocalProvider(LocalDensity provides Density(dens.density * fit, dens.fontScale)) {
-                    RoutesBox(engine, Modifier.wrapContentHeight(unbounded = true, align = Alignment.Top).onSizeChanged { val h = it.height / dens.density / fit; if (kotlin.math.abs(h - boxH) > boxH * 0.02f) boxH = h })
-                }
+                RoutesBox(engine, Modifier.heightIn(max = room), maxH = room)
             }
         }
 
@@ -1193,7 +1197,7 @@ private fun CarChipsCompact(engine: NavEngine, actions: CarActions) {
 }
 
 @Composable
-private fun CarChips(engine: NavEngine, actions: CarActions, rows: Int) {
+private fun CarChips(engine: NavEngine, actions: CarActions, budget: androidx.compose.ui.unit.Dp) {
     val c = LocalVw.current
     val home = engine.places.slot("home"); val work = engine.places.slot("work")
     // the drive times (the engine throttles this itself: online only, every 10 minutes or after moving 3 km)
@@ -1237,6 +1241,11 @@ private fun CarChips(engine: NavEngine, actions: CarActions, rows: Int) {
                 listOfNotNull(home, work).none { Geo.dist(it.pos, f.pos) < 60 } }
             (mine.map { it.label to it.place } + favs.map { it.name to it }).take(20)
         }
+        // (Home / Work / saved places and the round shortcut buttons are always shown: measured, so what's left of [budget] is known)
+        val dens = LocalDensity.current
+        var fixedPx by remember { mutableStateOf(0) }
+        var predPx by remember { mutableStateOf(0) }
+        Column(Modifier.fillMaxWidth().onSizeChanged { fixedPx = it.height }, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val fixed = (if (showHome) 1 else 0) + (if (showWork) 1 else 0)
             val allW = 50.dp
@@ -1265,11 +1274,24 @@ private fun CarChips(engine: NavEngine, actions: CarActions, rows: Int) {
                 for (sc in chosenShortcuts(engine)) find(sc.kind, sc.icon, sc.color, sz)
             }
         }
+        }
         // where you're probably heading now, with the live drive time (as in the app; Settings "Suggest where you're going")
         LaunchedEffect(engine.fix != null) { while (true) { engine.refreshPrediction(); kotlinx.coroutines.delay(60_000) } }
-        val pr = engine.prediction?.takeIf { engine.prefs.b(PreferenceKeys.PREDICT, true) }
-        if (pr != null && rows >= 1) Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(GmGreen).carTap("predict") { engine.startRoute(pr.place) }.padding(horizontal = 16.dp, vertical = 11.dp),
+        val pr0 = engine.prediction?.takeIf { engine.prefs.b(PreferenceKeys.PREDICT, true) }
+        // what fits under the always-shown part: the suggestion card (its measured height; about 62 dp before it's been shown),
+        // then Recent with as many rows as fit (a row 54 dp: 38 dp icon + 8 dp above and below; its header and padding about 46 dp),
+        // each after a 10 dp gap. Nothing until the fixed part has been measured.
+        var left = with(dens) { if (fixedPx == 0) 0.dp else budget - fixedPx.toDp() }
+        val predH = with(dens) { if (predPx > 0) predPx.toDp() else 62.dp }
+        val pr = pr0?.takeIf { left >= predH + 10.dp }
+        if (pr != null) left -= predH + 10.dp
+        // (a row less when the suggestion is showing, so the map keeps its room)
+        // (the text is in sp, so with a bigger Text size the rows grow: two lines of 16 + 13 sp are about 38 sp, the header line 19 sp)
+        val rowH = with(dens) { maxOf(38.dp, 38.sp.toDp()) } + 16.dp
+        val headH = with(dens) { 24.dp + maxOf(22.dp, 19.sp.toDp()) }
+        val fitRows = ((left - 10.dp - headH) / rowH).toInt().coerceIn(0, if (pr != null) 2 else 3)
+        if (pr != null) Row(
+            Modifier.fillMaxWidth().onSizeChanged { predPx = it.height }.clip(RoundedCornerShape(22.dp)).background(GmGreen).carTap("predict") { engine.startRoute(pr.place) }.padding(horizontal = 16.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             androidx.compose.material3.Icon(when (pr.title) { "Home" -> androidx.compose.material.icons.Icons.Rounded.Home; "Work" -> androidx.compose.material.icons.Icons.Rounded.Work
@@ -1287,8 +1309,7 @@ private fun CarChips(engine: NavEngine, actions: CarActions, rows: Int) {
             val all = engine.places.customs(); val favs = engine.places.favourites()
             engine.places.recents().filter { r -> favs.none { Geo.dist(it.pos, r.pos) < 60 } && all.none { Geo.dist(it.place.pos, r.pos) < 60 } }
         }
-        // (a row less when the suggestion is showing, so the map keeps its room)
-        val listRows = (rows - (if (pr != null) 1 else 0)).coerceAtLeast(0)
+        val listRows = fitRows
         // (folded away with the arrow in the search bar)
         if (engine.prefs.b(PreferenceKeys.QUICKLIST, true) && recents.isNotEmpty() && listRows > 0) Column(Modifier.fillMaxWidth().panel(10.dp, RoundedCornerShape(24.dp), c.surface).padding(vertical = 2.dp)) {
             Row(Modifier.fillMaxWidth().carTap("saved") { actions.places() }.padding(start = 16.dp, end = 14.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {

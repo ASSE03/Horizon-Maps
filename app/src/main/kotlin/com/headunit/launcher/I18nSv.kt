@@ -2,7 +2,12 @@ package com.headunit.launcher
 
 /** sv: looked up by the English wording (as in [L]); made by tr/genlang.py from tr/lang/sv.tsv. */
 object I18nSv {
-    fun rows(): List<Pair<String, String>> = p0() + p1() + p2() + p3() + p4() + p5() + p6()
+    fun rows(): List<Pair<String, String>> = p0() + p1() + p2() + p3() + p4() + p5() + p6() + listOf(
+        "Import Google Maps" to "Importera från Google Maps",
+        "Choose a Saved Places.json file from Google Takeout" to "Välj filen Saved Places.json från Google Takeout",
+        "Imported {0} · already saved {1}" to "{0} importerade · {1} redan sparade",
+        "No saved places found in that file" to "Inga sparade platser hittades i den här filen"
+    )
 
     private fun p0(): List<Pair<String, String>> = listOf(
         "arrive, destination on the left" to "du är framme, destinationen ligger till vänster",
@@ -1703,6 +1708,38 @@ object I18nSv {
         "Plus is on: the map, search, routes and traffic use Horizon Maps' own accounts, so there are no keys to add." to "Plus är på: karta, sökning, rutter och trafik använder Horizon Maps egna konton, så det finns inga nycklar att lägga till.",
         "The free version uses OpenStreetMap, with routes from your downloaded country pack. Horizon Maps Plus adds detailed 3D buildings and landmarks, satellite and live traffic, with no keys to set up." to "Gratisversionen använder OpenStreetMap, med rutter från ditt nedladdade landspaket. Horizon Maps Plus lägger till detaljerade 3D-byggnader och landmärken, satellit och trafik i realtid, utan nycklar att ställa in.",
         "In rain or snow" to "Vid regn eller snö",
+        "A greyer, softer daylight when it's raining or snowing where you are" to "Ett gråare, mjukare dagsljus när det regnar eller snöar där du är",
+        "A pale wash over the map and a thick haze in fog or mist. Off shows those as a plain overcast day" to "En blek slöja över kartan och tät dis i dimma. Av visar det som en vanlig mulen dag",
+        "Checks the weather where you are every 10 minutes, for everything below" to "Kollar vädret där du är var 10:e minut, för allt nedan",
+        "Fetches the weather where you are now" to "Hämtar vädret där du är nu",
+        "Fog and mist on the map" to "Dimma och dis på kartan",
+        "Forecasts and radar" to "Prognoser och radar",
+        "Haze towards the horizon" to "Dis mot horisonten",
+        "Light, shadows, 3D, sky, satellite" to "Ljus, skuggor, 3D, himmel, satellit",
+        "Live weather" to "Live-väder",
+        "Live weather (Settings > Weather) comes from Open-Meteo. In the UK, a free Met Office key is usually more accurate: datahub.metoffice.gov.uk, subscribe to Site-Specific Forecast (Global spot), then paste the API key. If the Met Office fails, Open-Meteo is used." to "Live-väder (Inställningar > Väder) kommer från Open-Meteo. I Storbritannien är en gratis Met Office-nyckel oftast mer exakt: datahub.metoffice.gov.uk, prenumerera på Site-Specific Forecast (Global spot) och klistra in API-nyckeln. Om Met Office misslyckas används Open-Meteo.",
+        "Live weather, rain, snow, fog, radar, forecasts" to "Live-väder, regn, snö, dimma, radar, prognoser",
+        "Met Office API key" to "Met Office API-nyckel",
+        "Needs Live weather switched on above" to "Slå på Live-väder ovan",
+        "Off leaves more room for Recent places" to "Av ger mer plats för Senaste platser",
+        "Optional, UK. Free plan: 360 requests a day (the app asks every 10 minutes at most)" to "Valfritt, Storbritannien. Gratisplan: 360 förfrågningar per dag (appen frågar högst var 10:e minut)",
+        "Puts your TomTom, Mapbox and Met Office keys in the backup file, so Restore brings them back. The file is plain text: keep it somewhere safe" to "Lägger dina TomTom-, Mapbox- och Met Office-nycklar i säkerhetskopian, så att Återställ tar tillbaka dem. Filen är vanlig text: förvara den säkert",
+        "Rain falling on the map, heavier in a downpour or storm" to "Regn som faller på kartan, kraftigare vid skyfall eller åska",
+        "Rain on the map" to "Regn på kartan",
+        "Saved as" to "Sparad som",
+        "Snow falling on the map" to "Snö som faller på kartan",
+        "Snow on the map" to "Snö på kartan",
+        "Sound button on the map" to "Ljudknapp på kartan",
+        "Sound on / Alerts only / Muted, when not navigating. Off leaves more room for Recent places; the same choice is in the car's Settings" to "Ljud på / Bara varningar / Tyst, när du inte navigerar. Av ger mer plats för Senaste platser; samma val finns i bilens Inställningar",
+        "Source: Met Office (key in Keys & accounts), Open-Meteo if it fails." to "Källa: Met Office (nyckel under Nycklar och konton), Open-Meteo om det misslyckas.",
+        "Source: Open-Meteo. In the UK, a free Met Office key (Keys & accounts) is usually more accurate." to "Källa: Open-Meteo. I Storbritannien är en gratis Met Office-nyckel (Nycklar och konton) oftast mer exakt.",
+        "Test" to "Testa",
+        "Test Met Office" to "Testa Met Office",
+        "The forecast along your route, for when you'll be there" to "Prognosen längs din rutt, för när du är där",
+        "The sky to match the weather: grey when overcast, thicker in rain" to "Himlen efter vädret: grå när det är mulet, tätare i regn",
+        "Waiting for your location" to "Väntar på din position",
+        "Favourites on the map" to "Favoriter på kartan",
+        "Your saved places as stars. Tap one to go there" to "Dina sparade platser som stjärnor. Tryck på en för att åka dit",
         "Up to {0}% fits this car's screen" to "Upp till {0}% får plats på den här bilens skärm",
         "Search bar and places on the map" to "Sökfält och platser på kartan",
         "Off for a car with a rotary knob: the full map, with Search, Home and Work under Places (★)" to "Av i en bil med vridreglage: hela kartan, med Sök, Hem och Jobb under Platser (★)",

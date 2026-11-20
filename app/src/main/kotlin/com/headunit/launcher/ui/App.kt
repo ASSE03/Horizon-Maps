@@ -48,6 +48,7 @@ import com.headunit.launcher.NavEngine
 import com.headunit.launcher.Prefs
 import com.headunit.launcher.PreferenceKeys
 import com.headunit.launcher.mapSource
+import com.headunit.launcher.mapWeather
 import com.headunit.launcher.locatorSpec
 import com.headunit.launcher.mapDetail
 import com.headunit.launcher.setApiKey
@@ -266,6 +267,18 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
         val la = ps.getOrNull(0)?.toDoubleOrNull(); val lo = ps.getOrNull(1)?.toDoubleOrNull(); val at = ps.getOrNull(2)?.toLongOrNull() ?: 0L
         map.setParked(if (la != null && lo != null && System.currentTimeMillis() - at < 48 * 3600_000L) com.headunit.launcher.LL(la, lo) else null)
     }
+    // your favourites as stars on the map (Settings > On the map; Xundey, #249): smaller and without names while navigating,
+    // and a tap on one opens its place card, with Go
+    val favsOn = prefs.b(PreferenceKeys.FAVS_ON_MAP, true)
+    val favsRaw = prefs.s(PreferenceKeys.PLACES_FAVOURITES, "")
+    val favsSmall = engine.route != null && !engine.previewing
+    LaunchedEffect(favsOn, favsRaw, favsSmall) {
+        map.setFavourites(if (favsOn) engine.places.favourites().map { it.pos to it.name } else emptyList(), favsSmall)
+    }
+    androidx.compose.runtime.DisposableEffect(map) {
+        map.onFavTap = { i -> engine.places.favourites().getOrNull(i)?.let { engine.showHere(it) } }
+        onDispose { map.onFavTap = null }
+    }
     // the extra 3D features (Settings > On the map)
     val xFacades = prefs.b(PreferenceKeys.FACADES, true); val xLand = prefs.b(PreferenceKeys.LANDMARKS3D, true); val xPaths = prefs.b(PreferenceKeys.PATHS, true)
     val xTerrain = prefs.b(PreferenceKeys.TERRAIN, false); val xTap = prefs.b(PreferenceKeys.TAPSELECT, true); val xFurn = prefs.b(PreferenceKeys.FURNITURE3D, true); val xClear = prefs.b(PreferenceKeys.CLEARVIEW, true)
@@ -275,7 +288,8 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
     LaunchedEffect(xHd) { map.setHdRoads(xHd) }
     // real rain and snow on the map when it's raining or snowing where you are (Weather effects)
     val wxOn = prefs.b(PreferenceKeys.RAIN_EFFECTS, false)
-    val wxNow = engine.weather?.code
+    // (with the kinds switched off in Settings > Weather shown as overcast)
+    val wxNow = prefs.mapWeather(engine.weather?.code)
     LaunchedEffect(wxOn, wxNow) { map.setWeather(if (wxOn) wxNow else null) }
     // the haze towards the horizon follows the weather, and the route's ribbon look
     val skyOn = prefs.b(PreferenceKeys.SKYWEATHER, true)
@@ -354,7 +368,7 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
                         Box(Modifier.fillMaxSize().bleedCutout(bleed)) { NightSky(Modifier.fillMaxWidth().fillMaxHeight(0.2f)) }
                     // in a tunnel (no GPS) the map is dimmed a little, as the car's own screen would be
                     if (engine.deadReckoning && !c.dark && prefs.b(PreferenceKeys.TUNNELDIM, true)) Box(Modifier.fillMaxSize().bleedCutout(bleed).background(Color.Black.copy(alpha = 0.35f)))
-                    val wxCode = engine.weather?.code
+                    val wxCode = prefs.mapWeather(engine.weather?.code)
                     // rain, snow or fog over the map to match the real weather where you are
                     // (the map draws rain and snow itself now; the screen overlay is kept for fog, and for when the map can't)
                     if (prefs.b(PreferenceKeys.RAIN_EFFECTS, false) && wxCode != null && (wxCode == 45 || wxCode == 48 || !map.drawsWeather)) WeatherFx(wxCode, Modifier.fillMaxSize())

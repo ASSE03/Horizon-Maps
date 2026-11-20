@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Traffic
 import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.WbTwilight
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.TurnRight
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.DirectionsCar
@@ -104,7 +105,8 @@ private class Section(val title: String, val sub: String, val icon: ImageVector,
 // (made each time it's read, so the names follow a change of language straight away)
 private val sections: List<Section> get() = listOf(
     Section("Style de carte", "Couleurs, jour et nuit, détail de la carte", Icons.Rounded.Map, Color(0xFF4C8DFF), "CARTE"),
-    Section("Lumière, météo et 3D", "Lumière, pluie et neige, radar, 3D, ciel", Icons.Rounded.WbTwilight, Color(0xFF4C8DFF)),
+    Section("Lumière et 3D", "Lumière, ombres, 3D, ciel, satellite", Icons.Rounded.WbTwilight, Color(0xFF4C8DFF)),
+    Section("Météo", "Météo en direct, pluie, neige, brouillard, radar, prévisions", Icons.Rounded.Cloud, Color(0xFF4C8DFF)),
     Section("Sur la carte", "Trafic, feux, radars, panneaux, lampadaires", Icons.Rounded.Traffic, Color(0xFF4C8DFF)),
     Section("Votre flèche et la ligne d'itinéraire", "Flèche ou voiture, couleurs, aspect de l'itinéraire", Icons.Rounded.Navigation, Color(0xFF4C8DFF)),
     Section("Itinéraires", "Véhicule, éviter, choisir, démarrer", Icons.Rounded.Route, Color(0xFF12A4B4), "CONDUITE"),
@@ -273,20 +275,21 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
                     when (cat) {
                         0 -> MapStyleSection(prefs, engine)
                         1 -> LightSection(prefs)
-                        2 -> OnTheMapSection(prefs, engine)
-                        3 -> ArrowSection(prefs, engine)
-                        4 -> RoutesSection(prefs, engine)
-                        5 -> GuidanceSection(prefs, engine)
-                        6 -> AlertsSection(prefs, engine)
-                        7 -> SoundSection(prefs, engine)
-                        8 -> WhileDrivingSection(prefs)
-                        9 -> { PlacesSection(engine); GpxGroup(engine, onShown = onClose); PhoneLinkGroup(prefs); SharingGroups(prefs) }
-                        10 -> FuelSection(prefs, engine)
-                        11 -> { OfflineMapsContent(prefs, engine); OfflinePlacesGroup(engine) }
-                        12 -> ScreenSection(prefs, engine)
-                        13 -> AndroidAutoSection(prefs)
-                        14 -> PerformanceSection(prefs)
-                        15 -> KeysSection(prefs, engine)
+                        2 -> WeatherSection(prefs)
+                        3 -> OnTheMapSection(prefs, engine)
+                        4 -> ArrowSection(prefs, engine)
+                        5 -> RoutesSection(prefs, engine)
+                        6 -> GuidanceSection(prefs, engine)
+                        7 -> AlertsSection(prefs, engine)
+                        8 -> SoundSection(prefs, engine)
+                        9 -> WhileDrivingSection(prefs)
+                        10 -> { PlacesSection(engine); GpxGroup(engine, onShown = onClose); PhoneLinkGroup(prefs); SharingGroups(prefs) }
+                        11 -> FuelSection(prefs, engine)
+                        12 -> { OfflineMapsContent(prefs, engine); OfflinePlacesGroup(engine) }
+                        13 -> ScreenSection(prefs, engine)
+                        14 -> AndroidAutoSection(prefs)
+                        15 -> PerformanceSection(prefs)
+                        16 -> KeysSection(prefs, engine)
                         else -> AboutSection(prefs, engine)
                     }
                 }
@@ -387,29 +390,21 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Chemins et sentiers", "paths", true, "Désactivez pour une carte de conduite plus épurée")
         SChoice("Routes HD", listOf("auto" to "Automatique", "on" to "Activé", "off" to "Désactivé"), prefs.s(PreferenceKeys.HD_ROADS, "auto"),
             sub = "Marquages au sol, flèches de direction et ponts en 3D là où Mapbox les a (3D complète). Automatique : activé seulement au Royaume-Uni, car dans certains pays ils masquent les rues ordinaires") { prefs.put(PreferenceKeys.HD_ROADS, it) }
+        SToggle(prefs, "Show lane data diagnostics", PreferenceKeys.HD_LANE_DIAGNOSTICS, false,
+            "Only shown in Demo mode; does not affect lane guidance.")
     }
 }
 
 @Composable
 private fun LightSection(prefs: Prefs) {
-    if (prefs.mapSource() == "mapbox") SGroup("Lumière et météo") {
-        SPercent("Luminosité de nuit", "La luminosité de toute la carte la nuit. 100 % : l'éclairage de nuit de Mapbox", prefs, PreferenceKeys.NIGHT_BRIGHT, 30, 200, 100)
-        SToggle(prefs, "Clair de lune la nuit", PreferenceKeys.MOONLIT, false, "Comme au crépuscule, mais sous la lune : une lumière bleue rasante avec de longues ombres douces, à la place de l'éclairage de nuit uniforme de Mapbox. Le ciel de nuit et vos couleurs restent")
+    if (prefs.mapSource() == "mapbox") SGroup("Lumière") {
+        SPercent("Luminosité de nuit", "Luminosité de toute la carte de nuit. 100 % correspond à l'éclairage de nuit de Mapbox", prefs, PreferenceKeys.NIGHT_BRIGHT, 30, 200, 100)
+        SToggle(prefs, "Clair de lune la nuit", PreferenceKeys.MOONLIT, false, "Comme au crépuscule, mais avec la lune : une lumière bleue rasante aux ombres longues et douces, à la place de l'éclairage de nuit plat de Mapbox. Le ciel nocturne et vos couleurs restent")
         if (prefs.b(PreferenceKeys.MOONLIT, false))
             SPercent("Intensité de la lune", "Force avec laquelle la lune éclaire les murs et projette des ombres", prefs, PreferenceKeys.MOON_STR, 0, 200, 100)
         SToggle(prefs, "Ombres", PreferenceKeys.SHADOWS, true, "Les bâtiments et arbres projettent des ombres. Désactivé allège aussi le travail d'un autoradio lent")
         SToggle(prefs, "Soleil à sa vraie place", PreferenceKeys.SUN_REAL, false, "La lumière et les ombres viennent de la position réelle du soleil, et la nuit de la lune")
-        // (one choice for the two old switches: "Always" already covered "In rain or snow", so both on was the same as Always)
-        val overcast = if (prefs.b(PreferenceKeys.OVERCAST, false)) "always" else if (prefs.b(PreferenceKeys.WEATHER_LIGHT, false)) "wet" else "off"
-        SChoice("Lumière couverte", listOf("off" to "Désactivé", "wet" to "Par pluie ou neige", "always" to "Toujours"), overcast,
-            when (overcast) {
-                "always" -> "Lumière douce sans ombres dures, plus reposante en cas d'éblouissement"
-                "wet" -> "Une lumière plus grise et douce quand il pleut ou neige là où vous êtes. Nécessite Effets météo sur la carte (Réglages > Sur la carte), qui affiche aussi la vraie pluie et la neige"
-                else -> null
-            }) {
-            prefs.put(PreferenceKeys.OVERCAST, it == "always")
-            prefs.put(PreferenceKeys.WEATHER_LIGHT, it == "wet")
-        }
+        // (Overcast light is in Settings > Weather, with everything else the weather changes)
     }
     SGroup("Vue 3D", footer = "30° à 65°. Auto est le choix de l'appli (54°, ou 52° avec une carte allégée). L'inclinaison selon la vitesse et l'aplatissement aux virages s'appliquent en plus.") {
         STilt("Inclinaison sur écran large", "Autoradios en paysage. Plus haut montre plus loin (plus à dessiner pour un appareil lent)", prefs, PreferenceKeys.TILT_WIDE)
@@ -428,12 +423,48 @@ private fun LightSection(prefs: Prefs) {
     }
     SGroup("Ciel et satellite") {
         SToggle(prefs, "Satellite", "satellite", false)
-        SToggle(prefs, "Brume et ciel", "skyweather", true, "Brume à l'horizon selon la météo : grise par temps couvert, plus dense sous la pluie, épaisse dans le brouillard")
-        SToggle(prefs, "Ciel nocturne en 3D", "nightsky", true, "Étoiles scintillantes au-dessus de l'horizon la nuit")
+        SToggle(prefs, "Ciel nocturne en 3D", "nightsky", true, "Étoiles scintillantes au-dessus de l'horizon à la nuit tombée")
     }
-    SGroup("Météo") {
-        SToggle(prefs, "Effets météo sur la carte", "rainfx", false, "Vraie pluie et neige (et brouillard) sur la carte selon la météo là où vous êtes")
-        SToggle(prefs, "Calque radar de pluie", "radar", false, "Radar en direct de RainViewer, sous l'itinéraire")
+}
+
+// ------------------------------------------------------------------ Weather
+
+/** Everything the weather changes, in one place: live weather and what it shows on the map, the light, advice, forecasts, radar. */
+@Composable
+private fun WeatherSection(prefs: Prefs) {
+    val live = prefs.b(PreferenceKeys.RAIN_EFFECTS, false)
+    val metKey = prefs.s(PreferenceKeys.METOFFICE_KEY, "").isNotBlank()
+    SGroup("Météo en direct", footer = if (metKey) "Source : Met Office (clé dans Clés et comptes), Open-Meteo en cas d'échec."
+        else "Source : Open-Meteo. Au Royaume-Uni, une clé Met Office gratuite (Clés et comptes) est souvent plus précise.") {
+        // (the key is still "rainfx": switching it on is what fetches the weather where you are, every 10 minutes)
+        SToggle(prefs, "Météo en direct", PreferenceKeys.RAIN_EFFECTS, false, "Vérifie la météo là où vous êtes toutes les 10 minutes, pour tout ce qui suit")
+        if (live) {
+            SToggle(prefs, "Pluie sur la carte", PreferenceKeys.WX_RAIN, true, "De la pluie qui tombe sur la carte, plus forte lors d'une averse ou d'un orage")
+            SToggle(prefs, "Neige sur la carte", PreferenceKeys.WX_SNOW, true, "De la neige qui tombe sur la carte")
+            SToggle(prefs, "Brouillard et brume sur la carte", PreferenceKeys.WX_FOG, true, "Un voile pâle sur la carte et une brume épaisse par brouillard. Désactivé, cela s'affiche comme un simple jour couvert")
+            SToggle(prefs, "Brume vers l'horizon", PreferenceKeys.SKYWEATHER, true, "Le ciel selon la météo : gris par temps couvert, plus épais sous la pluie")
+            SToggle(prefs, "Conseils météo", PreferenceKeys.WXADVICE, true, "Une note discrète par forte pluie, neige, brouillard ou verglas quand vous êtes proche de la limite")
+            val st = com.headunit.launcher.MetOffice.status
+            if (metKey && st.isNotBlank()) SNote(st)
+        }
+    }
+    // (only Mapbox's map has its own light)
+    if (prefs.mapSource() == "mapbox") SGroup("Légère") {
+        // (one choice for the two old switches: "Always" already covered "In rain or snow", so both on was the same as Always)
+        val overcast = if (prefs.b(PreferenceKeys.OVERCAST, false)) "always" else if (prefs.b(PreferenceKeys.WEATHER_LIGHT, false)) "wet" else "off"
+        SChoice("Lumière couverte", listOf("off" to "Désactivé", "wet" to "Par pluie ou neige", "always" to "Toujours"), overcast,
+            when (overcast) {
+                "always" -> "Lumière douce sans ombres dures, plus reposante en cas d'éblouissement"
+                "wet" -> if (live) "Une lumière du jour plus grise et plus douce quand il pleut ou neige là où vous êtes" else "Activez Météo en direct ci-dessus"
+                else -> null
+            }) {
+            prefs.put(PreferenceKeys.OVERCAST, it == "always")
+            prefs.put(PreferenceKeys.WEATHER_LIGHT, it == "wet")
+        }
+    }
+    SGroup("Prévisions et radar") {
+        SToggle(prefs, "Météo sur l'itinéraire", PreferenceKeys.ROUTEWX, true, "Les prévisions le long de votre trajet, pour le moment où vous y serez")
+        SToggle(prefs, "Calque radar de pluie", PreferenceKeys.RAIN_RADAR, false, "Radar en direct de RainViewer, sous l'itinéraire")
     }
 }
 
@@ -443,6 +474,9 @@ private fun LightSection(prefs: Prefs) {
 private fun OnTheMapSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Appui long sur la carte") {
         SToggle(prefs, "Qu'y a-t-il ici", PreferenceKeys.WHATS_HERE, true, "Un appui long sur la carte montre d'abord la route, sa limitation et le lieu, avec Y aller et Ajouter une étape. Désactivé : on y va directement, comme avant")
+    }
+    SGroup("Favoris") {
+        SToggle(prefs, "Favoris sur la carte", PreferenceKeys.FAVS_ON_MAP, true, "Vos lieux enregistrés en étoiles. Touchez-en une pour y aller")
     }
     SGroup("Trafic") {
         SToggle(prefs, "Trafic en direct", "traffic", true)
@@ -590,10 +624,9 @@ private fun RoutesSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Itinéraires éco", "route_eco", false, "Économes en carburant plutôt que les plus rapides")
         SToggle(prefs, "Préférer les itinéraires plus simples", "prefer_simple", true, "Quand un itinéraire n'est qu'environ une minute plus lent mais a bien moins de virages, il est choisi en premier (indiqué La plus simple). Désactivé choisit toujours le plus rapide")
         SToggle(prefs, "Proposer des itinéraires plus rapides", "fasterroute", true)
-        if (prefs.b(PreferenceKeys.FASTER_ROUTE, true)) SToggle(prefs, "Garder les autres itinéraires sur la carte", "livealts", true, "Lignes grises avec +/− minutes, à toucher à tout moment. Désactivé : une carte « Itinéraire plus rapide trouvé » à la place")
-        SToggle(prefs, "Deviner votre destination", "predict", true, "Avec le temps de trajet en direct, y compris domicile et travail à vos heures habituelles")
-        SToggle(prefs, "Météo sur l'itinéraire", "routewx", true)
-        SToggle(prefs, "Arriver du bon côté de la route", PreferenceKeys.ARRIVE_SIDE, true, "L'itinéraire vous amène du côté de la chaussée où se trouve votre destination, pour ne pas avoir à traverser. Itinéraires Mapbox et hors ligne")
+        if (prefs.b(PreferenceKeys.FASTER_ROUTE, true)) SToggle(prefs, "Garder les autres itinéraires sur la carte", "livealts", true, "Lignes grises avec +/− minutes à toucher à tout moment. Désactivé affiche plutôt une carte « Itinéraire plus rapide trouvé »")
+        SToggle(prefs, "Suggérer votre destination", "predict", true, "Avec le temps de trajet en direct, y compris domicile et travail à vos heures habituelles")
+        SToggle(prefs, "Arriver du bon côté de la route", PreferenceKeys.ARRIVE_SIDE, true, "L'itinéraire vous amène du côté trottoir de votre destination, sans traverser la circulation. Itinéraires Mapbox et hors ligne")
     }
     SGroup("Démarrer un itinéraire") {
         SToggle(prefs, "Compte à rebours de démarrage auto", PreferenceKeys.AUTO_START_ROUTE, true, "Démarrer automatiquement la navigation à la fin du compte à rebours")
@@ -803,7 +836,6 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Zones et rappels") {
         SToggle(prefs, "Zones à faibles émissions (ZFE)", "zonewarn", true)
         SToggle(prefs, "Rappel de pause après 2 heures", "breakremind", true)
-        SToggle(prefs, "Conseils météo", "wxadvice", true, "Une discrète remarque par forte pluie, neige, brouillard ou verglas quand vous êtes proche de la limite")
     }
     SGroup("Vos signalements", footer = "Faites un signalement depuis le bouton d'options de la carte. Les signalements restent sur cet appareil et disparaissent après quelques heures.") {
         SToggle(prefs, "Avertir des signalements devant", "policealerts", true)
@@ -849,6 +881,7 @@ private fun PlaceItem(label: String, p: Place?, onChange: () -> Unit, onClear: (
 @Composable
 private fun PlacesSection(engine: NavEngine) {
     val pl = engine.places
+    val importContext = LocalContext.current
     var settingSlot by remember { mutableStateOf<String?>(null) }
     // (read again whenever the saved places change, so a change shows straight away)
     val slotsRaw = engine.prefs.s(PreferenceKeys.PLACE_HOME, "") + engine.prefs.s("place_work", "")
@@ -931,7 +964,36 @@ private fun PlacesSection(engine: NavEngine) {
     val favs = remember(favRaw) { pl.favourites() }
     var renamingFav by remember { mutableStateOf<Place?>(null) }
     var slotFor by remember { mutableStateOf<Place?>(null) }
+    var importingGoogle by remember { mutableStateOf(false) }
+    val googleMapsPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) {
+            importingGoogle = false
+        } else {
+            Thread {
+                val outcome = try {
+                    val json = importContext.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    val places = com.headunit.launcher.GoogleMapsImport.parse(json)
+                    if (places.isEmpty()) null else pl.importFavourites(places)
+                } catch (_: Throwable) { null }
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    importingGoogle = false
+                    if (outcome == null) engine.toast("Aucun lieu enregistré trouvé dans ce fichier", 3500)
+                    else engine.toast("${outcome.first} importés · ${outcome.second} déjà enregistrés", 4500)
+                }
+            }.start()
+        }
+    }
     SGroup("Favoris") {
+        SItem("Importer depuis Google Maps", "Choisissez le fichier Saved Places.json de Google Takeout") {
+            SButton(if (importingGoogle) "Importation…" else "Choisir", primary = true) {
+                if (!importingGoogle) {
+                    importingGoogle = true
+                    try { googleMapsPicker.launch(arrayOf("application/json", "text/plain", "*/*")) }
+                    catch (_: Exception) { importingGoogle = false; engine.toast("Aucun lieu enregistré trouvé dans ce fichier", 3500) }
+                }
+            }
+        }
+
         if (favs.isEmpty()) SNote("Aucun favori pour l'instant. Touchez l'étoile d'une destination pour l'ajouter.")
         favs.forEach { f ->
             when {
@@ -1316,6 +1378,7 @@ private fun AndroidAutoSection(prefs: Prefs) {
     CarTripButtonsGroup(prefs)
     SGroup {
         SToggle(prefs, "Barre de recherche et lieux sur la carte", PreferenceKeys.CAR_MAPUI, true, "Désactivé pour une voiture à molette : toute la carte, avec Rechercher, Domicile et Travail dans Lieux (★)")
+        SToggle(prefs, "Bouton du son sur la carte", PreferenceKeys.CAR_SOUND_BTN, true, "Son activé / Alertes seulement / Muet, hors navigation. Désactivé laisse plus de place aux Lieux récents ; le même choix est dans les Réglages de la voiture")
     }
     // Voice search from the car screen's microphone button listens through the app, which needs the microphone allowed. Android
     // only lets an app ask from its own screen (asking from the car screen is refused on newer Android), so it's asked here
@@ -1435,6 +1498,18 @@ private fun KeysSection(prefs: Prefs, engine: NavEngine) {
             "Horizon Nav utilise la recherche TomTom : la meilleure pour les adresses et numéros de rue") { prefs.put(PreferenceKeys.SEARCHWITH, it) }
         else if (!engine.hasKey) SNote("Pour la recherche d'adresse la plus précise, ajoutez une clé TomTom gratuite ci-dessous.")
     }
+    // Weather (shown in every edition, Plus included: the Met Office key is always your own)
+    SGroup("Météo", footer = "La météo en direct (Réglages > Météo) vient d'Open-Meteo. Au Royaume-Uni, une clé Met Office gratuite est souvent plus précise : datahub.metoffice.gov.uk, abonnez-vous à Site-Specific Forecast (Global spot), puis collez la clé API. Si le Met Office échoue, Open-Meteo est utilisé.") {
+        SFieldItem("Clé API Met Office", prefs.s(PreferenceKeys.METOFFICE_KEY, ""), "Facultatif, Royaume-Uni. Offre gratuite : 360 requêtes par jour (l'app demande au plus toutes les 10 minutes)",
+            placeholder = "Collez une clé") { prefs.put(PreferenceKeys.METOFFICE_KEY, it.trim()) }
+        if (prefs.s(PreferenceKeys.METOFFICE_KEY, "").isNotBlank()) {
+            SItem("Tester le Met Office", if (engine.fix == null) "En attente de votre position" else "Récupère la météo là où vous êtes maintenant") {
+                SButton("Tester", primary = true) { engine.refreshWeather() }
+            }
+            val st = com.headunit.launcher.MetOffice.status
+            if (st.isNotBlank()) SNote(st)
+        }
+    }
     // Horizon Maps on Play: the keys are the app's own (Plus) or not needed (the free OpenStreetMap version), so there's nothing to paste
     if (com.headunit.launcher.Plus.offered) {
         SGroup("Comptes de carte") {
@@ -1525,7 +1600,7 @@ private fun AboutSection(prefs: Prefs, engine: NavEngine) {
         }
     }
     SGroup("Sauvegarde", footer = "Comprend les réglages, les lieux enregistrés et les traces GPX, pas le pack hors ligne. Vos clés API n’y sont que si l’interrupteur est activé. Une sauvegarde de Horizon Launcher peut aussi être restaurée ici.") {
-        SToggle(prefs, "Inclure les clés API", PreferenceKeys.BACKUP_KEYS, false, "Place vos clés TomTom et Mapbox dans le fichier de sauvegarde, pour que Restaurer les remette. Le fichier est en texte brut : gardez-le en lieu sûr")
+        SToggle(prefs, "Inclure les clés API", PreferenceKeys.BACKUP_KEYS, false, "Met vos clés TomTom, Mapbox et Met Office dans le fichier de sauvegarde, pour que Restaurer les remette. Le fichier est en texte clair : gardez-le en lieu sûr")
         SItem("Réglages, lieux et traces") {
             SButton("Sauvegarder") {
                 try { exporter.launch("horizon-nav-backup.json") }

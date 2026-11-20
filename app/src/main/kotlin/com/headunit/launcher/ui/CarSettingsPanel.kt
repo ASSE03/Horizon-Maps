@@ -168,6 +168,7 @@ internal fun CarSettingsPanel(engine: NavEngine, actions: CarActions, small: Boo
                             SetChoice("st-clock", "Horloge", listOf("auto" to "Automatique", "24" to "24 heures", "12" to "12 heures"), prefs.s(PreferenceKeys.CLOCK, "auto")) { prefs.put(PreferenceKeys.CLOCK, it) }
                         }
                         item { SetSwitch("st-mapui", "Barre de recherche et lieux sur la carte", "Désactivé pour une voiture à molette : toute la carte, avec Rechercher, Domicile et Travail dans Lieux (★)", prefs.b(PreferenceKeys.CAR_MAPUI, true)) { prefs.put(PreferenceKeys.CAR_MAPUI, it) } }
+                        item { SetSwitch("st-soundbtn", "Bouton du son sur la carte", "Désactivé laisse plus de place aux Lieux récents", prefs.b(PreferenceKeys.CAR_SOUND_BTN, true)) { prefs.put(PreferenceKeys.CAR_SOUND_BTN, it) } }
                         item { SetSwitch("st-home", "Bouton Domicile", "Sous la barre de recherche", prefs.b(PreferenceKeys.HOME_BTN, true)) { prefs.put(PreferenceKeys.HOME_BTN, it) } }
                         item { SetSwitch("st-work", "Bouton Travail", "Sous la barre de recherche", prefs.b(PreferenceKeys.WORK_BTN, true)) { prefs.put(PreferenceKeys.WORK_BTN, it) } }
                         val cluster = prefs.b(PreferenceKeys.CLUSTER_MAP, true)
