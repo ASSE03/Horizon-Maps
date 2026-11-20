@@ -281,8 +281,8 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
         if (!favsOn) emptyList() else {
             val out = ArrayList<Triple<com.headunit.launcher.Place, String, String>>()
             fun near(p: com.headunit.launcher.Place) = out.any { com.headunit.launcher.Geo.dist(it.first.pos, p.pos) < 30.0 }
-            engine.places.slot("home")?.let { out += Triple(it, com.headunit.launcher."Domicile", "home") }
-            engine.places.slot("work")?.let { if (!near(it)) out += Triple(it, com.headunit.launcher."Travail", "work") }
+            engine.places.slot("home")?.let { out += Triple(it, "Domicile", "home") }
+            engine.places.slot("work")?.let { if (!near(it)) out += Triple(it, "Travail", "work") }
             for (f in engine.places.favourites()) if (!near(f)) out += Triple(f, f.name, "fav")
             for (c in engine.places.customs()) if (c.pinned && !near(c.place)) out += Triple(c.place, c.label, "fav")
             out
