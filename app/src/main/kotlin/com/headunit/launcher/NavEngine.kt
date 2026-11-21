@@ -39,6 +39,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     var fix by mutableStateOf<Fix?>(null)
     var routes by mutableStateOf<List<Route>>(emptyList())
     var routeFrac by mutableStateOf(0f)
+    // #287: carry the completed share of the trip forward when the remaining route is recalculated.
+    private var routeFracBase = 0f
     var active by mutableIntStateOf(0)
     var dest by mutableStateOf<Place?>(null)
     var turn by mutableStateOf<TurnInfo?>(null)
@@ -739,6 +741,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     init {
         NetHealth.appCtx = ctx.applicationContext
+        BgLog.appCtx = ctx.applicationContext
         EuFuel.filesDir = ctx.filesDir
         CarTrains.filesDir = ctx.filesDir   // (the car-train lines, for Avoid car trains)   // (Italy's fuel price list is kept on the device)
         // the language for directions (Settings > Sound & voice > Language): before the voice starts, so it starts in it
@@ -1087,6 +1090,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         "rhd" -> false
         else -> detectedCountry.isNotBlank() && detectedCountry.uppercase() !in KEEP_LEFT
     }
+
+    /** Roundabout traffic follows the country's road rules, not the driver's steering-wheel or card position setting. */
+    val roundaboutClockwise: Boolean get() = if (detectedCountry.isNotBlank()) detectedCountry.uppercase() in KEEP_LEFT else !mirrored
 
     /** The screen layout's side: the turn card and cards on the right (buttons on the left) when true. Follows the steering wheel
      *  side unless Settings > Screen and sizes > Card positions puts the turn card on a side of its own. */
@@ -1498,6 +1504,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     @Volatile private var fusedAcc = 99f
 
     private fun handleLocation(l: Location, first: Boolean) {
+        if (!isCar) try { BgLog.fix(route != null && !previewing) } catch (e: Throwable) { }
         try { handleLocationInner(l, first) } catch (e: Exception) { android.util.Log.w("NavEngine", "location handling failed", e) }
     }
 
@@ -1938,6 +1945,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             try { RouteEnds.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Last routes ended:"); append(it) } } catch (e: Throwable) { }
             try { SoundLog.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Music lowered and given back:"); append(it) } } catch (e: Throwable) { }
             try { NetHealth.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Connection problems:"); append(it) } } catch (e: Throwable) { }
+            try { BgLog.text().takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("In the background today:"); append(it) } } catch (e: Throwable) { }
             try { SessionWatch.exitHistory(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("How the app last ended (Android's record):"); append(it) } } catch (e: Throwable) { }
             if (crash != null) { appendLine(); appendLine("Last crash:"); appendLine(crash) }
             val freeze = try { FreezeWatch.file(ctx).takeIf { it.exists() }?.readText()?.take(2500) } catch (e: Exception) { null }
@@ -2950,6 +2958,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     fun startRoute(to0: Place, departInMin: Int = 0, keepVia: Boolean = false, startNow: Boolean = false, preferVia: String = "", fromTrack: Boolean = false) {
         // a GPX track picked from the search (on the car screen, say): drive it rather than to its start
         if (to0.web.startsWith("gpx:")) { driveTrack(to0.web.removePrefix("gpx:")); return }
+        // Changing stops during a live trip keeps its completed share; a genuinely new destination starts at zero.
+        val progressBase = if (startNow && route != null && !previewing) routeFrac else 0f
         // (a new destination ends driving a GPX track; re-planning the same trip keeps it)
         if (!fromTrack && !keepVia) stopTrackDrive()
         var to = to0
@@ -3003,12 +3013,15 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 stopSim()
                 if (TomTomRest.avoidDropped && !usedOffline) toast("Impossible de contourner les zones à éviter, l'itinéraire les traverse", 5000)
                 dest = to; routes = rs
+                // Save the full set of stops as soon as route planning succeeds: drivers may preview it repeatedly before setting off.
+                rememberMultiStopJourney()
+                clearRouteLimitIfNeeded()
                 // a saved (or sent) route: the choice that goes the same way as before, when one does
                 active = if (preferVia.isBlank()) 0 else rs.indexOfFirst { com.headunit.launcher.ui.viaOf(it) == preferVia }.coerceAtLeast(0)
                 prediction = null; predictionAt = 0L
                 updateRouteZones()
                 said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0
-                turn = null; eta = null; routeFrac = 0f
+                turn = null; eta = null; routeFracBase = progressBase.coerceIn(0f, 1f); routeFrac = routeFracBase
                 map.setDest(to.pos)
                 map.setVias(via.map { v -> v.pos to chargeVias.any { Geo.dist(it, v.pos) < 50.0 } })
                 drawRoutes()
@@ -3317,7 +3330,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                             }
                         } else fetchReroute(f.pos, d.pos, routeVia(), hd)
                         if (rs.isNotEmpty()) shortRoute = offlineNow && OfflineRouter.endsShort
-                        if (rs.isNotEmpty()) { routes = rs; active = 0; said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0; clearLiveAlts(); drawRoutes(); cardsForStartAlts(); err = null; break }
+                        if (rs.isNotEmpty()) {
+                            // #287: the new route starts at the car, so its local progress must be added to the trip already completed.
+                            routeFracBase = routeFrac.coerceIn(0f, 1f); routeFrac = routeFracBase
+                            routes = rs; active = 0; said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0; clearLiveAlts(); drawRoutes(); cardsForStartAlts(); err = null; break
+                        }
                         err = "aucun itinéraire trouvé"
                     } catch (e: Exception) { err = e.message ?: "unknown error" }
                     if (attempt < 3) delay(2500)
@@ -3373,6 +3390,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         faster = null; resume = null; prefs.put(PreferenceKeys.RESUME, "{}")
         incMatches = emptyList(); incidentAhead = null; incAt = 0L; incAlerted.clear()
         routeCams = emptyList(); camsRoute = null; camsAt = 0L; camsCount = -1; hazardSig = 0; policeSig = 0; map.setHazards(emptyList())
+        clearRouteLimitIfNeeded(); routeFracBase = 0f
         via = emptyList(); stopMode = false; destRain = null; routeWx = emptyList(); stopEtas = emptyList(); choose = null
         routes = emptyList(); active = 0; dest = null; turn = null; eta = null; lastIdx = 0; previewing = false; routeFrac = 0f; onRoad = ""
         try { refreshRoad() } catch (e: Exception) { }
@@ -3482,6 +3500,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     @Volatile private var ttWay = -1L
     @Volatile private var ttLim: TomTomRest.RoadLimit? = null
     private var routeLimitAt = 0L
+    private var routeLimitShown = false
+    /** Drop only a value supplied by the previous route; live road lookups must remain intact. */
+    private fun clearRouteLimitIfNeeded() {
+        if (!routeLimitShown) return
+        speedLimit = null; limitEstimated = false; routeLimitShown = false
+        routeLimitAt = 0L; limitOkAt = 0L; limitOkPos = null
+    }
     private var pendLimit = -2.0
     private var pendHits = 0
 
@@ -3567,6 +3592,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             else { speedLimit = v; limitEstimated = r.estimated }
             LimitLog.add(ctx, "carte ${if (r.sure) "sûr" else "probable"}${if (r.estimated) " estimé" else ""} : ${if (v > 0) Math.round(v * 3.6) else 0} km/h · ${r.road.ifBlank { "?" }} (way ${r.wayId}) @ ${LimitLog.pos(at)}")
         }
+        // A successful live road lookup takes ownership from the route sections, so later route gaps won't erase it.
+        routeLimitShown = false
         if (v > 0.0) checkLimitChange(v, r.estimated)
         limitOkAt = System.currentTimeMillis(); limitOkPos = at
     }
@@ -3613,7 +3640,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun applyRouteLimit(r: Route, prog: Double, p: Fix) {
         if (mgLimits()) return
         val secs = r.limits
-        if (secs.isEmpty()) return
+        if (secs.isEmpty()) { clearRouteLimitIfNeeded(); return }
         // a few metres ahead, to make up for the GPS being about a second behind
         val at = prog + min(max(p.speed, 0.0) * 0.8, 20.0)
         var lo = 0; var hi = secs.size - 1; var hit: LimitSec? = null
@@ -3622,7 +3649,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val sc = secs[m]
             if (at < sc.off) hi = m - 1 else if (at >= sc.end) lo = m + 1 else { hit = sc; break }
         }
-        if (hit == null) { nextLimit = null; map.setSpeedChange(null, null); return }      // no posted limit known for this stretch: the map data takes over
+        if (hit == null) {
+            // #283: a gap in the route's speed-limit sections must not leave the last section's limit showing as if it still applied.
+            clearRouteLimitIfNeeded()
+            nextLimit = null; map.setSpeedChange(null, null); return
+        }
         // the next change ahead, within about half a mile (shown small above the limit sign)
         var nx: Pair<Double, Double>? = null
         for (sc in secs) {
@@ -3643,7 +3674,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // (Settings › Alerts › Upcoming speed limits switches the sign on the map off along with the one by the speedometer)
             if (prefs.b(PreferenceKeys.NEXT_LIMIT, true)) map.setSpeedChange(point, value, limitSignStyle) else map.setSpeedChange(null, null)
         }
-        routeLimitAt = System.currentTimeMillis()
+        routeLimitAt = System.currentTimeMillis(); routeLimitShown = true
         pendHits = 0; pendLimit = -2.0
         // fork FR : les limitations de l'itinéraire passent parfois à la valeur suivante trop tôt (sortie d'agglomération). Si la
         // carte locale, lue il y a peu au même endroit, indique une limitation plus basse, on garde la plus basse jusqu'à ce
@@ -3793,7 +3824,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // warned in good time: at least 500 m, or about 18 seconds ahead at speed
         val warnAt = max(500.0, p.speed * 18.0)
         val rc = routeCams
-        if (navigatingNow() && onRouteNow && rc.isNotEmpty()) {
+        if (navigatingNow()) {
+            // #286: while navigating, only announce cameras matched to this route; an empty match is not permission to
+            // fall back to nearby cameras, which may belong to a parallel or opposite road.
+            if (onRouteNow && rc.isNotEmpty()) {
             // on a route: the cameras along it, by distance along the road (works round bends, where "straight ahead" doesn't)
             // the cameras that start or end an average speed check (or stand along one) are announced as the check, not as a plain
             // camera: both used the same banner, so "Speed camera" came up first and hid "Average speed check" (GitHub #107)
@@ -3804,6 +3838,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (!camFacesUs(c, p.heading)) continue
                 if (zones.any { off >= it.start - 150.0 && off <= it.end + 150.0 }) continue
                 best = c; bestD = max(0.0, ahead)
+            }
             }
         } else if (p.speed > 3.0) {
             for (c in cameras) {
@@ -4130,6 +4165,53 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    // ---- recent multi-stop journeys: keep the destination and every stop so the same trip can be planned again ----
+    class JourneyHistory(val id: Long, val dest: Place, val stops: List<Place>)
+
+    fun journeyHistory(): List<JourneyHistory> = try {
+        val a = org.json.JSONArray(prefs.s("journey_history", "[]"))
+        (0 until a.length()).mapNotNull { i ->
+            try {
+                val o = a.getJSONObject(i)
+                val v = o.optJSONArray("v") ?: org.json.JSONArray()
+                JourneyHistory(o.optLong("id"), placeOf(o.getJSONObject("d")),
+                    (0 until v.length()).map { placeOf(v.getJSONObject(it)) })
+            } catch (e: Exception) { null }
+        }.sortedByDescending { it.id }.take(8)
+    } catch (e: Exception) { emptyList() }
+
+    private fun rememberMultiStopJourney() {
+        val d = dest ?: return
+        val stops = via.toList()
+        if (stops.isEmpty()) return
+        val old = journeyHistory().filterNot { h ->
+            Geo.dist(h.dest.pos, d.pos) < 30.0 && h.stops.size == stops.size &&
+                h.stops.zip(stops).all { Geo.dist(it.first.pos, it.second.pos) < 30.0 }
+        }
+        val now = System.currentTimeMillis()
+        val a = org.json.JSONArray()
+        (listOf(JourneyHistory(now, d, stops)) + old).take(8).forEach { h ->
+            a.put(org.json.JSONObject().put("id", h.id).put("d", placeJson(h.dest))
+                .put("v", org.json.JSONArray().apply { h.stops.forEach { put(placeJson(it)) } }))
+        }
+        // Keep this separate from saved routes and single-place recents: it records a journey actually started.
+        prefs.put("journey_history", a.toString())
+    }
+
+    fun startJourneyHistory(journey: JourneyHistory) {
+        via = journey.stops.toList()
+        startRoute(journey.dest, keepVia = true)
+    }
+
+    fun removeJourneyHistory(journey: JourneyHistory) {
+        val a = org.json.JSONArray()
+        journeyHistory().filterNot { it.id == journey.id }.forEach { h ->
+            a.put(org.json.JSONObject().put("id", h.id).put("d", placeJson(h.dest))
+                .put("v", org.json.JSONArray().apply { h.stops.forEach { put(placeJson(it)) } }))
+        }
+        prefs.put("journey_history", a.toString())
+    }
+
     // ---- saved routes: a destination with its stops and the road picked, to plan again later (with that day's traffic) ----
     class SavedRoute(val name: String, val dest: Place, val stops: List<Place>, val via: String)
 
@@ -4318,6 +4400,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var glideRunning = false
     /** The app is on screen (set by the activity): in the background the per-frame work drops right down. */
     @Volatile var appVisible = true
+        set(v) { field = v; if (!isCar) BgLog.foreground = v }
     private var gLastNs = 0L
     private var gGuideAt = 0L
     private var gFullAt = 0L
@@ -4331,6 +4414,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         ch.postFrameCallback(object : android.view.Choreographer.FrameCallback {
             private var lastFrame = 0L
             override fun doFrame(frameTimeNanos: Long) {
+                // another app in front and no route to follow: nothing to move, so the loop stops instead of waking the phone at
+                // every screen refresh while you use other apps (battery). The next GPS fix starts it again
+                if (!appVisible && !isCar && route == null && simMode == 0) { glideRunning = false; return }
                 val before = PerfStats.ticks
                 val t0 = System.nanoTime()
                 try { glideTick(frameTimeNanos) } catch (e: Exception) { android.util.Log.w("NavEngine", "glide failed", e) }
@@ -4644,9 +4730,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // it's ended, which also stops the GPS and the notification, so nothing runs on in the background for hours (pc4096)
         if (newFix) {
             val nowI = android.os.SystemClock.elapsedRealtime()
-            if (route == null || previewing || appVisible || !(isStill || p.speed < 1.0) || simMode != 0) idleSince = 0L
+            // (after Android Auto was unplugged with the car parked, walking pace counts too, and 10 minutes is enough: the trip
+            // the phone took over kept GPS and guidance running in your pocket as you walked off, never "still", draining the
+            // battery. Nothing ends while a car is connected)
+            val walkedOff = !isCar && RouteSync.carLeftParkedAt > 0L && p.speed < 3.0
+            if (route == null || previewing || appVisible || !(isStill || p.speed < 1.0 || walkedOff) || simMode != 0 || (!isCar && RouteSync.carConnected())) idleSince = 0L
             else if (idleSince == 0L) idleSince = nowI
-            else if (nowI - idleSince > 30 * 60_000L) { idleSince = 0L; scope.launch { try { endRoute() } catch (e: Exception) { } } }
+            else if (nowI - idleSince > (if (walkedOff) 10 else 30) * 60_000L) { idleSince = 0L; scope.launch { try { endRoute() } catch (e: Exception) { } } }
         }
         // on Android Auto: the map moved by hand and then the car drives off (over about 10 mph, 5 seconds after the last touch):
         // back to following the car, so it doesn't drive off the screen and need a tap on Re-centre while driving (GitHub #273).
@@ -6280,6 +6370,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun acceptFaster() {
         val fr = faster ?: return
+        routeFracBase = routeFrac.coerceIn(0f, 1f)
         routes = listOf(fr.route); active = 0
         said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0
         faster = null
@@ -6314,6 +6405,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val a = liveAlts.getOrNull(i) ?: return
         altListOpen = false
         val old = route; val oldProg = curProgress
+        routeFracBase = routeFrac.coerceIn(0f, 1f)
         routes = listOf(a.route); active = 0
         said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0; liveSaid.clear()
         clearLiveAlts()
@@ -6483,7 +6575,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     StopEta(v, Clock.hm(now + (s * 1000).toLong()), max(0.0, o - progress), s)
                 }
             }
-            routeFrac = (1.0 - frac).toFloat().coerceIn(0f, 1f)
+            // #287: the new route begins at the current position; scale its local progress into the trip still remaining.
+            routeFrac = (routeFracBase + (1f - routeFracBase) * (1.0 - frac).toFloat()).coerceIn(0f, 1f)
             pruneLiveAlts(progress)
             saveResumeBeat()
             checkFaster(r, secs)
@@ -7503,6 +7596,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         try { bendTick(r, progress) } catch (e: Exception) { }
         val now = System.currentTimeMillis()
+        // #280: hazards belong to a particular route. Discard the old route's cache immediately, rather than
+        // projecting its stop signs onto a replacement route that may run alongside it.
+        if (hzWinRoute !== r) {
+            rawHz = emptyList(); hzWinRoute = r; hzWinEnd = -1.0; hzRetryAt = 0L
+            placed = null; placedSig = 0
+            map.setStopSigns(emptyList()); map.setCrossings(emptyList())
+        }
         barProgress = progress
         val d = dest
         // motorway services: once per destination, for longer trips
@@ -7525,8 +7625,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             scope.launch {
                 try {
                     val (p, _) = withContext(Dispatchers.IO) { RouteExtras.hazards(line) }
-                    rawHz = (rawHz + p).distinctBy { "${it.kind}${Math.round(it.pos.lat * 1e5)},${Math.round(it.pos.lon * 1e5)}" }.takeLast(1500)
-                    hzWinRoute = r; hzWinEnd = to
+                    // #280: an Overpass reply can arrive after a reroute; never attach its old-route signs to the new route.
+                    if (route === r && !previewing && hzWinRoute === r) {
+                        rawHz = p.distinctBy { "${it.kind}${Math.round(it.pos.lat * 1e5)},${Math.round(it.pos.lon * 1e5)}" }.takeLast(1500)
+                        hzWinEnd = to
+                    }
                 } catch (e: Exception) { hzRetryAt = System.currentTimeMillis() + 60_000L }
                 finally { hzBusy = false }
             }
@@ -7582,6 +7685,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         val zs = if (zoneWarn) Zones.entries(r, Zones.all(ctx)).map { it.first.name to it.second } else emptyList()
                         Placed(r, svc, fuelText, hzOn, avg, stops, zs)
                     }
+                    // #280: route placement is asynchronous too; an old result must not repaint signs after a reroute.
+                    if (route !== r || previewing) return@launch
                     placed = pl; placedSig = sig
                     pushAvgZones(r, if (prefs.b(PreferenceKeys.AVGZONES, true)) pl.avg else emptyList())
                     // zebra and other marked crossings on the route, painted on the road

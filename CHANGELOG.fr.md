@@ -5,6 +5,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Historique des trajets à plusieurs étapes : un trajet récent avec étapes se relance en entier, le nombre d'étapes affiché sous son nom.
 - Limitations à venir sur la carte : un panneau lisible là où la limitation change sur l'itinéraire, assorti au panneau principal (Réglages › Vitesse › Limitations à venir).
 - Domicile, Travail et favoris sur la carte, avec un curseur de taille.
 - Trier les favoris : de A à Z ou le plus proche ; « Déplacer vers Vos lieux ».
@@ -132,6 +133,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Ronds-points : le sens de rotation suit le code de la route local (aussi dans la notification de guidage).
+- Recalcul en cours de trajet : la progression déjà faite est gardée, et les alertes suivent le nouvel itinéraire.
+- Lampadaires : chargement amélioré.
+- Batterie : sur téléphone, l'écran peut se mettre en veille hors guidage ; plus d'images calculées en arrière-plan ; un trajet abandonné à pied se termine après débranchement. Journal d'activité en arrière-plan dans les avis envoyés.
 - Signal faible : un message juste quand le téléphone est connecté mais que le service d'itinéraire ne répond pas.
 - Dangers signalés sur l'autre sens d'une route à chaussées séparées : beaucoup moins d'alertes inutiles.
 - Voies et zoom sur les voies : plus de clignotement à l'approche des sorties d'autoroute.

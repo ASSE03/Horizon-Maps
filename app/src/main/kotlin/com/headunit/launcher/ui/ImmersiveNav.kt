@@ -934,7 +934,7 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
         // hazard radar: the next two miles at a glance (replaces the separate camera and incident badges)
         if (radarOn) HazardRadar(engine)
         else if ((inc != null && engine.alert?.kind != "incident") || (cam != null && engine.alert?.kind != "camera")) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (inc != null && engine.alert?.kind != "incident") HazardBadge("incident", inc.label, Geo.fmtDist(inc.dist, engine.imperial))
+            if (inc != null && engine.alert?.kind != "incident") HazardBadge("incident", L.t(inc.label), Geo.fmtDist(inc.dist, engine.imperial))
             if (cam != null && engine.alert?.kind != "camera") HazardBadge("camera", "Radar", Geo.fmtDist(cam.toDouble(), engine.imperial))
         }
         eta?.let { e ->
@@ -1365,13 +1365,13 @@ internal fun ImmTurnCard(
             .clickable { engine.itineraryOpen = true },
     ) {
         if (slim) Row(Modifier.padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-            ManeuverArrow(t.maneuver, Geo.maneuverAngle(t.maneuver), Modifier.size(34.dp), roundaboutExit = t.exit, roundaboutClockwise = !engine.mirrored, exitAngle = roundaboutTurn(t.rbIn, t.rbOut), sides = t.sides)
+            ManeuverArrow(t.maneuver, Geo.maneuverAngle(t.maneuver), Modifier.size(34.dp), roundaboutExit = t.exit, roundaboutClockwise = engine.roundaboutClockwise, exitAngle = roundaboutTurn(t.rbIn, t.rbOut), sides = t.sides)
             RollText(Geo.fmtDist(t.dist, engine.imperial), Color.White, 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 10.dp))
             RoadLine(if (t.landmark.isNotBlank()) t.landmark + (if (t.street.isNotBlank()) " · " + t.street else "") else t.street, engine.ukRoadBadges, 16.sp, Modifier.padding(start = 12.dp))
         } else {
         val thenIcon = t.thenManeuver != null && engine.prefs.s(PreferenceKeys.THEN_STYLE, "row") == "icon"
         Row(Modifier.padding(start = if (compact) 12.dp else 18.dp, end = if (compact) 12.dp else 16.dp, top = if (compact) 9.dp else 16.dp, bottom = if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ManeuverArrow(t.maneuver, Geo.maneuverAngle(t.maneuver), Modifier.size(if (compact) 42.dp else 60.dp), roundaboutExit = t.exit, roundaboutClockwise = !engine.mirrored, exitAngle = roundaboutTurn(t.rbIn, t.rbOut), exitNumber = t.exit, sides = t.sides)
+            ManeuverArrow(t.maneuver, Geo.maneuverAngle(t.maneuver), Modifier.size(if (compact) 42.dp else 60.dp), roundaboutExit = t.exit, roundaboutClockwise = engine.roundaboutClockwise, exitAngle = roundaboutTurn(t.rbIn, t.rbOut), exitNumber = t.exit, sides = t.sides)
             Column(Modifier.padding(start = if (compact) 9.dp else 16.dp).weight(1f)) {
                 // at traffic lights or a stop sign: that in big ("At the lights"), and the distance moves down beside the road name
                 val lmk = t.landmark.isNotBlank()
@@ -1389,7 +1389,7 @@ internal fun ImmTurnCard(
             // the turn straight after, as a small arrow (the "Puis" line below is used instead when that style is chosen)
             if (thenIcon && t.thenManeuver != null) Column(Modifier.padding(start = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(TealDeep), contentAlignment = Alignment.Center) {
-                    ManeuverArrow(t.thenManeuver, Geo.maneuverAngle(t.thenManeuver), Modifier.size(28.dp), roundaboutExit = t.thenExit, roundaboutClockwise = !engine.mirrored)
+                    ManeuverArrow(t.thenManeuver, Geo.maneuverAngle(t.thenManeuver), Modifier.size(28.dp), roundaboutExit = t.thenExit, roundaboutClockwise = engine.roundaboutClockwise)
                 }
                 Text("puis", color = Color.White.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
             }
@@ -1420,8 +1420,8 @@ internal fun ImmTurnCard(
                 // a roundabout next: its exit number goes in the icon, so the line only needs the road ("Then A3057 Romsey Road");
                 // "Then take the 3rd exit onto …" ran out of room on long names (karthikeyansr)
                 val rbShort = t.thenExit > 0 && t.thenStreet.isNotBlank() && t.thenManeuver.uppercase().contains("ROUNDABOUT")
-                if (rbShort) ManeuverArrow(t.thenManeuver, Geo.maneuverAngle(t.thenManeuver), Modifier.size(38.dp), roundaboutExit = t.thenExit, roundaboutClockwise = !engine.mirrored, exitNumber = t.thenExit)
-                else ManeuverArrow(t.thenManeuver, Geo.maneuverAngle(t.thenManeuver), Modifier.size(22.dp), roundaboutExit = t.thenExit, roundaboutClockwise = !engine.mirrored)
+                if (rbShort) ManeuverArrow(t.thenManeuver, Geo.maneuverAngle(t.thenManeuver), Modifier.size(38.dp), roundaboutExit = t.thenExit, roundaboutClockwise = engine.roundaboutClockwise, exitNumber = t.thenExit)
+                else ManeuverArrow(t.thenManeuver, Geo.maneuverAngle(t.thenManeuver), Modifier.size(22.dp), roundaboutExit = t.thenExit, roundaboutClockwise = engine.roundaboutClockwise)
                 BadgedLine(if (rbShort) "Puis ${t.thenStreet}" else t.thenText, engine.ukRoadBadges, 14.sp, Color.White.copy(alpha = 0.92f), Modifier.padding(start = 10.dp),
                     // on the car screen a long street name wraps onto a second line before it's cut short (fjunakovic, #248)
                     maxLines = if (car) 2 else 1)
@@ -1717,12 +1717,14 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
     val rawRecent = engine.prefs.s(PreferenceKeys.PLACES_RECENT, "")
     val rawRoutes = engine.prefs.s(PreferenceKeys.PLACES_ROUTES, "[]")
     val routes = remember(rawRoutes) { engine.savedRoutes() }
+    val rawJourneyHistory = engine.prefs.s("journey_history", "[]")
+    val journeyHistory = remember(rawJourneyHistory) { engine.journeyHistory() }
     // (kind 0 = one of your own labelled places, 1 = a favourite, 2 = recent, 3 = a saved route, 4 = a group of your places; the
     // label is the name shown). A group is one row that opens to its places (GitHub #138).
     var openGroup by rememberSaveable { mutableStateOf("") }
     val groupCount = remember(rawCustom) { engine.places.customs().filter { it.group.isNotBlank() }.groupingBy { it.group }.eachCount() }
     val inOpen = remember(rawCustom, openGroup) { engine.places.customs().filter { it.group == openGroup && openGroup.isNotEmpty() }.map { it.label }.toSet() }
-    val saved: List<Triple<com.headunit.launcher.Place, Int, String>> = remember(rawCustom, rawFav, rawRecent, routes, openGroup) {
+    val saved: List<Triple<com.headunit.launcher.Place, Int, String>> = remember(rawCustom, rawFav, rawRecent, routes, rawJourneyHistory, journeyHistory, openGroup) {
         val mine = engine.places.customs()
         val favs = engine.places.favourites().filter { f -> mine.none { Geo.dist(it.place.pos, f.pos) < 60 } }
         val recents = engine.places.recents().filter { r -> favs.none { Geo.dist(it.pos, r.pos) < 60 } && mine.none { Geo.dist(it.place.pos, r.pos) < 60 } }
@@ -1732,7 +1734,7 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
         }
         // (only recent places: everything saved is in the row of tiles above, which ends with "Add a place")
         @Suppress("UNUSED_VARIABLE") val unusedGroups = grouped
-        recents.map { Triple(it, 2, it.name) }
+        journeyHistory.map { Triple(it.dest, 5, it.id.toString()) } + recents.map { Triple(it, 2, it.name) }
     }
     var adding by remember { mutableStateOf(false) }
     if (adding) AddPlaceDialog(engine, null) { adding = false }
@@ -1809,8 +1811,9 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
                         }
                         return@items
                     }
-                    val fav = kind != 2
+                    val fav = kind == 0 || kind == 1
                     val sr = if (kind == 3) routes.firstOrNull { it.dest === p && it.name == label } else null
+                    val jr = if (kind == 5) journeyHistory.firstOrNull { it.id.toString() == label } else null
                     // swipe a place sideways to take it off the list (a favourite is unstarred, a recent one forgotten, your own place removed)
                     var dx by remember { mutableStateOf(0f) }
                     var w by remember { mutableStateOf(1) }
@@ -1822,6 +1825,7 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
                                     if (kotlin.math.abs(dx) > w * 0.35f) when (kind) {
                                         0 -> { engine.places.removeCustom(label); engine.toast("$label retiré", 2000) }
                                         3 -> { sr?.let { engine.deleteSavedRoute(it) }; engine.toast("Retiré des itinéraires enregistrés", 2000) }
+                                        5 -> { jr?.let { engine.removeJourneyHistory(it) }; engine.toast("Retiré des lieux récents", 2000) }
                                         1 -> { engine.places.toggleFavourite(p); engine.toast("Retiré des favoris", 2000) }
                                         else -> { engine.places.removeRecent(p); engine.toast("Retiré des lieux récents", 2000) }
                                     }
@@ -1831,17 +1835,19 @@ private fun ImmQuick(engine: NavEngine, showSaved: Boolean = true) {
                             ) { change, amount -> change.consume(); dx += amount }
                         }
                         .graphicsLayer { translationX = shown; alpha = 1f - (kotlin.math.abs(shown) / w.toFloat()).coerceIn(0f, 0.7f) }
-                        .clickable { if (sr != null) engine.startSavedRoute(sr) else engine.startRoute(p) }
+                        .clickable { when { sr != null -> engine.startSavedRoute(sr); jr != null -> engine.startJourneyHistory(jr); else -> engine.startRoute(p) } }
                         .padding(start = if (kind == 0 && label in inOpen) 34.dp else 16.dp, end = 16.dp, top = 9.dp, bottom = 9.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(44.dp).clip(CircleShape).background(c.tile), contentAlignment = Alignment.Center) {
-                            if (kind == 3) Icon(Icons.Rounded.Route, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                            if (kind == 3 || kind == 5) Icon(Icons.Rounded.Route, null, tint = c.accent, modifier = Modifier.size(22.dp))
                             else Icon(if (fav) Icons.Rounded.Star else Icons.Rounded.History, null, tint = if (fav) Warn else c.sub, modifier = Modifier.size(22.dp))
                         }
                         Column(Modifier.padding(start = 14.dp).weight(1f)) {
-                            Text(label, color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(if (jr != null) p.name else label, color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (sr != null) Text(when (sr.stops.size) { 0 -> "Itinéraire enregistré"; 1 -> "Itinéraire enregistré · 1 arrêt"; else -> "Itinéraire enregistré · ${sr.stops.size} arrêts" },
                                 color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            else if (p.sub.isNotBlank()) Text(p.sub, color = c.sub, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            else if (jr != null) Text(if (jr.stops.size == 1) "1 étape" else "${jr.stops.size} étapes",
+                                color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            else if (p.sub.isNotBlank()) Text(p.sub, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         if (here != null) Text(Geo.fmtDist(Geo.dist(here, p.pos), engine.imperial), color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
                     }
@@ -1887,7 +1893,7 @@ private fun ItineraryCard(engine: NavEngine) {
                 Column(Modifier.fillMaxWidth().background(if (sel) Color.White.copy(alpha = 0.10f) else Color.Transparent)
                     .clickable { touched++; picked = row.index; engine.previewTurn(row) }.padding(horizontal = 16.dp, vertical = 10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ManeuverArrow(row.maneuver, Geo.maneuverAngle(row.maneuver), Modifier.size(30.dp), roundaboutExit = row.exit, roundaboutClockwise = !engine.mirrored)
+                        ManeuverArrow(row.maneuver, Geo.maneuverAngle(row.maneuver), Modifier.size(30.dp), roundaboutExit = row.exit, roundaboutClockwise = engine.roundaboutClockwise)
                         Column(Modifier.padding(start = 14.dp).weight(1f)) {
                             Text(row.text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(listOfNotNull(row.tag.ifBlank { null }, "vers " + row.arrive).joinToString(" · "), color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, maxLines = 1)

@@ -5,6 +5,26 @@ Everything that has changed in Horizon Nav, newest first. Each version lists wha
 ## Unreleased
 
 ### New
+- Multi-stop journey history: remember the destination and every stop as soon as the route is planned, so it can be previewed again with the same stops and fresh traffic (thanks to neilch0111, #279)
+
+### Fixed
+- Malayalam wording: refine Delete, fuel use and price, fuel-stop suggestions and the map-selection label (thanks to bijindas, #244)
+- Streetlights loading: queue every missing OpenStreetMap area instead of silently skipping requests while another area is downloading; carry on to the next area even when one request times out (thanks to joel941703-hash, #282)
+
+### Fixed
+- Roundabout direction: the highlighted path now follows the country's traffic rules, independently of the steering-wheel and screen layout settings, including the turn card, Android Auto and navigation notification (thanks to Dixet, #285)
+- Route progress after rerouting: keep the completed part of the journey, so the progress bar carries on instead of jumping back towards the start (thanks to yurividal, #287)
+- Speed camera warnings while navigating: only use cameras matched to the active route, not nearby cameras on parallel or opposite roads when route matching finds none (thanks to d3stiny999, #286)
+- Stop signs after rerouting: clear the previous route's results, ignore late replies from the old route, and don't guess when the sign's road cannot be identified (thanks to jvricardo1, #280)
+- Spanish incident labels and speed limits: translate incident badges on the phone, and clear a route-derived limit when the route has no known limit for the current stretch so live road data can take over (thanks to pimpampumpam, #283)
+
+### Improved
+- Battery: on a phone, the screen now goes off as usual while you're only looking at the map, and stays on just while you're following a route (it stayed on the whole time the app was open). Head units keep it on as before
+- Battery: with another app in front and no route, the map's per-frame work stops completely, instead of waking the phone at every screen refresh
+- Problem reports now say what the app did in the background today: how long GPS ran (with and without a route) and how many online requests were made, by which part of the app, to track down battery drain
+- Battery: a trip the phone carried on with after Android Auto was unplugged with the car parked now ends after 10 minutes of not driving, so GPS and guidance don't keep running in your pocket as you walk away
+
+### New
 - Upcoming speed limits you can read: the sign on the route where the limit changes is now the same sign as your main one (the red ring, or the white board in the US and Canada), about twice the size, on a white halo, and road names move out of its way instead of covering it. The small sign by your limit with how far it is now looks like the main one too. Both are under Settings › Alerts › Upcoming speed limits
 - Home, Work and starred places on the map: as well as your favourites, Home (a house on blue), Work (a briefcase on amber) and the starred places in Your places now show on the map, and a tap opens the place with Go. Settings › On the map › Saved places has one "Saved places icons" slider for the size of them all
 - The faded roads on the turn arrow sit at tidy angles: the arrow is drawn at a set angle for each kind of turn, but the other roads came at their real angles, so one could stick out at an odd angle beside it. They're now set to the nearest 45 degrees, on the side they really are
