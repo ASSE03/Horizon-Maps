@@ -2067,6 +2067,31 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             return res
         }
         fun mappedNear(lat: Double, lon: Double): Boolean = cellsNear(lampGrid, lat, lon).any { Geo.dist(LL(it[0], it[1]), LL(lat, lon)) < clearOf }
+        // every street piece on screen in the same 30 m squares, so a placed lamp can be kept off the carriageway: at the left kerb
+        // of one road it could stand on another (the other half of a dual carriageway, a side road at a junction), which showed as
+        // lamps in the middle of the road (ChrisSantosGarage, #296)
+        val roadGrid = HashMap<Long, MutableList<DoubleArray>>()
+        for (line in roads) for (i in 0 until line.size - 1) {
+            val a = line[i]; val b = line[i + 1]
+            val piece = doubleArrayOf(a.longitude() * kx, a.latitude() * ky, b.longitude() * kx, b.latitude() * ky)
+            val len = Math.hypot(piece[2] - piece[0], piece[3] - piece[1])
+            val n = Math.max(1, Math.ceil(len / cellM).toInt())
+            val keys = HashSet<Long>()
+            for (t in 0..n) keys += cell(a.latitude() + (b.latitude() - a.latitude()) * t / n, a.longitude() + (b.longitude() - a.longitude()) * t / n)
+            for (kk in keys) roadGrid.getOrPut(kk) { ArrayList() } += piece
+        }
+        /** How far [lat], [lon] is from the middle of the nearest street on screen (up to 30 m). */
+        fun roadGap(lat: Double, lon: Double): Double {
+            val px = lon * kx; val py = lat * ky
+            var best = 30.0
+            for (q in cellsNear(roadGrid, lat, lon)) {
+                val dx = q[2] - q[0]; val dy = q[3] - q[1]
+                val l2 = dx * dx + dy * dy
+                val t = if (l2 < 1e-6) 0.0 else (((px - q[0]) * dx + (py - q[1]) * dy) / l2).coerceIn(0.0, 1.0)
+                best = minOf(best, Math.hypot(px - (q[0] + dx * t), py - (q[1] + dy * t)))
+            }
+            return best
+        }
         var skippedUnlit = 0
         if (roads.isNotEmpty()) {
             val taken = HashSet<Long>()
@@ -2094,6 +2119,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                         val dir = Math.toDegrees(Math.atan2(bx - ax, by - ay))
                         // at the left kerb, about 5.5 m from the middle of the road, arm reaching back over it
                         val at = Furniture.offset(LL(lat, lon), dir - 90.0, 5.5)
+                        // (not where it would stand in another road: within 4.5 m of any street's middle, its own included)
+                        if (roadGap(at.lat, at.lon) < 4.5) continue
                         if (taken.add(key(at.lat, at.lon)) && Geo.dist(at, c) < 900.0) spots += doubleArrayOf(at.lat, at.lon, dir + 90.0)
                     }
                     carry = d - len
@@ -4475,6 +4502,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val cOpts = if (custom) locatorColor.split('|') else emptyList()
         val cTurns = cOpts.getOrNull(1) != "0"
         val cCircle = cOpts.getOrNull(2) == "1"
+        val cClear = cOpts.getOrNull(3) != "0"
         val upright = custom && !cTurns
         val yawB = if (upright) 0L else (Math.round(rel / 8.0) * 8) % 360
         val pitB = if (upright) 0L else Math.round(cam.pitch / 5.0) * 5
@@ -4490,7 +4518,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                 val car = locatorStyle == "car"; val col = locatorColor
                 Thread {
                     val bmp = try {
-                        if (custom) customImage(cOpts.getOrNull(0) ?: "")?.let { renderCustom(it, yawB.toDouble(), pitB.toDouble(), !upright, cCircle) }
+                        if (custom) customImage(cOpts.getOrNull(0) ?: "", cClear)?.let { renderCustom(it, yawB.toDouble(), pitB.toDouble(), !upright, cCircle) }
                         else if (car) renderSprite(carParts(col), 300.0 / 4.4 * 0.6, yawB.toDouble(), pitB.toDouble(), true)
                         else renderSprite(arrowParts(col), 300.0 * 0.42, yawB.toDouble(), pitB.toDouble(), false)
                     } catch (e: Throwable) { null }
@@ -4515,12 +4543,48 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     @Volatile private var customVer: String? = null
 
     /** Your locator picture (saved small by the settings page), loaded once per version. */
-    private fun customImage(ver: String): Bitmap? {
-        if (customVer == ver) return customBase
+    private fun customImage(ver: String, clearWhite: Boolean = true): Bitmap? {
+        val stamp = ver + "|" + (if (clearWhite) "1" else "0")
+        if (customVer == stamp) return customBase
         val f = java.io.File(ctx.filesDir, "locator.png")
-        val b = try { if (f.exists()) android.graphics.BitmapFactory.decodeFile(f.path) else null } catch (e: Throwable) { null }
-        customBase = b; customVer = ver
+        var b = try { if (f.exists()) android.graphics.BitmapFactory.decodeFile(f.path) else null } catch (e: Throwable) { null }
+        if (b != null && clearWhite) b = try { withoutWhiteBackground(b) } catch (e: Throwable) { b }
+        customBase = b; customVer = stamp
         return b
+    }
+
+    /**
+     * A picture saved with a solid white background (no real see-through part) gets that white made see-through, so it doesn't
+     * show as a white box on the map. Only the white that touches the edge of the picture is removed, so white inside the
+     * picture (a white car, say) stays. A picture that already has see-through pixels is returned as it is.
+     */
+    private fun withoutWhiteBackground(src: Bitmap): Bitmap {
+        val w = src.width; val h = src.height
+        if (w < 2 || h < 2) return src
+        val px = IntArray(w * h)
+        src.getPixels(px, 0, w, 0, 0, w, h)
+        for (v in px) if ((v ushr 24) < 250) return src
+        fun white(v: Int): Boolean = ((v shr 16) and 0xFF) >= 235 && ((v shr 8) and 0xFF) >= 235 && (v and 0xFF) >= 235
+        // all four corners must be white, otherwise the picture's edge isn't a white background
+        if (!white(px[0]) || !white(px[w - 1]) || !white(px[(h - 1) * w]) || !white(px[h * w - 1])) return src
+        val seen = BooleanArray(w * h)
+        val stack = IntArray(w * h)
+        var top = 0
+        fun push(i: Int) { if (!seen[i] && white(px[i])) { seen[i] = true; stack[top++] = i } }
+        for (x in 0 until w) { push(x); push((h - 1) * w + x) }
+        for (y in 0 until h) { push(y * w); push(y * w + w - 1) }
+        while (top > 0) {
+            val i = stack[--top]
+            val x = i % w; val y = i / w
+            if (x > 0) push(i - 1)
+            if (x < w - 1) push(i + 1)
+            if (y > 0) push(i - w)
+            if (y < h - 1) push(i + w)
+        }
+        for (i in px.indices) if (seen[i]) px[i] = 0
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        out.setPixels(px, 0, w, 0, 0, w, h)
+        return out
     }
 
     /**

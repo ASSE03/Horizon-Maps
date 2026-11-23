@@ -5,6 +5,15 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Nouvelle disposition en portrait (téléphone) : sans itinéraire, la barre de recherche en haut, vos lieux, la musique et les messages dans un volet en bas (météo, carburant le moins cher, voiture garée, trafic vers Domicile/Travail) ; en guidage, volet de trajet, dangers dans la carte de direction, vitesse en bas à gauche. Réglages › Écran.
+- Android Auto : ajouter un arrêt en un appui depuis la carte de trajet (carburant, recharge, restauration, café le long de l'itinéraire) et signalements rapides.
+- Signalement rapide depuis la carte.
+- Numéro de la route à côté du nom de rue sur la carte de direction.
+- Arrivée à une adresse : l'itinéraire se termine dans la bonne rue.
+- Alertes travaux désactivables (accidents et fermetures restent signalés) ; sur Android Auto, les travaux s'affichent une fois sur la carte de direction.
+- Canal de la voix : Notification, Alarme ou Sonnerie en plus, quand la voix suit le volume de la musique.
+- Taille du panneau de limitation sur l'écran de la voiture.
+- Image de flèche perso : son fond blanc est retiré.
 - Historique des trajets à plusieurs étapes : un trajet récent avec étapes se relance en entier, le nombre d'étapes affiché sous son nom.
 - Limitations à venir sur la carte : un panneau lisible là où la limitation change sur l'itinéraire, assorti au panneau principal (Réglages › Vitesse › Limitations à venir).
 - Domicile, Travail et favoris sur la carte, avec un curseur de taille.
@@ -133,6 +142,14 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Virage dangereux : l'alerte reste affichée jusqu'à la sortie du virage.
+- Ralentisseurs annoncés au moins 100 m avant.
+- Carte de direction : vitesse moyenne, aires, parkings et conseils y sont regroupés ; « Itinéraire plus rapide » devient une bande sur la carte de trajet.
+- Bandeaux d'alerte sur trois lignes, heure d'arrivée lissée, vue 3D gardée en recentrant à l'arrêt.
+- Lampadaires : plus posés sur l'autre chaussée.
+- Réglages : groupes « Vue de la carte » et « Position de la flèche » (avec l'avance de la flèche), diagnostics sous Performances.
+- Nouveautés : seules celles pas encore montrées sur cet appareil.
+- Clé TomTom refusée : plus lue comme « pas de réseau », et TomTom n'est plus interrogé pendant une heure.
 - Ronds-points : le sens de rotation suit le code de la route local (aussi dans la notification de guidage).
 - Recalcul en cours de trajet : la progression déjà faite est gardée, et les alertes suivent le nouvel itinéraire.
 - Lampadaires : chargement amélioré.

@@ -91,7 +91,9 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
     LaunchedEffect(installedVersion) {
         if (com.headunit.launcher.BuildConfig.UPDATE_REPO.isNotBlank() && prefs.s(PreferenceKeys.WHATS_NEW_SEEN_VERSION, "") != installedVersion) {
             val previousVersion = prefs.s(PreferenceKeys.WHATS_NEW_SEEN_VERSION, "")
-            val notes = try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.headunit.launcher.Updater.installedReleaseNotes(installedVersion, previousVersion, appCtx) } } catch (_: Exception) { "" }
+            val notes0 = try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.headunit.launcher.Updater.installedReleaseNotes(installedVersion, previousVersion, appCtx) } } catch (_: Exception) { "" }
+            // (only what this unit hasn't been shown before: a build's notes are everything since the last published version)
+            val notes = com.headunit.launcher.Updater.unseenNotes(notes0, prefs.s(PreferenceKeys.WHATS_NEW_SHOWN, ""))
             // (only shown when there's something to say: an update with no new notes showed a card saying just that no notes
             // were found. It counts as seen, so it isn't looked up again on every start)
             if (notes.isNotBlank()) {
@@ -412,7 +414,9 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
                         (prefs.b(PreferenceKeys.CRUISE_HEADING, true) || engine.roadNow.isNotBlank())
                     // (above the media bar when that's showing at the bottom)
                     val mediaUp = prefs.b(PreferenceKeys.MEDIA_BAR, false) && com.headunit.launcher.MediaNow.showing()
-                    if (!engine.deadReckoning && cruiseShows) CruisePill(engine, Modifier.align(Alignment.BottomCenter).padding(bottom = if (mediaUp) maxOf(84f, engine.mediaLiftDp + 10f).dp else 18.dp))
+                    androidx.compose.runtime.SideEffect { val w = !engine.deadReckoning && cruiseShows; if (engine.cruisePillWanted != w) engine.cruisePillWanted = w }
+                    // (with the portrait sheet up, the pill is the top line of the sheet instead)
+                    if (!engine.deadReckoning && cruiseShows && !engine.portraitSheetOn) CruisePill(engine, Modifier.align(Alignment.BottomCenter).padding(bottom = if (mediaUp) maxOf(84f, engine.mediaLiftDp + 10f).dp else 18.dp))
                     // that pill has the road name, so the one under your arrow steps aside while it's up (they overlapped)
                     val cruisePillUp = !engine.deadReckoning && cruiseShows
                     LaunchedEffect(cruisePillUp) { map.setRoadNameHidden(cruisePillUp) }
@@ -493,8 +497,9 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
                             else Modifier.align(Alignment.TopStart).fillMaxWidth().padding(start = if (engine.mirrored) 290.dp else 412.dp, end = if (engine.mirrored) 412.dp else 290.dp, top = 16.dp),
                             contentAlignment = if (narrow) Alignment.BottomCenter else Alignment.TopCenter,
                         ) {
+                            // (the portrait route layout draws them under its turn card instead)
                             androidx.compose.animation.AnimatedVisibility(
-                                visible = curAlert != null,
+                                visible = curAlert != null && !engine.alertsUnderTurn,
                                 enter = androidx.compose.animation.slideInVertically(initialOffsetY = { if (narrow) it else -it }) + androidx.compose.animation.fadeIn(),
                                 exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { if (narrow) it else -it }) + androidx.compose.animation.fadeOut(),
                             ) { lastAlert.value?.let { AlertBanner(it) } }
@@ -523,7 +528,11 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
         // landscape (wide and short, like most head units): a wide card with the title and button on the left and the changes in
         // two columns on the right, so more of them show at once; portrait keeps the tall single-column card
         val wideCard = conf.screenWidthDp > conf.screenHeightDp && conf.screenWidthDp >= 640
-        val dismissWhatsNew = { prefs.put(PreferenceKeys.WHATS_NEW_SEEN_VERSION, installedVersion); whatsNewVisible = false }
+        val dismissWhatsNew = {
+            prefs.put(PreferenceKeys.WHATS_NEW_SEEN_VERSION, installedVersion)
+            prefs.put(PreferenceKeys.WHATS_NEW_SHOWN, com.headunit.launcher.Updater.markNotesShown(whatsNewNotes, prefs.s(PreferenceKeys.WHATS_NEW_SHOWN, "")))
+            whatsNewVisible = false
+        }
         androidx.compose.ui.window.Dialog(onDismissRequest = dismissWhatsNew,
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = !wideCard)) {
             val shape = RoundedCornerShape(28.dp)

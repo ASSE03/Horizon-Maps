@@ -631,7 +631,7 @@ object MapboxRest {
                     steps += Step(at, man, street, m.optString("instruction"), exit, if (type == "off ramp") s.optString("exits").substringBefore(';') else "", s.optString("destinations"), junctionPic = pic,
                         rbIn = if (type == "roundabout" || type == "rotary") m.optDouble("bearing_before", -1.0) else -1.0,
                         lights = j0?.optBoolean("traffic_signal", false) == true, stopSign = j0?.optBoolean("stop_sign", false) == true, lightsBefore = sigOnWay,
-                        sides = sideRoads(j0))
+                        sides = sideRoads(j0), ref = if (name.isNotBlank() && type != "off ramp") ref else "")
                     sigOnWay = sigHere
                     if (type == "roundabout" || type == "rotary") rbIdx = steps.size - 1
                     // the lanes at this junction: which go where, and the ones to be in
@@ -784,6 +784,12 @@ object MapboxRest {
         val sub = pr.optString("full_address").takeIf { it.isNotBlank() && it != name && pr.optString("feature_type") == "poi" }
             ?: pr.optString("place_formatted")
         val web = pr.optJSONObject("metadata")?.optString("website").orEmpty()
+        // an address: Mapbox's routable point, on the street in front of it, when it gives one (the address point itself can be in
+        // the middle of the plot, nearer a road behind the house than the one it's on)
+        if (pr.optString("feature_type") == "address") co?.optJSONArray("routable_points")?.optJSONObject(0)?.let { rp ->
+            val la = rp.optDouble("latitude"); val lo = rp.optDouble("longitude")
+            if (!la.isNaN() && !lo.isNaN() && Geo.dist(LL(la, lo), LL(lat, lon)) < 200.0) return Place(name, sub, LL(la, lo), web)
+        }
         return Place(name, sub, LL(lat, lon), web)
     }
 

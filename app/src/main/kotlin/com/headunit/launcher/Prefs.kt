@@ -19,6 +19,7 @@ internal object PreferenceKeys {
     const val LOCATOR_IMAGE = "locimg"
     const val LOCATOR_IMAGE_TURNS = "locimgturn"
     const val LOCATOR_IMAGE_CIRCLE = "locimgcircle"
+    const val LOCATOR_IMAGE_CLEAR = "locimgclear"
     const val MODEL_SHAPE = "modelshape"
     const val MODEL_GLOW = "modelglow"
     /** Your own 3D model: "<stamp>|<bytes>|<longest side>|<file name>" (the file itself is in the app's storage). */
@@ -63,6 +64,8 @@ internal object PreferenceKeys {
     const val CAR_CARD_SIZE = "carcardsize"
     const val CAR_TEXT_SIZE = "cartextsize"
     const val CAR_SPEED_SIZE = "carspeedsize"
+    /** The speed limit sign on the car screen, as a percentage of its usual size (pc4096: it looked too small beside the speedometer). */
+    const val CAR_LIMIT_SIZE = "carlimitsize"
     const val CAR_BUTTON_SIZE = "carbuttonsize"
     const val CAR_ARROW_SIZE = "cararrowsize"
     const val MAP_THEME = "maptheme"
@@ -102,6 +105,8 @@ internal object PreferenceKeys {
     const val SAVED_ICON_SIZE = "savediconsize"
     const val PLACES_ROUTES = "places_routes"
     const val CAR_TRIP_BTNS = "car_trip_btns"
+    /** Set once the Add stop button has been added to a trip card whose buttons were already picked by hand. */
+    const val CAR_TRIP_STOP_ADDED = "car_trip_stop_added"
     const val CAR_TRIP_BTN_SIZE = "car_trip_btn_size"
     /** Android Auto split screen: the trip card as a "bar" along the bottom or a "column" on the left (GitHub). */
     const val CAR_SPLIT_TRIP = "car_split_trip"
@@ -120,6 +125,8 @@ internal object PreferenceKeys {
     const val WHATS_NEW_SEEN_VERSION = "whatsnew_seen_version"
     /** The notes the What's new card last showed, so Settings › Version › What's new can bring them back (GitHub #149). */
     const val WHATS_NEW_LAST_NOTES = "whatsnew_last_notes"
+    /** Every change the What's new card has already shown on this unit (one tidied line each), so it never shows one twice. */
+    const val WHATS_NEW_SHOWN = "whatsnew_shown"
     const val AUTO_START_ROUTE = "autostartroute"
     const val AUTO_START_SECONDS = "autostartseconds"
     // Additional legacy keys centralised without changing their persisted names.
@@ -155,6 +162,8 @@ internal object PreferenceKeys {
     const val CRUISE = "cruise"
     /** "Heading E" after the road name in that pill (liamstears: a switch of its own). */
     const val CRUISE_HEADING = "cruise_heading"
+    /** A portrait screen with no route: just the search bar at the top, and your places, music and notices in a sheet along the bottom. */
+    const val PORTRAIT_SHEET = "portraitsheet"
     const val DATAPROV = "dataprov"
     const val DATASNOOZE = "datasnooze"
     const val DEMO = "demo"
@@ -535,7 +544,7 @@ fun Prefs.setApiKey(k: String) {
 fun Prefs.locatorSpec(): Pair<String, String> {
     val loc = s(PreferenceKeys.LOCATOR, "arrow")
     return when (loc) {
-        "custom" -> loc to (s(PreferenceKeys.LOCATOR_IMAGE, "0") + "|" + (if (b(PreferenceKeys.LOCATOR_IMAGE_TURNS, true)) "1" else "0") + "|" + (if (b(PreferenceKeys.LOCATOR_IMAGE_CIRCLE, false)) "1" else "0"))
+        "custom" -> loc to (s(PreferenceKeys.LOCATOR_IMAGE, "0") + "|" + (if (b(PreferenceKeys.LOCATOR_IMAGE_TURNS, true)) "1" else "0") + "|" + (if (b(PreferenceKeys.LOCATOR_IMAGE_CIRCLE, false)) "1" else "0") + "|" + (if (b(PreferenceKeys.LOCATOR_IMAGE_CLEAR, true)) "1" else "0"))
         "model" -> {
             // (your own model, but none saved: the arrow)
             val shape = s(PreferenceKeys.MODEL_SHAPE, "arrow").let { if (it == "own" && s(PreferenceKeys.OWN_MODEL, "").isBlank()) "arrow" else it }

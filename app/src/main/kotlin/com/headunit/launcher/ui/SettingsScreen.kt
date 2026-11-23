@@ -390,8 +390,6 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Chemins et sentiers", "paths", true, "Désactivez pour une carte de conduite plus épurée")
         SChoice("Routes HD", listOf("auto" to "Automatique", "on" to "Activé", "off" to "Désactivé"), prefs.s(PreferenceKeys.HD_ROADS, "auto"),
             sub = "Marquages au sol, flèches de direction et ponts en 3D là où Mapbox les a (3D complète). Automatique : activé seulement au Royaume-Uni, car dans certains pays ils masquent les rues ordinaires") { prefs.put(PreferenceKeys.HD_ROADS, it) }
-        SToggle(prefs, "Show lane data diagnostics", PreferenceKeys.HD_LANE_DIAGNOSTICS, false,
-            "Only shown in Demo mode; does not affect lane guidance.")
     }
 }
 
@@ -406,10 +404,15 @@ private fun LightSection(prefs: Prefs) {
         SToggle(prefs, "Soleil à sa vraie place", PreferenceKeys.SUN_REAL, false, "La lumière et les ombres viennent de la position réelle du soleil, et la nuit de la lune")
         // (Overcast light is in Settings > Weather, with everything else the weather changes)
     }
-    SGroup("Vue 3D", footer = "30° à 65°. Auto est le choix de l'appli (54°, ou 52° avec une carte allégée). L'inclinaison selon la vitesse et l'aplatissement aux virages s'appliquent en plus.") {
+    // everything that sets the map's angle in one place (the switches below were in Turn card & lanes and On the map, where the
+    // flat view when stopped wasn't found: bluelions25, #312)
+    SGroup("Vue de la carte", footer = "Inclinaison : de 30° à 65°. Auto est le choix de l'appli (54°, ou 52° avec une carte allégée). L'inclinaison selon la vitesse et l'aplatissement dans les virages s'ajoutent par-dessus.") {
         STilt("Inclinaison sur écran large", "Autoradios en paysage. Plus haut montre plus loin (plus à dessiner pour un appareil lent)", prefs, PreferenceKeys.TILT_WIDE)
         STilt("Inclinaison sur écran vertical", "Écrans en portrait et téléphones", prefs, PreferenceKeys.TILT_TALL)
         STilt("Inclinaison sur Android Auto", "L'écran de la voiture", prefs, PreferenceKeys.TILT_CAR)
+        SToggle(prefs, "Aplatir la carte en 2D aux virages", "turn2d", true)
+        SToggle(prefs, "Inclinaison selon la vitesse", "speedtilt", true, "Plus plat à basse vitesse, vue plus longue à vitesse élevée")
+        SToggle(prefs, "Aperçu du trafic à l'arrêt", PreferenceKeys.STOPPED_OVERVIEW, true, "Après 30 secondes à l'arrêt (feu, bouchon), la carte recule en vue du dessus du trafic autour de vous, puis revient quand vous repartez")
     }
     SGroup("3D") {
         SToggle(prefs, "Ombrage du relief", PreferenceKeys.HILLSHADE, false, "Un ombrage doux sur les pentes, pour voir vallées et crêtes même sur une carte à plat. Plus léger que le relief 3D")
@@ -544,6 +547,7 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
         if (loc == "custom") {
             SItem("Image", "Un PNG à fond transparent rend le mieux. Orientez son haut dans le sens de la marche") { SButton(if (hasPic) "Changer" else "Choisir") { choosePic() } }
             SToggle(prefs, "Tourne avec vous", PreferenceKeys.LOCATOR_IMAGE_TURNS, true, "À plat sur la route et tourne avec vous, comme la flèche. Désactivé : reste droite")
+            SToggle(prefs, "Retirer le fond blanc", PreferenceKeys.LOCATOR_IMAGE_CLEAR, true, "Pour une image enregistrée sur fond blanc plutôt que transparent : le blanc autour devient transparent. Une image déjà transparente n'est pas modifiée")
             SToggle(prefs, "Recadrage rond", PreferenceKeys.LOCATOR_IMAGE_CIRCLE, false, "La découpe en cercle avec un bord blanc (idéal pour les photos)")
         }
         // the car's shape: for the Car picture and the real 3D car alike
@@ -582,12 +586,18 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
         SSlider(if (ownShape) "Taille du modèle" else if (shapeCar) "Taille de la voiture" else if (loc == "custom") "Taille de l'image" else "Taille de la flèche", prefs.s(PreferenceKeys.ARROW_PERCENT, "240").toFloatOrNull() ?: 240f, 60f..500f, "%", reset = 240f) { prefs.put(PreferenceKeys.ARROW_PERCENT, it.toString()) }
         SToggle(prefs, "Faisceau des phares la nuit", PreferenceKeys.BEAM, true, "Un doux cône de lumière sur la route devant vous la nuit, en roulant")
     }
+    SGroup("Position de la flèche") {
+        SToggle(prefs, "Garder la flèche sur la route sans itinéraire", "snaproad", true)
+        SChoice("Avance de la flèche", listOf("0" to "Aucune", "0.5" to "0,5 s", "1.0" to "1 s", "1.5" to "1,5 s", "2.0" to "2 s"), prefs.s("arrowlead", "1.0"),
+            "Compense le retard du GPS : la flèche est placée là où vous serez dans ce délai. Augmentez si elle arrive aux croisements après la voiture, baissez si elle les dépasse avant") { prefs.put("arrowlead", it) }
+        SToggle(prefs, "Garder la flèche sur le côté", PreferenceKeys.ARROW_SIDE, false, "Quand les cartes se replient, au lieu de revenir au centre")
+    }
     SGroup("Tracé de l'itinéraire") {
-        SToggle(prefs, "Drapeaux 3D", PreferenceKeys.FLAGS_3D, true, "Un grand drapeau rouge à destination et des drapeaux orange plus petits aux étapes, au-dessus des bâtiments, visibles de loin")
-        SToggle(prefs, "Flèche de direction sur le tracé", "turnarrows", true, "Une flèche blanche à travers le prochain carrefour ou rond-point")
-        SToggle(prefs, "Chevrons le long du tracé", "routechevrons", true, "Petites flèches le long du tracé en vue rapprochée")
-        SToggle(prefs, "Ruban d'itinéraire", "ribbon", true, "Une ombre douce sous le tracé, et l'itinéraire visible en transparence à travers les bâtiments 3D devant")
-        SToggle(prefs, "Lumière animée le long du tracé", "routeflow", true)
+        SToggle(prefs, "Drapeaux 3D", PreferenceKeys.FLAGS_3D, true, "Un grand drapeau à votre destination et de plus petits orange à vos arrêts, au-dessus des bâtiments pour les voir de loin")
+        SToggle(prefs, "Flèche de direction sur l'itinéraire", "turnarrows", true, "Une flèche blanche à travers la prochaine intersection ou le rond-point")
+        SToggle(prefs, "Chevrons le long de l'itinéraire", "routechevrons", true, "Petites flèches sur la ligne en zoom rapproché")
+        SToggle(prefs, "Ruban d'itinéraire", "ribbon", true, "Une ombre douce sous la ligne, et l'itinéraire visible à travers les bâtiments 3D devant")
+        SToggle(prefs, "Lumière qui défile sur l'itinéraire", "routeflow", true)
         SColours("Couleur des itinéraires alternatifs", listOf(
             "#C4D9E6" to "Gris-bleu pâle (par défaut)", "#A9D4F0" to "Bleu clair", "#5AB7F5" to "Bleu", "#315CBA" to "Bleu foncé",
             "#A9B4C2" to "Gris argent", "#FFFFFF" to "Blanc", "#42CFA5" to "Menthe", "#F4C542" to "Jaune",
@@ -757,10 +767,8 @@ private fun GuidanceSection(prefs: Prefs, engine: NavEngine) {
             },
             listOf("lit" to "Voie éclairée", "closeup" to "Vue rapprochée", "sign" to "Panneau"), prefs.s(PreferenceKeys.LANE_MAP_STYLE, "lit"), { id, c -> lanePicture(id, c) },
         ) { prefs.put(PreferenceKeys.LANE_MAP_STYLE, it) }
-        SToggle(prefs, "Zoom sur les voies avant un carrefour", "laneview", true)
-        SToggle(prefs, "Vue rapprochée des échangeurs", "junctionview", true, "Aux bretelles, sorties d'autoroute, embranchements et séparations de voies, la vue se rapproche et s'aplatit un peu sur les 200 derniers mètres")
-        SToggle(prefs, "Passer la carte en 2D dans les virages", "turn2d", true)
-        SToggle(prefs, "Inclinaison selon la vitesse", "speedtilt", true, "Plus à plat à basse vitesse, vue plus lointaine à haute vitesse")
+        SToggle(prefs, "Zoomer sur les voies avant une intersection", "laneview", true)
+        SToggle(prefs, "Intersection en gros plan", "junctionview", true, "Aux bretelles, sorties d'autoroute, bifurcations et séparations de voies, la vue se rapproche et s'aplatit un peu sur les 200 derniers mètres")
     }
     SGroup("Carte de trajet") {
         SToggle(prefs, "Barre d'itinéraire sur la carte de trajet", "routebar", true, "Trafic, radars, aires et étapes, avec votre progression")
@@ -829,6 +837,7 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
     }
     SGroup("Dangers", footer = "Ralentisseurs, écoles, passages à niveau et gués viennent d'OpenStreetMap : certains peuvent manquer.") {
         SToggle(prefs, "Travaux et incidents", "incidents", true)
+        if (prefs.b("incidents", true)) SToggle(prefs, "Alertes travaux", "roadworkswarn", true, "Désactivé : plus de bandeau ni d'annonce pour les travaux. Accidents et fermetures restent signalés")
         SToggle(prefs, "Alerte contresens", "wrongway", true, "Si vous vous engagez à contresens dans une rue à sens unique")
         SToggle(prefs, "Ralentisseurs", "bumps", true)
         SToggle(prefs, "Virages dangereux", PreferenceKeys.BEND_WARN, true, "Les virages où il faut ralentir sont rayés de jaune sur l'itinéraire, avec une alerte et une vitesse confortable avant chacun")
@@ -858,8 +867,8 @@ private fun SoundSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Instructions plus intelligentes", "smartvoice", true, "Numéros de sortie et directions des panneaux, la manœuvre suivante quand elle suit de près, et moins d'annonces anticipées sur vos routes habituelles")
     }
     SGroup("Voix et volume") {
-        SChoice("Canal audio de la voix", listOf("nav" to "Navigation", "media" to "Média"), prefs.s(PreferenceKeys.VOICE_CHANNEL, "nav"),
-            "Si vous entendez les bips mais pas la voix, choisissez Média : certains autoradios ne jouent pas le canal navigation") { prefs.put(PreferenceKeys.VOICE_CHANNEL, it) }
+        SChoice("Canal audio de la voix", listOf("nav" to "Navigation", "media" to "Média", "notif" to "Notification", "alarm" to "Alarme", "ring" to "Sonnerie"), prefs.s(PreferenceKeys.VOICE_CHANNEL, "nav"),
+            "Si vous entendez les bips mais pas la voix, choisissez Média : certains autoradios ne jouent pas le canal navigation. Si la voix suit le volume de la musique, essayez Notification, Alarme ou Sonnerie (certains autoradios appellent l'un d'eux Diffusion)", wrap = true) { prefs.put(PreferenceKeys.VOICE_CHANNEL, it) }
         SItem("Voix et langue", "Utilise la synthèse vocale du système (installez la voix française)") { SButton("Ouvrir") { openSystemSettings(ctx, "com.android.settings.TTS_SETTINGS") } }
         SItem("Volume") { SButton("Ouvrir") { openSystemSettings(ctx, Settings.ACTION_SOUND_SETTINGS) } }
         SSlider("Volume des bips", prefs.i(PreferenceKeys.CHIME_VOL, 70).coerceIn(5, 100).toFloat(), 5f..100f, "%",
@@ -1280,6 +1289,7 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Assombrir l'écran la nuit", "dimnight", false)
         SToggle(prefs, "Garder l'écran allumé", "keepon", true)
         SToggle(prefs, "Panneaux en verre", "glass", true, "Cartes translucides teintées par la carte. Désactivé : cartes opaques")
+        SToggle(prefs, "Nouvelle disposition en portrait", PreferenceKeys.PORTRAIT_SHEET, true, "Sur un écran vertical sans itinéraire : seulement la barre de recherche en haut, et vos lieux, la musique et les messages dans un volet en bas")
         SChoice("Position du logo Mapbox", listOf("tl" to "En haut à gauche", "tr" to "En haut à droite", "bl" to "En bas à gauche", "br" to "En bas à droite"), prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"),
             "Mapbox impose son logo sur la carte ; choisissez le coin qui vous convient") { prefs.put(PreferenceKeys.MAPBOX_LOGO, it) }
     }
@@ -1353,10 +1363,6 @@ private fun WhileDrivingSection(prefs: Prefs) {
     SGroup("En conduisant") {
         SToggle(prefs, "Nom de la route en conduisant sans itinéraire", "cruise", true)
         if (prefs.b("cruise", true)) SToggle(prefs, "Direction à côté du nom de la route", PreferenceKeys.CRUISE_HEADING, true, "« Direction E » après la route. Désactivé n'affiche que la route")
-        SToggle(prefs, "Garder la flèche sur la route sans itinéraire", "snaproad", true)
-        SChoice("Avance de la flèche", listOf("0" to "Aucune", "0.5" to "0,5 s", "1.0" to "1 s", "1.5" to "1,5 s", "2.0" to "2 s"), prefs.s("arrowlead", "1.0"),
-            "Compense le retard du GPS : la flèche est placée là où vous serez dans ce délai. Augmentez si elle arrive aux croisements après la voiture, baissez si elle les dépasse avant") { prefs.put("arrowlead", it) }
-        SToggle(prefs, "Garder la flèche sur le côté", PreferenceKeys.ARROW_SIDE, false, "Quand les cartes se replient, au lieu de revenir au centre")
         SToggle(prefs, "Assombrir la carte dans les tunnels", "tunneldim", true)
         SToggle(prefs, "Moins de boutons en conduisant", "drivesimple", true)
         SToggle(prefs, "Horloge sur la carte", PreferenceKeys.CLOCK_MAP, false, "L’heure, avec le compteur de vitesse. Pratique quand la barre d’état de l’autoradio est masquée")
@@ -1432,6 +1438,7 @@ private fun AndroidAutoSection(prefs: Prefs) {
     SGroup("Tailles sur l'écran de la voiture") {
         SSlider("Taille générale sur l'écran de la voiture", prefs.i(PreferenceKeys.CARSCALE, 100).toFloat(), 40f..300f, "%", sub = "Échelle de base pour tout l'affichage" + (prefs.i(PreferenceKeys.CARSCALE_MAX, 0).takeIf { it in 100..299 }?.let { " · " + "Jusqu'à $it% tient sur l'écran de cette voiture" } ?: ""), steps = 25, reset = 100f) { prefs.put(PreferenceKeys.CARSCALE, it) }
         SSlider("Taille du compteur et du panneau de limitation", prefs.i(PreferenceKeys.CAR_SPEED_SIZE, 100).toFloat(), 40f..180f, "%", sub = "Rétrécit automatiquement si la zone d'écran disponible est trop petite", reset = 100f) { prefs.put(PreferenceKeys.CAR_SPEED_SIZE, it) }
+        SSlider("Taille du panneau de limitation", prefs.i(PreferenceKeys.CAR_LIMIT_SIZE, 100).toFloat(), 80f..170f, "%", sub = "Agrandit ou réduit le panneau de limitation à côté du compteur", reset = 100f) { prefs.put(PreferenceKeys.CAR_LIMIT_SIZE, it) }
         var carAdvanced by rememberSaveable { mutableStateOf(false) }
         SItem("Tailles avancées pour l'écran de la voiture", "Réglez finement chaque élément") {
             SButton(if (carAdvanced) "Masquer" else "Afficher") { carAdvanced = !carAdvanced }
@@ -1507,6 +1514,10 @@ private fun PerformanceSection(prefs: Prefs) {
     }
     SGroup("Démo") {
         SToggle(prefs, "Bouton de trajet de démo", "demo", false, "Rejoue un itinéraire pour essayer le guidage à l'arrêt")
+    }
+    SGroup("Diagnostics") {
+        SToggle(prefs, "Show lane data diagnostics", PreferenceKeys.HD_LANE_DIAGNOSTICS, false,
+            "Only shown in Demo mode; does not affect lane guidance.")
     }
 }
 
@@ -1937,20 +1948,25 @@ private fun SettingsMapPreview(engine: NavEngine, heightDp: Int) {
         engine.map.forceLight(when (mode) { "day" -> "day"; "night" -> "night"; else -> null })
         onDispose { }
     }
-    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { engine.map.forceLight(null); PreviewLight.mode = "now" } }
+    androidx.compose.runtime.DisposableEffect(Unit) { engine.previewInSettings(true); onDispose { engine.map.forceLight(null); PreviewLight.mode = "now"; engine.previewInSettings(false) } }
     Box(Modifier.fillMaxWidth().widthIn(max = 820.dp).height(heightDp.dp).padding(bottom = 10.dp).clip(RoundedCornerShape(20.dp)).border(1.dp, c.line, RoundedCornerShape(20.dp))) {
         MapHost(engine.map, Modifier.fillMaxSize(), cornerDp = 20)
         // (touches stop here: the preview only shows)
         Box(Modifier.fillMaxSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } })
-        Text("Aperçu en direct", color = Color.White, fontSize = 12.sp,
-            modifier = Modifier.align(Alignment.TopStart).padding(10.dp).clip(RoundedCornerShape(10.dp)).background(Color(0x99000000)).padding(horizontal = 10.dp, vertical = 4.dp))
-        Row(Modifier.align(Alignment.TopEnd).padding(10.dp).clip(RoundedCornerShape(16.dp)).background(Color(0x99000000))) {
+        // (the label and the Day / Night / Now tabs share one row, so a long label gives way rather than running under the tabs:
+        // "Podgląd na żywo" did in Polish, ChrisSantosGarage)
+        Row(Modifier.align(Alignment.TopStart).fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Aperçu en direct", color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false).clip(RoundedCornerShape(10.dp)).background(Color(0x99000000)).padding(horizontal = 10.dp, vertical = 4.dp))
+        Box(Modifier.weight(1f).width(8.dp))
+        Row(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(0x99000000))) {
             for ((id, label) in listOf("day" to "Jour", "night" to "Nuit", "now" to "Maintenant")) {
                 val sel = id == mode
                 Box(Modifier.background(if (sel) c.accent else Color.Transparent).pressClick { mode = id }.padding(horizontal = 14.dp, vertical = 7.dp)) {
                     Text(label, color = Color.White, fontSize = 13.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal)
                 }
             }
+        }
         }
     }
 }

@@ -21,7 +21,9 @@ data class Step(val off: Double, val maneuver: String, val street: String, val m
     val lights: Boolean = false, val stopSign: Boolean = false, val lightsBefore: Int = 0,
     /** The other roads at this junction, as turns from the way you arrive (degrees, 0 ahead, 90 right), for the faint roads on the
      *  turn arrow; null when the route data doesn't say. */
-    val sides: List<Double>? = null)
+    val sides: List<Double>? = null,
+    /** The road number (169, E39) when the road has a name too, shown beside the name; never spoken (desko1973, #297). */
+    val ref: String = "")
 /** A place found or saved. [web]: its website when the search gave one (for its logo; not saved with favourites). */
 data class Place(val name: String, val sub: String, val pos: LL, val web: String = "")
 
@@ -440,7 +442,7 @@ object TomTomRest {
         catch (e: IOException) {
             val m = e.message ?: ""
             // no way round the areas (or the request was refused): route normally and say so
-            if (m == "no signal" || m.startsWith("too many")) throw e
+            if (m == "no signal" || m.startsWith("too many") || m.startsWith("TomTom didn't accept") || m.startsWith("This TomTom key")) throw e
             val r = routesWith(key, from, to, alternatives, departAtMs, via, headingDeg, quick, null)
             avoidDropped = true
             r
@@ -512,7 +514,11 @@ object TomTomRest {
         if (body == null) {
             val m = last?.message ?: ""
             NetHealth.note(last, "TomTom route")
-            throw IOException(if (!m.startsWith("HTTP")) "no signal" else if (m.startsWith("HTTP 429")) "too many requests, try again in a moment" else m.ifBlank { "Routing failed" })
+            // a refused key or a used-up daily limit comes back already explained ("TomTom didn't accept the API key…"): that isn't
+            // "no signal". Turning it into one stopped the switch to Mapbox and left the route waiting for a signal that was there
+            // all along, starting only when TomTom happened to answer, or never (GitHub #269, #281, #291)
+            val explained = m.startsWith("TomTom didn't accept") || m.startsWith("This TomTom key")
+            throw IOException(if (explained) m else if (!m.startsWith("HTTP")) "no signal" else if (m.startsWith("HTTP 429")) "too many requests, try again in a moment" else m.ifBlank { "Routing failed" })
         }
         val arr = JSONObject(body).optJSONArray("routes") ?: JSONArray()
         return (0 until arr.length()).map { parse(arr.getJSONObject(it)) }
@@ -629,7 +635,7 @@ object TomTomRest {
         val ttLang = when (com.headunit.launcher.L.lang) {
             "ar" -> "ar"; "cs" -> "cs-CZ"; "da" -> "da-DK"; "de" -> "de-DE"; "el" -> "el-GR"; "es", "esar", "esmx" -> "es-ES"; "fi" -> "fi-FI"
             "fr" -> "fr-FR"; "he" -> "he-IL"; "hu" -> "hu-HU"; "id" -> "id-ID"; "it" -> "it-IT"; "nb" -> "nb-NO"; "nl" -> "nl-NL"; "pl" -> "pl-PL"
-            "pt" -> "pt-PT"; "ro" -> "ro-RO"; "ru" -> "ru-RU"; "sk" -> "sk-SK"; "sv" -> "sv-SE"; "tr" -> "tr-TR"; else -> "en-GB"
+            "pt" -> "pt-PT"; "ptbr" -> "pt-BR"; "ro" -> "ro-RO"; "ru" -> "ru-RU"; "sk" -> "sk-SK"; "sv" -> "sv-SE"; "tr" -> "tr-TR"; else -> "en-GB"
         }
         val url0 = "$API/traffic/incidents/details?apiVersion=2&timeValidity=present&language=$ttLang&bbox=$minLon,$minLat,$maxLon,$maxLat"
         // (Horizon Maps Plus: through the key server, which adds the real key)
