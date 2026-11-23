@@ -3708,8 +3708,21 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         showNextLimit(r, at, nx)
         routeLimitAt = System.currentTimeMillis(); routeLimitShown = true
         pendHits = 0; pendLimit = -2.0
-        if (speedLimit != hit.ms || limitEstimated) { speedLimit = hit.ms; limitEstimated = false }
-        checkLimitChange(hit.ms, false)
+        // fork FR : les limitations de l'itinéraire passent parfois à la valeur suivante trop tôt (sortie d'agglomération). Si la
+        // carte locale, lue il y a peu au même endroit, indique une limitation plus basse, on garde la plus basse jusqu'à ce
+        // que les deux soient d'accord.
+        var ms = hit.ms
+        val op = osmLimPos
+        val o = osmLimMs
+        if (o > 0.0 && op != null && System.currentTimeMillis() - osmLimAt < 10_000L && Geo.dist(op, p.pos) < 150.0 && ms > o + 0.3) {
+            if (abs(routeCapLogged - ms) > 0.3) { routeCapLogged = ms; LimitLog.add(ctx, "itinéraire ${Math.round(ms * 3.6)} km/h, carte ${Math.round(o * 3.6)} km/h : on garde ${Math.round(o * 3.6)} @ ${LimitLog.pos(p.pos)}") }
+            ms = o
+        }
+        if (speedLimit != ms || limitEstimated) {
+            if (speedLimit == null || abs((speedLimit ?: 0.0) - ms) > 0.3) LimitLog.add(ctx, "itinéraire : ${Math.round(ms * 3.6)} km/h @ ${LimitLog.pos(p.pos)}")
+            speedLimit = ms; limitEstimated = false
+        }
+        checkLimitChange(ms, false)
         limitOkAt = routeLimitAt; limitOkPos = p.pos
     }
 
@@ -3727,24 +3740,6 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // (Settings › Alerts › Upcoming speed limits switches the sign on the map off along with the one by the speedometer)
             if (prefs.b(PreferenceKeys.NEXT_LIMIT, true)) map.setSpeedChange(point, value, limitSignStyle) else map.setSpeedChange(null, null)
         }
-        routeLimitAt = System.currentTimeMillis(); routeLimitShown = true
-        pendHits = 0; pendLimit = -2.0
-        // fork FR : les limitations de l'itinéraire passent parfois à la valeur suivante trop tôt (sortie d'agglomération). Si la
-        // carte locale, lue il y a peu au même endroit, indique une limitation plus basse, on garde la plus basse jusqu'à ce
-        // que les deux soient d'accord.
-        var ms = hit.ms
-        val op = osmLimPos
-        val o = osmLimMs
-        if (o > 0.0 && op != null && System.currentTimeMillis() - osmLimAt < 10_000L && Geo.dist(op, p.pos) < 150.0 && ms > o + 0.3) {
-            if (abs(routeCapLogged - ms) > 0.3) { routeCapLogged = ms; LimitLog.add(ctx, "itinéraire ${Math.round(ms * 3.6)} km/h, carte ${Math.round(o * 3.6)} km/h : on garde ${Math.round(o * 3.6)} @ ${LimitLog.pos(p.pos)}") }
-            ms = o
-        }
-        if (speedLimit != ms || limitEstimated) {
-            if (speedLimit == null || abs((speedLimit ?: 0.0) - ms) > 0.3) LimitLog.add(ctx, "itinéraire : ${Math.round(ms * 3.6)} km/h @ ${LimitLog.pos(p.pos)}")
-            speedLimit = ms; limitEstimated = false
-        }
-        checkLimitChange(ms, false)
-        limitOkAt = routeLimitAt; limitOkPos = p.pos
     }
 
     /** Finds the exact map coordinate at a distance along the route. */
