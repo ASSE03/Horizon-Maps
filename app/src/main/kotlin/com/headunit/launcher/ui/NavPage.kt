@@ -421,7 +421,7 @@ internal fun mineLine(rs: List<com.headunit.launcher.Route>, r: com.headunit.lau
     if (r.mine.isBlank()) return null
     val best = rs.filter { it.mine.isBlank() }.minOfOrNull { it.time } ?: return r.mine
     val d = Math.round((r.time - best) / 60.0).toInt()
-    return r.mine + " · " + when { d > 0 -> "+$d min"; d < 0 -> "${-d} min plus rapide"; else -> "same time" }
+    return r.mine + " · " + when { d > 0 -> "+$d min"; d < 0 -> "${-d} min plus rapide"; else -> "même durée" }
 }
 
 /**
@@ -543,7 +543,7 @@ internal fun ArrivalCard(engine: NavEngine, a: ArrivalInfo, modifier: Modifier =
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Rounded.Route, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                Text("Save as my route", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
+                Text("Enregistrer cet itinéraire", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
             }
             if (naming) SaveMyRouteDialog(d.suggested, onSave = { n -> naming = false; engine.saveMyRoute(n) }, onClose = { naming = false })
         }
@@ -569,9 +569,9 @@ private fun SaveMyRouteDialog(suggested: String, onSave: (String) -> Unit, onClo
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
         Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.panel)
             .verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Save this route", color = c.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            SField(name, { name = it.take(60) }, placeholder = "e.g. School run", width = 436.dp, fill = true)
-            Text("Offered next time you go from near here to the same place. Settings › Places & trips › My routes to rename or delete it.", color = c.sub, fontSize = 13.sp)
+            Text("Enregistrer cet itinéraire", color = c.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            SField(name, { name = it.take(60) }, placeholder = "ex. : Trajet de l'école", width = 436.dp, fill = true)
+            Text("Proposé la prochaine fois que vous partez de près d'ici vers la même destination. Réglages › Lieux et trajets › Mes itinéraires pour le renommer ou le supprimer.", color = c.sub, fontSize = 13.sp)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                 SButton("Annuler") { onClose() }
                 SButton("Enregistrer", primary = true) { onSave(name.ifBlank { suggested }) }

@@ -77,7 +77,7 @@ object MyRoutes {
         val arr = JSONArray()
         for (p in pts) { arr.put(Math.round(p.lat * 1e6) / 1e6); arr.put(Math.round(p.lon * 1e6) / 1e6) }
         val now = System.currentTimeMillis()
-        val title = name.trim().take(60).ifBlank { toName.ifBlank { "My route" } }
+        val title = name.trim().take(60).ifBlank { toName.ifBlank { "Mon itinéraire" } }
         val o = JSONObject().put("name", title).put("toName", toName).put("min", minute).put("len", len).put("at", now)
             .put("fla", pts.first().lat).put("flo", pts.first().lon).put("tla", pts.last().lat).put("tlo", pts.last().lon).put("pts", arr)
         return try {

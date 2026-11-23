@@ -174,7 +174,7 @@ internal fun MyRoutesGroup(engine: NavEngine, onShown: () -> Unit) {
     LaunchedEffect(Unit) { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.headunit.launcher.MyRoutes.all(ctx.applicationContext) } }
     val list = com.headunit.launcher.MyRoutes.list
     val fmt = remember { java.text.SimpleDateFormat("d MMM", L.locale) }
-    SGroup("My routes", footer = "Save the way you drove from the arrival card. When you next go from near the same start to the same place, it's offered as \"Your route\" beside the fastest, with the difference in time.") {
+    SGroup("Mes itinéraires", footer = "Enregistrez le chemin pris depuis la carte d'arrivée. La prochaine fois que vous partez de près du même endroit vers la même destination, il est proposé comme « Votre itinéraire » à côté du plus rapide, avec la différence de temps.") {
         for (r in list) {
             var ask by remember(r.id) { mutableStateOf(false) }
             var renaming by remember(r.id) { mutableStateOf(false) }
@@ -188,7 +188,7 @@ internal fun MyRoutesGroup(engine: NavEngine, onShown: () -> Unit) {
                 } else {
                     Column(Modifier.weight(1f)) {
                         Text(r.name, color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(Geo.fmtDist(r.len, engine.imperial) + " · " + "saved ${fmt.format(java.util.Date(r.at))}", color = c.sub, fontSize = 13.sp, maxLines = 1)
+                        Text(Geo.fmtDist(r.len, engine.imperial) + " · " + "enregistré le ${fmt.format(java.util.Date(r.at))}", color = c.sub, fontSize = 13.sp, maxLines = 1)
                     }
                     if (ask) {
                         SButton("Oui, supprimer", danger = true) { com.headunit.launcher.MyRoutes.delete(ctx, r.id); ask = false }
@@ -203,8 +203,8 @@ internal fun MyRoutesGroup(engine: NavEngine, onShown: () -> Unit) {
                 }
             }
         }
-        if (list.isEmpty()) Text("No routes saved yet. When you arrive, tap \"Save as my route\" on the arrival card.", color = c.sub, fontSize = 14.sp, modifier = Modifier.padding(vertical = 6.dp))
-        SChoice("When a saved route fits", listOf("offer" to "Offer it first", "start" to "Start on it straight away", "off" to "Don't offer"),
+        if (list.isEmpty()) Text("Aucun itinéraire enregistré. À l'arrivée, touchez « Enregistrer cet itinéraire » sur la carte d'arrivée.", color = c.sub, fontSize = 14.sp, modifier = Modifier.padding(vertical = 6.dp))
+        SChoice("Quand un itinéraire enregistré convient", listOf("offer" to "Le proposer en premier", "start" to "Le prendre directement", "off" to "Ne pas le proposer"),
             engine.prefs.s(com.headunit.launcher.PreferenceKeys.MY_ROUTES, "offer")) { engine.prefs.put(com.headunit.launcher.PreferenceKeys.MY_ROUTES, it) }
     }
 }

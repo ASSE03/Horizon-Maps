@@ -2126,7 +2126,7 @@ private fun ParkedCard(engine: NavEngine) {
         ImmPill("Revenir à pied", {
             val walk = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "google.navigation:q=%.6f,%.6f&mode=w", spot.lat, spot.lon)))
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "geo:%.6f,%.6f?q=%.6f,%.6f(Your car)", spot.lat, spot.lon, spot.lat, spot.lon)))
+            val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "geo:%.6f,%.6f?q=%.6f,%.6f(Votre voiture)", spot.lat, spot.lon, spot.lat, spot.lon)))
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             // (Google Maps by name: on some phones the request went to a driving app, which drove you round to the car, Dotancom
             // #320; then Google's walking directions on the web, then just the spot)

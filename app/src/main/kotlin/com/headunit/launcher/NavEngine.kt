@@ -3083,7 +3083,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         finishedDrive = null
         scope.launch {
             val r = withContext(Dispatchers.IO) { try { MyRoutes.save(ctx, name, d.toName, d.pts, d.minute) } catch (e: Exception) { null } }
-            toast(if (r != null) "Saved to My routes: offered next time you go there" else "Couldn't save that route", 4000)
+            toast(if (r != null) "Enregistré dans Mes itinéraires : proposé la prochaine fois" else "Impossible d'enregistrer cet itinéraire", 4000)
         }
     }
 

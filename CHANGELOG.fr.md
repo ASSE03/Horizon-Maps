@@ -283,6 +283,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Mes itinéraires, enregistrement à l'arrivée et « Continuer vers… » sur Android Auto : textes traduits en français.
 - Plantage sur un résultat de recherche.
 - Faisceau des phares : il part maintenant de l'avant de la flèche, et ne clignote plus.
 - Limite des radars tronçons hors du Royaume-Uni : lue dans l'unité du pays (un « 60 » n'est plus lu en miles).

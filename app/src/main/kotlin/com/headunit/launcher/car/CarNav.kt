@@ -869,7 +869,7 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             // (cars that pass taps on still have those too)
             // a trip to carry on (paused by a stop on the way): first, where a rotary knob can reach it (pc4096)
             val rp = e?.resume
-            if (rp != null && e != null && e.route == null) strip.addAction(Action.Builder().setTitle("Carry on").setOnClickListener { e.startRoute(rp, startNow = true); invalidate() }.build())
+            if (rp != null && e != null && e.route == null) strip.addAction(Action.Builder().setTitle("Continuer").setOnClickListener { e.startRoute(rp, startNow = true); invalidate() }.build())
             strip.addAction(reportAction())
             // (on a short car screen these are icons, so Android Auto's row of buttons takes less of the map)
             strip.addAction((if (CarLayout.short) Action.Builder().setIcon(icon(R.drawable.ic_car_star)) else Action.Builder().setTitle("Lieux"))

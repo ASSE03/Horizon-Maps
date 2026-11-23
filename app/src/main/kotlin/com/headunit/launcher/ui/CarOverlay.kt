@@ -563,7 +563,7 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
                 left10.animateTo(0f, androidx.compose.animation.core.tween(10_000, easing = androidx.compose.animation.core.LinearEasing))
                 if (engine.resume === resumeTo && engine.route == null) engine.startRoute(resumeTo, startNow = true)
             }
-            Text("Carry on to", color = c.sub, fontSize = 13.sp)
+            Text("Continuer vers", color = c.sub, fontSize = 13.sp)
             Text(resumeTo.name, color = c.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (resumeTo.sub.isNotBlank()) Text(resumeTo.sub, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Box(Modifier.padding(vertical = 10.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(c.line)) {
