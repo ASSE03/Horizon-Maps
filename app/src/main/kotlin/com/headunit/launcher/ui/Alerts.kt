@@ -273,8 +273,10 @@ fun SpeedLimitSign(engine: NavEngine, size: Dp, modifier: Modifier = Modifier, o
     val over = engine.overLimit
     val board = engine.limitSignStyle
     // fork FR : signaler une limitation fausse : appui long sur le téléphone, deux touches sur l'écran de la voiture
-    val modifier = if (engine.isCar) modifier.carTap("limit-sign") { engine.reportLimitTap() }
-        else modifier.pointerInput(onClick) { detectTapGestures(onLongPress = { engine.reportLimit() }, onTap = { onClick?.invoke() }) }
+    val flash = rememberPulse(engine.flashOver, 420, 1f, 0.25f)
+    val fm0 = modifier.graphicsLayer { alpha = flash.value }
+    val modifier = if (engine.isCar) fm0.carTap("limit-sign") { engine.reportLimitTap() }
+        else fm0.pointerInput(onClick) { detectTapGestures(onLongPress = { engine.reportLimit() }, onTap = { onClick?.invoke() }) }
     if (board != "round") { LimitBoard(n, board == "ca", over, engine.limitEstimated, size, sc, modifier, null); return }
     Roundel(n, size, over, engine.limitEstimated, modifier.graphicsLayer { scaleX = sc; scaleY = sc }, null)
 }

@@ -401,7 +401,9 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
             minOf((380f + 60f * ((layoutW.value - 1000f) / 100f).coerceIn(0f, 1f)).dp, maxWidth * 0.38f)
         }
         // (the turn card's width, which the trip card under it on the same side takes too, so the two line up)
-        val turnCardW = if (portrait) topW else if (small) minOf(340.dp, maxWidth * 0.42f) else minOf(420.dp, maxWidth * 0.36f)
+        // (Settings › Android Auto › sizes › Turn card width, ZarulOfficial #317; never more than about half the screen)
+        val turnWK = engine.prefs.i(PreferenceKeys.CAR_TURN_WIDTH, 100).coerceIn(60, 130) / 100f
+        val turnCardW = (if (portrait) topW else if (small) minOf(340.dp, maxWidth * 0.42f) else minOf(420.dp, maxWidth * 0.36f)).let { (it * turnWK).coerceAtMost(maxWidth * (if (portrait) 1f else 0.55f)) }
         var turnH by remember { mutableStateOf(0) }
         var turnW by remember { mutableStateOf(0) }
         // the turn card and what's under it, without the lane picture, and the cards along the bottom on the same side: the lane
@@ -418,7 +420,15 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         fun report(i: Int, r: androidx.compose.ui.geometry.Rect) =
             engine.setPanel(i, (r.left - vL) / vW, (r.top - vT) / vH, (r.right - vL) / vW, (r.bottom - vT) / vH)
         // (Search bar and places on the map switched off: nothing drawn top left with no route, so the map has the whole screen)
-        val mapUi = engine.prefs.b(PreferenceKeys.CAR_MAPUI, true)
+        // ...and with Hide them after set, they fold away once the screen hasn't been touched for that long (a touch anywhere brings
+        // them back: CarButtons is poked by every tap, drag and pinch), for a clean map with no route (ZarulOfficial #315)
+        val hideAfter = engine.prefs.s(PreferenceKeys.CAR_MAPUI_HIDE, "0").toIntOrNull() ?: 0
+        var uiAsleep by remember { mutableStateOf(false) }
+        LaunchedEffect(CarButtons.shownAt, hideAfter, engine.route == null) {
+            uiAsleep = false
+            if (hideAfter > 0 && engine.route == null) { kotlinx.coroutines.delay(hideAfter * 1000L); uiAsleep = true }
+        }
+        val mapUi = engine.prefs.b(PreferenceKeys.CAR_MAPUI, true) && !(uiAsleep && !CarSearch.open)
         // (the sound button when not navigating can be left off: Settings > Android Auto)
         val soundBtn = engine.prefs.b(PreferenceKeys.CAR_SOUND_BTN, true)
         val topShown = !portrait && !arriving && ((engine.route == null && mapUi) || (guiding && engine.turn != null))
@@ -484,12 +494,18 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         // taken away when it would reach them and one given back when there's room again (with a margin, so it can't flicker)
         val extraCap = if (tile) 1 else if (small) 2 else 4
         var extraMax by remember { mutableStateOf(extraCap) }
+        // the card's height when it last had one line more: a line is only given back when there's room for that much again. A car
+        // park line is taller than the 48 dp margin, so near the end it was taken away and given back over and over (Dotancom
+        // #324). Forgotten when the lines themselves change
+        val extraWhat = "${engine.parkingNear.size}|${engine.avgInfo != null}|${engine.lorryWarn != null}|${engine.servicesAhead.size}|${engine.advice != null}"
+        val grownH = remember(extraWhat) { intArrayOf(0) }
         val extraFreePx = with(dens) { (maxHeight - top - bottom - 12.dp).toPx() } - bottomColH - aboveH - (if (speedUnderTurn) speedUnderH else 0)
         androidx.compose.runtime.SideEffect {
             val step = with(dens) { 48.dp.toPx() }
+            val need = if (grownH[0] > aboveH) (grownH[0] - aboveH) + with(dens) { 8.dp.toPx() } else step
             if (extraMax > extraCap) extraMax = extraCap
-            else if (extraFreePx < 0f && extraMax > 0) extraMax -= 1
-            else if (extraFreePx > step && extraMax < extraCap) extraMax += 1
+            else if (extraFreePx < 0f && extraMax > 0) { grownH[0] = aboveH; extraMax -= 1 }
+            else if (extraFreePx > need && extraMax < extraCap) extraMax += 1
         }
         if (showTurn && t != null && !settingsOpen && !altsOpen && !searching && !stopsOpen) Box(Modifier.padding(start = left, top = top).width(turnCardW)
             .onSizeChanged { turnH = it.height; turnW = it.width }.onGloballyPositioned { if (topShown) report(0, it.boundsInRoot()) }) {
@@ -509,6 +525,8 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
                             TurnCardExtras(engine, extraMax, advice = !small)
                         })
                 }
+                // the next services: a card of its own under the turn card again, not joined to it (not on a tile: no room)
+                if (!tile) CompositionLocalProvider(LocalDensity provides Density(dens.density * cardScale, dens.fontScale)) { ServicesCard(engine) }
               }
                 // sized to the gap down to the trip card (it used to run on underneath it on a short car screen), or left out
                 // when even a small one wouldn't fit: the turn card's lane strip still shows the lanes then
@@ -535,7 +553,34 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         }
         // (a car with a rotary knob and no touchscreen can't reach any of this: Settings › Android Auto can leave it off, and
         // Places (★) in Android Auto's own buttons has Search, Home, Work and the rest, wass0035 #222)
-        if (engine.route == null && !arriving && !covered && mapUi) Column(Modifier.padding(start = left, top = top).width(topW).onSizeChanged { topBlockH = it.height }.onGloballyPositioned { if (topShown) report(0, it.boundsInRoot()) },
+        // a trip paused by a stop on the way (or stopped a few minutes ago): "Carry on to …", which starts by itself after 10 seconds
+        // unless "Not now" is tapped, as Waze does (pc4096). It takes the search bar's place while it's up
+        val resumeTo = if (engine.route == null && !arriving && !covered && !engine.busy) engine.resume else null
+        if (resumeTo != null) Column(Modifier.padding(start = left, top = top).width(topW).onGloballyPositioned { if (topShown) report(0, it.boundsInRoot()) }
+            .panel(10.dp, RoundedCornerShape(22.dp), c.surface).padding(horizontal = 16.dp, vertical = 12.dp)) {
+            val left10 = remember(resumeTo) { androidx.compose.animation.core.Animatable(1f) }
+            LaunchedEffect(resumeTo) {
+                left10.animateTo(0f, androidx.compose.animation.core.tween(10_000, easing = androidx.compose.animation.core.LinearEasing))
+                if (engine.resume === resumeTo && engine.route == null) engine.startRoute(resumeTo, startNow = true)
+            }
+            Text("Carry on to", color = c.sub, fontSize = 13.sp)
+            Text(resumeTo.name, color = c.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (resumeTo.sub.isNotBlank()) Text(resumeTo.sub, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Box(Modifier.padding(vertical = 10.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(c.line)) {
+                Box(Modifier.fillMaxWidth(left10.value).fillMaxHeight().background(Good))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(c.accent).carTap("resume-go") { engine.startRoute(resumeTo, startNow = true) }
+                    .padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
+                    Text("Y aller" + " (" + kotlin.math.ceil(left10.value * 10f).toInt() + ")", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+                Box(Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(c.line).carTap("resume-no") { engine.forgetResume() }
+                    .padding(horizontal = 18.dp), contentAlignment = Alignment.Center) {
+                    Text("Pas maintenant", color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+        else if (engine.route == null && !arriving && !covered && mapUi) Column(Modifier.padding(start = left, top = top).width(topW).onSizeChanged { topBlockH = it.height }.onGloballyPositioned { if (topShown) report(0, it.boundsInRoot()) },
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth().height(if (small) 48.dp else 60.dp).panel(10.dp, RoundedCornerShape(30.dp), c.surface).padding(end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
@@ -974,6 +1019,8 @@ private fun TripCard(engine: NavEngine, actions: CarActions, fill: Boolean, oneL
             Row(Modifier.carTap("trip-figs") { actions.stops() }, horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) { stats(false) }
             if (on.isNotEmpty()) Row(Modifier.padding(start = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { buttons(40.dp) }
         }
+        // what the trip has cost so far (#316; not on the one-line card of a short screen)
+        if (!oneLine) LiveFuelLine(engine, Modifier.padding(start = 16.dp, end = 12.dp, bottom = 8.dp))
     }
 }
 
@@ -1062,15 +1109,16 @@ private fun CarRoutePreview(engine: NavEngine, side: Boolean = false) {
     val cards: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
         rs.forEachIndexed { i, r ->
             val sel = i == engine.active
-            val label = if (i == fastest) "Le plus rapide" else if (rs[i].simpler) "Le plus simple" else if (i == shortest) "Le plus court" else "Alternatif"
+            val label = if (r.mine.isNotBlank()) "Votre itinéraire" else if (i == fastest) "Le plus rapide" else if (rs[i].simpler) "Le plus simple" else if (i == shortest) "Le plus court" else "Alternatif"
             Column(Modifier.weight(1f).inset(18.dp, if (sel) c.accent else null).carTap("route-$i") { engine.selectRoute(i) }.padding(horizontal = 12.dp, vertical = 9.dp)) {
                 Text(label.uppercase(), color = if (sel) c.accent else c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1)
                 Text(Geo.fmtDur(r.time), color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 Text("${Geo.fmtDist(r.len, engine.imperial)} · arrivée ${fmt.format(java.util.Date(baseMs + (r.time * 1000).toLong()))}", color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val via = viaOf(r)
                 val delayMin = Math.round(r.delay / 60.0).toInt()
-                Text(if (delayMin >= 1) "+$delayMin min de trafic" else if (via.isNotEmpty()) "via $via" else "Aucun retard",
-                    color = if (delayMin >= 10) Bad else if (delayMin >= 1) Warn else c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val mine = mineLine(rs, r)
+                Text(mine ?: if (delayMin >= 1) "+$delayMin min de trafic" else if (via.isNotEmpty()) "via $via" else "Aucun retard",
+                    color = if (mine != null) Good else if (delayMin >= 10) Bad else if (delayMin >= 1) Warn else c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 cost(r)
                 LorryBadge(r)
                 if (i == engine.active) LorryCheck(engine, r)
@@ -1144,7 +1192,7 @@ private fun CarRoutePreview(engine: NavEngine, side: Boolean = false) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             rs.forEachIndexed { i, r ->
                 val sel = i == engine.active
-                val label = L.t(if (i == fastest) "Fastest" else if (rs[i].simpler) "Simplest" else if (i == shortest) "Shortest" else "Alternative")
+                val label = L.t(if (r.mine.isNotBlank()) "Your route" else if (i == fastest) "Fastest" else if (rs[i].simpler) "Simplest" else if (i == shortest) "Shortest" else "Alternative")
                 val via = viaOf(r)
                 val delayMin = Math.round(r.delay / 60.0).toInt()
                 Column(Modifier.fillMaxWidth().inset(14.dp, if (sel) c.accent else null).carTap("route-$i") { engine.selectRoute(i) }.padding(horizontal = 10.dp, vertical = 5.dp)) {
@@ -1153,8 +1201,9 @@ private fun CarRoutePreview(engine: NavEngine, side: Boolean = false) {
                         Text("${Geo.fmtDist(r.len, engine.imperial)} · ${fmt.format(java.util.Date(baseMs + (r.time * 1000).toLong()))}", color = c.sub, fontSize = 12.sp, maxLines = 1,
                             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp, bottom = 2.dp))
                     }
-                    Text(label + " · " + (if (delayMin >= 1) "+$delayMin min de trafic" else if (via.isNotEmpty()) "par $via" else "Aucun retard"),
-                        color = if (delayMin >= 10) Bad else if (delayMin >= 1) Warn else if (sel) c.accent else c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val mine = mineLine(rs, r)
+                    Text(mine ?: (label + " · " + (if (delayMin >= 1) "+$delayMin min de trafic" else if (via.isNotEmpty()) "par $via" else "Aucun retard")),
+                        color = if (mine != null) Good else if (delayMin >= 10) Bad else if (delayMin >= 1) Warn else if (sel) c.accent else c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     // (just the chosen route's, so the list doesn't grow past a short screen)
                     if (sel) cost(r)
                     LorryBadge(r)
@@ -1214,7 +1263,7 @@ private fun CarChipsCompact(engine: NavEngine, actions: CarActions) {
     val bs = carButtonScale(engine).coerceAtMost(1.25f)
     LaunchedEffect(Unit) { while (true) { engine.refreshSlotTimes(); kotlinx.coroutines.delay(60_000) } }
     @Composable fun pill(id: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, label: String, place: com.headunit.launcher.Place?, mins: Int?) {
-        Row(Modifier.height(38.dp).panel(6.dp, RoundedCornerShape(19.dp), c.surface).carTap(id) { if (place != null) engine.startRoute(place) else actions.search() }
+        Row(Modifier.height(38.dp).panel(6.dp, RoundedCornerShape(19.dp), c.surface).carTap(id) { if (place != null) engine.startRoute(place) else { engine.pendingSave = id; actions.search() } }
             .padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.material3.Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
             Text(if (place == null) L.t(if (id == "work") "Set work" else "Set home") else label, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
@@ -1257,7 +1306,7 @@ private fun CarChips(engine: NavEngine, actions: CarActions, budget: androidx.co
             here != null -> Geo.fmtDist(Geo.dist(here, place.pos), engine.imperial)
             else -> place.sub
         }
-        Row(m.height(58.dp).panel(6.dp, RoundedCornerShape(20.dp), c.surface).carTap(id) { if (place != null) engine.startRoute(place) else actions.search() }
+        Row(m.height(58.dp).panel(6.dp, RoundedCornerShape(20.dp), c.surface).carTap(id) { if (place != null) engine.startRoute(place) else { engine.pendingSave = id; actions.search() } }
             .padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(36.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tint.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
                 androidx.compose.material3.Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))

@@ -329,7 +329,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         rs.forEachIndexed { i, r ->
             val sel = i == engine.active
             val shape = RoundedCornerShape(18.dp)
-            val label = if (i == fastest) "La plus rapide" else if (rs[i].simpler) "La plus simple" else if (i == shortest) "La plus courte" else "Alternative"
+            val label = if (r.mine.isNotBlank()) "Votre itinéraire" else if (i == fastest) "La plus rapide" else if (rs[i].simpler) "La plus simple" else if (i == shortest) "La plus courte" else "Alternative"
             Column(
                 Modifier.weight(1f).inset(18.dp, if (sel) c.accent else null)
                                         .clickable { engine.selectRoute(i) }.padding(horizontal = 14.dp, vertical = 9.dp),
@@ -341,9 +341,10 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
                 Text("${Geo.fmtDist(r.len, engine.imperial)} · ${fmt.format(java.util.Date(baseMs + (r.time * 1000).toLong()))}", color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val via = viaOf(r)
                 val delayMin = Math.round(r.delay / 60.0).toInt()
+                val mine = mineLine(rs, r)
                 Text(
-                    if (delayMin >= 1) "+$delayMin min de trafic" else if (via.isNotEmpty()) "via $via" else "Aucun retard",
-                    color = if (delayMin >= 10) Bad else if (delayMin >= 1) Warn else c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    mine ?: if (delayMin >= 1) "+$delayMin min de trafic" else if (via.isNotEmpty()) "via $via" else "Aucun retard",
+                    color = if (mine != null) Good else if (delayMin >= 10) Bad else if (delayMin >= 1) Warn else c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 // roughly what this route costs in fuel (or charging), from Settings › Fuel (pc4096: it was only at the far end of the
                 // Stops row, scrolled out of sight)
@@ -410,6 +411,17 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         }
     }
     }
+}
+
+/**
+ * One of your saved routes in the route choice (#321): "Home → Work (morning) · +2 min" against the quickest of the others
+ * ("2 min faster", "same time"), or null for a normal route.
+ */
+internal fun mineLine(rs: List<com.headunit.launcher.Route>, r: com.headunit.launcher.Route): String? {
+    if (r.mine.isBlank()) return null
+    val best = rs.filter { it.mine.isBlank() }.minOfOrNull { it.time } ?: return r.mine
+    val d = Math.round((r.time - best) / 60.0).toInt()
+    return r.mine + " · " + when { d > 0 -> "+$d min"; d < 0 -> "${-d} min plus rapide"; else -> "same time" }
 }
 
 /**
@@ -502,6 +514,8 @@ internal fun ArrivalCard(engine: NavEngine, a: ArrivalInfo, modifier: Modifier =
             ArrivalStat(Geo.fmtDist(a.dist, imp), "distance")
             ArrivalStat(Geo.fmtDur(a.secs), "time")
             ArrivalStat("${Math.round(a.avgMs * k)} ${if (imp) "mph" else "km/h"}", "moyenne")
+            // what the drive really cost, from the distance driven (Settings › Places and trips › Live fuel cost, #316)
+            a.fuelCost?.let { ArrivalStat(formatMoney(engine.prefs, it), if (engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV") "recharge" else "carburant") }
         }
         engine.arrivalParking?.let { pk ->
             Row(
@@ -519,6 +533,20 @@ internal fun ArrivalCard(engine: NavEngine, a: ArrivalInfo, modifier: Modifier =
                 Text("Partir", color = c.accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
         }
+        // the way you drove, kept as one of your routes (#321): named on the phone; on the car screen (no typing) with the name it suggests
+        engine.finishedDrive?.let { d ->
+            var naming by remember { mutableStateOf(false) }
+            Row(
+                Modifier.clip(RoundedCornerShape(20.dp)).background(c.accent).clickable { if (car) engine.saveMyRoute(d.suggested) else naming = true }
+                    .then(if (car) Modifier.carTap("arr-mine") { engine.saveMyRoute(d.suggested) } else Modifier)
+                    .padding(horizontal = 16.dp, vertical = if (compact) 7.dp else 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.Route, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Text("Save as my route", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
+            }
+            if (naming) SaveMyRouteDialog(d.suggested, onSave = { n -> naming = false; engine.saveMyRoute(n) }, onClose = { naming = false })
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             a.place?.let { p ->
                 var fav by remember { mutableStateOf(engine.places.isFavourite(p)) }
@@ -529,6 +557,25 @@ internal fun ArrivalCard(engine: NavEngine, a: ArrivalInfo, modifier: Modifier =
             if (engine.tripFrom != null && engine.prefs.b(PreferenceKeys.ROUTEBACK, true)) Pill("Itinéraire retour", false, { engine.routeBack() },
                 if (car) Modifier.carTap("arr-back") { engine.routeBack() } else Modifier)
             Pill("Terminé", true, { engine.dismissArrival() }, if (car) Modifier.carTap("arr-done") { engine.dismissArrival() } else Modifier)
+        }
+    }
+}
+
+/** Names a route before it's saved to My routes (#321), with the name it suggests filled in. */
+@Composable
+private fun SaveMyRouteDialog(suggested: String, onSave: (String) -> Unit, onClose: () -> Unit) {
+    val c = LocalVw.current
+    var name by remember { mutableStateOf(suggested) }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.panel)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Save this route", color = c.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            SField(name, { name = it.take(60) }, placeholder = "e.g. School run", width = 436.dp, fill = true)
+            Text("Offered next time you go from near here to the same place. Settings › Places & trips › My routes to rename or delete it.", color = c.sub, fontSize = 13.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                SButton("Annuler") { onClose() }
+                SButton("Enregistrer", primary = true) { onSave(name.ifBlank { suggested }) }
+            }
         }
     }
 }
@@ -853,6 +900,25 @@ internal fun DemoChoiceBtn(engine: NavEngine, modifier: Modifier = Modifier, hei
  * litre, so anything under 10 is taken as euros or pounds (smikkelvriend: 2.15 gave 3 cents for a 30-minute drive). For
  * electricity, anything under 2 (no one pays 2 cents a kWh).
  */
+/**
+ * The fuel the trip has cost so far and how far you've driven ("£1.84 so far · 23.4 km driven"), under the trip card's figures
+ * (Settings › Places and trips › Live fuel cost, ZarulOfficial #316). Nothing when it's off or no economy and price are set.
+ */
+@Composable
+internal fun LiveFuelLine(engine: NavEngine, modifier: Modifier = Modifier) {
+    if (!engine.liveFuelOn()) return
+    // (to the nearest 100 m: the line doesn't need redrawing for every metre)
+    val driven = Math.round(engine.drivenThisRoute / 100.0) * 100.0
+    val cost = engine.fuelCostOf(driven) ?: return
+    val c = LocalVw.current
+    val ev = engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV"
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(if (ev) Icons.Rounded.EvStation else Icons.Rounded.LocalGasStation, null, tint = c.sub, modifier = Modifier.size(14.dp))
+        Text("${formatMoney(engine.prefs, cost)} so far" + " · " + "${Geo.fmtDist(driven, engine.imperial)} driven",
+            color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp))
+    }
+}
+
 internal fun pricePence(raw: String, ev: Boolean, prefs: com.headunit.launcher.Prefs? = null): Double? {
     val v = raw.trim().replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 } ?: return null
     // (rupees, kroner, forints, yen...: the price is typed as normally written, in the main unit; bijindas: ₹107.40 came out as paise)

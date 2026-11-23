@@ -5,6 +5,13 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Mes itinéraires : enregistrer le chemin que vous avez pris, proposé (ou pris directement) la prochaine fois que le trajet convient.
+- Coût réel du carburant : ce que le trajet a coûté jusqu'ici, d'après la distance vraiment parcourue, et le total à l'arrivée (Réglages › Lieux et trajets).
+- Panneau de limitation qui clignote quand vous dépassez de plus que la marge choisie (en agglomération et hors agglomération, en km/h ou en %).
+- Image dans l'image sur téléphone : en quittant l'appli en guidage, la carte, la prochaine direction et le temps restant restent dans une petite fenêtre.
+- Android Auto : tailles de la carte de direction (flèche, largeur, hauteur), masquage automatique de la recherche et des lieux, fonctionnement au frais pour les téléphones qui chauffent, carte « Continuer vers… » avec compte à rebours pour un trajet en pause.
+- Voix : sortie par le haut-parleur du téléphone, et « Jouer la voix comme les bips » quand la musique ne baisse pas pour la voix.
+- Couleurs du trafic fondues sur le tracé et la barre du trajet.
 - Nouvelle disposition en portrait (téléphone) : sans itinéraire, la barre de recherche en haut, vos lieux, la musique et les messages dans un volet en bas (météo, carburant le moins cher, voiture garée, trafic vers Domicile/Travail) ; en guidage, volet de trajet, dangers dans la carte de direction, vitesse en bas à gauche. Réglages › Écran.
 - Android Auto : ajouter un arrêt en un appui depuis la carte de trajet (carburant, recharge, restauration, café le long de l'itinéraire) et signalements rapides.
 - Signalement rapide depuis la carte.
@@ -142,6 +149,12 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Un seul bip en dépassant la limitation, réarmé une fois revenu dessous (votre grille d'alertes reste la règle).
+- Heure d'arrivée calculée tronçon par tronçon, plus juste en cours de route et aux étapes.
+- Position au démarrage : une ancienne position GPS ne bloque plus la position réseau récente.
+- Recherche : une ville à 700 km ne passe plus devant le commerce d'à côté.
+- Android Auto : recherche vocale sans doublon ni résultat partiel, « Domicile » et « Travail » enregistrables, voitures à molette qui gardent Arrêter à portée.
+- Ronds-points : sens de la mini-carte fiable ; vraie nuit atténuée, plus de pluie par temps clair ; trajets en pause conservés.
 - Virage dangereux : l'alerte reste affichée jusqu'à la sortie du virage.
 - Ralentisseurs annoncés au moins 100 m avant.
 - Carte de direction : vitesse moyenne, aires, parkings et conseils y sont regroupés ; « Itinéraire plus rapide » devient une bande sur la carte de trajet.

@@ -90,6 +90,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Additional auto-zoom adjustment for Android Auto's usable viewport. Negative values zoom out
      * on compact or narrow displays, where the same camera zoom shows too little road ahead. */
     @Volatile private var carViewportZoomOffset = 0.0
+    /** How much further out the map is in the picture-in-picture window (0 at full size; MainActivity sets it, #301). */
+    @Volatile var pipZoomShift = 0.0
+    /** The camera's top padding (as a share of the height) in the picture-in-picture window, or -1 when it isn't showing (#301). */
+    @Volatile var pipPad = -1.0
 
     /** Recalculate the camera's automatic zoom for the actual Android Auto display, not just its pixel count.
      * Inputs are surface pixels and the display's DPI. The short edge controls the base adjustment and
@@ -263,6 +267,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     // extras
     val habits = HabitStore(prefs)
     var overLimit by mutableStateOf(false)
+    /** Over the limit by more than the margin in Settings › Alerts › Flash the sign: the limit sign flashes (desko1973 #323). */
+    var flashOver by mutableStateOf(false)
     var via by mutableStateOf<List<Place>>(emptyList())
     var stopMode by mutableStateOf(false)
     var destRain by mutableStateOf<String?>(null)
@@ -381,6 +387,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var candidateHits = 0
     private var announcedLimit = -1
     private var lastBeep = 0L
+    /** The over-the-limit chime can sound (it has once since you went over), and the limit it was for. */
+    private var beepArmed = true
+    private var beepLim: Double? = null
     private var breakNext = 7200L
     private var tripPts = ArrayList<LL>()
 
@@ -819,9 +828,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     toast("Reprise du trajet vers ${d.name}", 3500)
                     startRoute(d, 0, keepVia = true, startNow = true)
                 }
-            } else if (o.has("la") && age < 15 * 60_000L)
-                // stopped navigating 4 to 15 minutes ago: offer to carry on with the "Resume trip" card
-                resume = Place(o.optString("n"), o.optString("s"), LL(o.getDouble("la"), o.getDouble("lo")))
+            } else if (o.has("la") && (age < 15 * 60_000L || (o.optBoolean("pause") && age < 3 * 3600_000L))) {
+                // stopped navigating 4 to 15 minutes ago, or a trip paused by a stop on the way (up to 3 hours ago, pc4096): offer to
+                // carry on ("Resume trip" on the phone; on Android Auto a card that carries on by itself after a few seconds).
+                // Not when you're already at the destination
+                val d = Place(o.optString("n"), o.optString("s"), LL(o.getDouble("la"), o.getDouble("lo")))
+                resume = d
+                scope.launch {
+                    var n = 0
+                    while (fix == null && n < 40) { delay(500); n++ }
+                    if (fix?.let { Geo.dist(it.pos, d.pos) < 400.0 } == true && resume === d) { resume = null; prefs.put(PreferenceKeys.RESUME, "{}") }
+                }
+            }
         } catch (e: Exception) { }
         tts = TextToSpeech(ctx) { status ->
             if (status != TextToSpeech.SUCCESS) {
@@ -842,8 +860,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     override fun onStart(id: String?) {}
                     // (a direction spoken in parts, a street name in another language's voice: the music comes back after the last part)
                     // (with more still queued, the check in [duck] hands the music back once all of it is said)
-                    override fun onDone(id: String?) { if (id?.startsWith("part") != true && tts?.isSpeaking != true) unduck() }
-                    @Deprecated("Deprecated in Java") override fun onError(id: String?) { if (id?.startsWith("part") != true) unduck() }
+                    override fun onDone(id: String?) {
+                        if (id?.startsWith("file") == true) { voiceFileReady(id, true); return }
+                        if (id?.startsWith("part") != true && tts?.isSpeaking != true && !viaBusy) unduck()
+                    }
+                    @Deprecated("Deprecated in Java") override fun onError(id: String?) {
+                        if (id?.startsWith("file") == true) { voiceFileReady(id, false); return }
+                        if (id?.startsWith("part") != true) unduck()
+                    }
                 })
             }
         }
@@ -955,7 +979,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             var quiet = 0
             repeat(60) {
                 if (t != duckToken || focusReq == null) return@launch
-                if (tts?.isSpeaking != true) { if (++quiet >= 2) { unduck(); return@launch } } else quiet = 0
+                if (tts?.isSpeaking != true && !viaBusy) { if (++quiet >= 2) { unduck(); return@launch } } else quiet = 0
                 delay(1000)
             }
             if (t == duckToken) unduck()
@@ -1059,7 +1083,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun shutdown() {
         RouteSync.unregister(this)
-        stopLocation(); simJob?.cancel(); tts?.shutdown()
+        stopLocation(); simJob?.cancel(); tts?.shutdown(); try { clearVia() } catch (e: Exception) { }
         // everything this engine had running (its timers, lookups and the map glide) stops with it: the car screen makes a new
         // engine each time the phone is plugged in, and the old one must not keep going in the background
         try { scope.coroutineContext[Job]?.cancel() } catch (e: Exception) { }
@@ -1473,8 +1497,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // fork FR : la position combinée d'Android (GPS + Wi-Fi + réseau, comme Google Maps), plus juste à l'arrêt et dans un bâtiment
             if (android.os.Build.VERSION.SDK_INT >= 31 && m.allProviders.contains(LocationManager.FUSED_PROVIDER))
                 m.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 2000L, 0f, this, Looper.getMainLooper())
-            (m.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: m.getLastKnownLocation(LocationManager.NETWORK_PROVIDER))
-                ?.let { handleLocation(it, true) }
+            // the newer of the two last positions the phone remembers (the GPS one can be from the last drive, hours ago and
+            // somewhere else: it always won, even over a network position from a minute ago)
+            listOfNotNull(m.getLastKnownLocation(LocationManager.GPS_PROVIDER), m.getLastKnownLocation(LocationManager.NETWORK_PROVIDER))
+                .maxByOrNull { it.elapsedRealtimeNanos }?.let { handleLocation(it, true) }
         } catch (e: SecurityException) {
             lm = null
             toast("L'autorisation de localisation est nécessaire pour la navigation")
@@ -1556,7 +1582,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         detectCountry(l.latitude, l.longitude)
         val now = System.currentTimeMillis()
         val slow = !l.hasSpeed() || l.speed < 1.0f
-        if (l.provider == LocationManager.GPS_PROVIDER) {
+        // (a remembered position more than 2 minutes old, shown while the GPS starts up, isn't taken for a live GPS fix: it used to
+        // be, and the phone's network positions were then turned away for 10 s, or 2 minutes on a route, so standing still at the
+        // start the arrow stayed where the phone last was until you drove off and the GPS caught up, neilch0111 #300)
+        val stale = first && (android.os.SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) > 120_000_000_000L
+        if (l.provider == LocationManager.GPS_PROVIDER && !stale) {
             lastGpsTime = now; lastGpsAcc = if (l.hasAccuracy()) l.accuracy else 99f
             // fork FR : à l'arrêt, une position combinée récente et plus précise (Wi-Fi dans un bâtiment) passe avant le GPS qui dérive
             if (slow && (fix?.speed ?: 0.0) < 1.0 && now - fusedAt < 8000 && fusedAcc + 3f < lastGpsAcc) return
@@ -1567,7 +1597,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // seulement à l'arrêt et quand elle est nettement plus précise : en roulant, le GPS seul reste le plus réactif
             if (!(slow && (fix?.speed ?: 0.0) < 1.0 && l.accuracy + 3f < lastGpsAcc && lastGpsAcc > 10f)) return
         }
-        else if (now - lastGpsTime < 10000) return
+        else if (l.provider != LocationManager.GPS_PROVIDER && now - lastGpsTime < 10000) return
         // with the GPS gone (a tunnel) a rough mobile-network position would throw the route off: keep estimating along the route instead
         else if (route != null && !previewing && glideOnRoute && now - lastGpsTime < 120_000 && (!l.hasAccuracy() || l.accuracy > 30f)) return
         val cur = LL(l.latitude, l.longitude)
@@ -1707,6 +1737,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                         .setSampleRate(22050).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
                     .setTransferMode(android.media.AudioTrack.MODE_STATIC).setBufferSizeInBytes(pcm.size * 2).build()
                 tr = t
+                phoneSpeaker()?.let { d -> try { t.setPreferredDevice(d) } catch (e: Exception) { } }
                 t.write(pcm, 0, pcm.size)
                 // Settings > Sound & voice > Chime volume: compared with the spoken directions on the same channel
                 try { t.setVolume((prefs.i(PreferenceKeys.CHIME_VOL, 70).coerceIn(5, 100) / 100f)) } catch (e: Exception) { }
@@ -1802,6 +1833,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         toast("${stops.size} arrêts recharge ajoutés", 2500)
         startRoute(d, departMin, true, startNow = route != null && !previewing)
     }
+    // ---- what the trip has really cost (Settings › Places and trips › Live fuel cost, ZarulOfficial #316) ----
+    /** Switched on, and the economy and price set (Settings › Fuel), so there's something to work it out from. */
+    fun liveFuelOn(): Boolean = prefs.b(PreferenceKeys.LIVE_FUEL, false) && fuelCostOf(1000.0) != null
+    /** The fuel (or charging) for [metres] of driving, from the economy and pump price in Settings, or null if they're not set. */
+    fun fuelCostOf(metres: Double): Double? {
+        val ev = prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV"
+        val mpg = prefs.s(if (ev) "evmpk" else "fuelmpg", "").toDoubleOrNull()?.takeIf { it > 0 } ?: return null
+        val ppl = com.headunit.launcher.ui.pricePence(prefs.s(if (ev) "evppk" else "fuelppl", ""), ev, prefs) ?: return null
+        return if (ev) metres / 1609.344 / mpg * ppl / 100.0 else metres / 1609.344 / mpg * 4.54609 * ppl / 100.0
+    }
+    /** How far you've really driven since this route started (by GPS, not the route's length). */
+    val drivenThisRoute: Double get() = if (navStartMs > 0) max(0.0, tripDist - navStartDist) else 0.0
 
     /** A route is being driven (not just looked at): a place picked now can be a stop on the way, or where to go instead. */
     fun driving(): Boolean = route != null && !previewing && dest != null
@@ -1929,7 +1972,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             appendLine("Frame rate: ${prefs.s(PreferenceKeys.MAP_FPS, "auto")} · map detail: ${prefs.mapDetail()} · steering wheel: ${if (mirrored) "left (traffic on the right)" else "right (traffic on the left)"}")
             if (perfLine.isNotBlank()) appendLine("Performance: $perfLine")
             try { appendLine(com.headunit.launcher.ui.NightWatch.line() + " · theme " + prefs.s(PreferenceKeys.THEME, "auto")) } catch (e: Exception) { }
-            if (heatLevel >= 0) appendLine("Heat: ${listOf("cool", "light", "moderate", "severe", "critical", "emergency", "shutdown").getOrElse(heatLevel) { "$heatLevel" }}")
+            if (heatLevel >= 0) appendLine("Heat: ${listOf("cool", "light", "moderate", "severe", "critical", "emergency", "shutdown").getOrElse(heatLevel) { "$heatLevel" }}" + " · cool running: " + prefs.s(PreferenceKeys.CAR_COOL, "off") + (if (coolOn) " (on now)" else ""))
             try { append(SessionWatch.report(ctx)) } catch (e: Exception) { }
             if (laneDiag.isNotBlank()) appendLine(laneDiag)
             if (laneNote.isNotBlank()) appendLine(laneNote)
@@ -1957,6 +2000,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // what Android Auto checks before listing the app (Play as installer, the system installer as initiating)
             appendLine("Install record: ${Updater.installRecord(ctx)}")
             try { RouteEnds.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Last routes ended:"); append(it) } } catch (e: Throwable) { }
+            try { com.headunit.launcher.car.CarCardLog.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Car search card closed:"); append(it) } } catch (e: Throwable) { }
             try { SoundLog.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Music lowered and given back:"); append(it) } } catch (e: Throwable) { }
             try { NetHealth.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Connection problems:"); append(it) } } catch (e: Throwable) { }
             try { BgLog.text().takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("In the background today:"); append(it) } } catch (e: Throwable) { }
@@ -2335,7 +2379,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         fun strong(p: Place) = p.name.lowercase().let { it == full || it.startsWith(full) }
         fun d(p: Place) = if (near != null) Geo.dist(near, p.pos) else 0.0
         val top = all.filter { strong(it.first) }.sortedBy { d(it.first) }
-        val rest = all.filter { !strong(it.first) }.sortedBy { it.second }
+        // the others in the search service's order, but a far-away one gives way to a few nearer ones: a city 700 km off used to
+        // come before the street or shop down the road (TheDMAl #327). Gently, so a place asked for by its town still comes first
+        fun farBy(p: Place): Int { val km = d(p) / 1000.0; return when { near == null || km < 30 -> 0; km < 150 -> 3; km < 500 -> 6; else -> 10 } }
+        val rest = all.filter { !strong(it.first) }.sortedBy { if (it.second < 1000) it.second + farBy(it.first) else it.second }
         return dedupe((top + rest).map { it.first }).take(15)
     }
 
@@ -2963,6 +3010,95 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
+    // ---- your own routes (Settings › Places & trips › My routes, igalshe-ai #321) ----
+    /** Routes along your saved routes that fit a trip from [from] to [to] (at most two), each marked with its name. Off the main thread. */
+    private fun myRoutesFor(from: LL, to: LL, departMs: Long): List<Route> {
+        val out = ArrayList<Route>()
+        for (m in try { MyRoutes.matching(ctx, from, to) } catch (e: Exception) { emptyList() }) {
+            try {
+                val full = MyRoutes.read(ctx, m.id) ?: continue
+                val vp = MyRoutes.viaPoints(full.pts)
+                val r = netRoutes(from, to, false, departMs, vp).firstOrNull() ?: continue
+                r.mine = m.name; r.mineId = m.id; r.mineVia = vp
+                out += r
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { }
+        }
+        return out
+    }
+
+    /** Your saved route being driven now ("" for none): rerouting keeps to it, and the arrival card doesn't offer to save it again. */
+    private var drivingMine = ""
+    /** Where you went on this route (about every 20 m), for "Save as my route" when you arrive. */
+    private var drivenPts = ArrayList<LL>()
+    private var drivenStartMin = 0
+    private var drivenFromName = ""
+
+    /** The drive just finished, ready to save as one of your routes from the arrival card (null: nothing to save). */
+    class FinishedDrive(val toName: String, val pts: List<LL>, val minute: Int, val suggested: String)
+    var finishedDrive by mutableStateOf<FinishedDrive?>(null)
+        private set
+
+    private fun noteDriven(p: LL) {
+        if (navStartMs <= 0L || previewing || route == null || simMode != 0) return
+        val last = drivenPts.lastOrNull()
+        if ((last == null || Geo.dist(last, p) >= 20.0) && drivenPts.size < 8000) drivenPts.add(p)
+    }
+
+    private fun startDriven() {
+        drivenPts = ArrayList(); fix?.pos?.let { drivenPts.add(it) }
+        val cal = java.util.Calendar.getInstance()
+        drivenStartMin = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+        val here = fix?.pos
+        val home = places.slot("home"); val work = places.slot("work")
+        drivenFromName = when {
+            here != null && home != null && Geo.dist(here, home.pos) < 300.0 -> "Domicile"
+            here != null && work != null && Geo.dist(here, work.pos) < 300.0 -> "Travail"
+            else -> onRoad
+        }
+        drivingMine = route?.mine ?: ""
+        // your route: the reroutes go through what's left of it, as when driving a GPX track (and no "faster route" prompts)
+        val r = route
+        if (r != null && r.mine.isNotBlank() && drivingTrack == null) { trackVia = r.mineVia; trackPassed = 0 }
+        else if (drivingTrack == null) { trackVia = emptyList(); trackPassed = 0 }
+    }
+
+    /** Arrived: the drive is kept for the arrival card's "Save as my route" (not a demo drive, nor one of your routes already). */
+    private fun finishDriven(toName: String) {
+        val pts = drivenPts
+        var len = 0.0
+        for (i in 1 until pts.size) len += Geo.dist(pts[i - 1], pts[i])
+        finishedDrive = if (simMode == 0 && drivingMine.isBlank() && len > 500.0) {
+            val base = if (drivenFromName.isNotBlank() && drivenFromName != toName) "$drivenFromName → $toName" else toName
+            // a second route for the same trip gets the time of day, so the two can be told apart
+            val same = try { pts.firstOrNull()?.let { a -> MyRoutes.matching(ctx, a, pts.last(), 5) }.orEmpty() } catch (e: Exception) { emptyList() }
+            val part = when (drivenStartMin / 60) { in 5..10 -> "morning"; in 11..16 -> "afternoon"; in 17..21 -> "evening"; else -> "night" }
+            FinishedDrive(toName, ArrayList(pts), drivenStartMin, if (same.isNotEmpty()) "$base ($part)" else base)
+        } else null
+        drivingMine = ""
+    }
+
+    /** Saves the drive just finished as one of your routes, called [name]. */
+    fun saveMyRoute(name: String) {
+        val d = finishedDrive ?: return
+        finishedDrive = null
+        scope.launch {
+            val r = withContext(Dispatchers.IO) { try { MyRoutes.save(ctx, name, d.toName, d.pts, d.minute) } catch (e: Exception) { null } }
+            toast(if (r != null) "Saved to My routes: offered next time you go there" else "Couldn't save that route", 4000)
+        }
+    }
+
+    /** Shows one of your saved routes on the map (Settings › My routes › Show). */
+    fun showMyRoute(id: String) {
+        scope.launch {
+            val r = withContext(Dispatchers.IO) { MyRoutes.read(ctx, id) } ?: return@launch
+            if (r.pts.size < 2) return@launch
+            shownTrack = GpxTrack("mine-" + r.id, r.name, r.len, r.at, r.pts, "", r.pts.first())
+            map.setTrack(r.pts)
+            following = false
+            map.fit(r.pts, panel = false)
+        }
+    }
+
     private fun stopTrackDrive() {
         if (drivingTrack == null && trackVia.isEmpty()) return
         drivingTrack = null; trackVia = emptyList(); trackPassed = 0
@@ -3007,7 +3143,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 var usedOffline = false
                 // a house address: the route ends on the street the house is on, not whichever road is nearest the middle of its plot
                 val target = withContext(Dispatchers.IO) { streetTarget(to) }
-                val rs = withContext(Dispatchers.IO) {
+                var rs = withContext(Dispatchers.IO) {
                     val haveOffline = OfflineRouter.installed(ctx)
                     // the free version on Play plans routes from the downloaded country pack (no route service): say what's needed
                     if (Plus.free && !haveOffline) throw IllegalStateException("téléchargez d’abord votre pays dans Réglages › Cartes hors ligne (la version gratuite calcule les itinéraires avec), ou prenez Horizon Maps Plus")
@@ -3018,6 +3154,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     }
                 }
                 if (rs.isEmpty()) throw IllegalStateException("aucun itinéraire trouvé")
+                // one of your own saved routes fits this trip (#321): planned through points along it, and put first
+                val myMode = prefs.s(PreferenceKeys.MY_ROUTES, "offer")
+                val mineRs = if (usedOffline || keepVia || fromTrack || via.isNotEmpty() || myMode == "off") emptyList()
+                    else withContext(Dispatchers.IO) { myRoutesFor(from, target, departMs) }
+                val rsAll = if (mineRs.isEmpty()) rs else mineRs + rs.take(if (mineRs.size >= 2) 1 else 2)
+                rs = rsAll
                 shortRoute = usedOffline && OfflineRouter.endsShort
                 if (shortRoute) toast("Votre carte téléchargée s'arrête avant ${to.name} : l'itinéraire va jusqu'à sa limite pour l'instant, le reste sera calculé dès qu'il y aura du réseau", 8000)
                 else if (usedOffline && !Plus.free) toast("Itinéraire hors ligne : pas de trafic ni de données en direct", 4000)
@@ -3064,7 +3206,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 } else map.fit(allPts)
                 waitingFor = null; waitJob?.cancel()
                 // changing stops while already driving carries straight on, without the route options in between
-                if (startNow) beginNavigation()
+                // (and Settings › My routes › Start on it: straight onto your own route)
+                if (startNow || (mineRs.isNotEmpty() && myMode == "start")) beginNavigation()
             } catch (e: Exception) {
                 val m = e.message ?: ""
                 if (m.contains("signal")) {
@@ -3122,6 +3265,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         navStartMs = System.currentTimeMillis(); navStartDist = tripDist
         // fork FR : les lampadaires du trajet téléchargés à l'avance (gardés un mois)
         route?.let { r -> if (prefs.b(PreferenceKeys.LAMPS, true)) try { OsmLamps.prefetchRoute(ctx, r.pts) } catch (e: Exception) { } }
+        try { startDriven() } catch (e: Exception) { }
         lastFasterCheck = System.currentTimeMillis(); faster = null; lastTrafficAt = 0L
         dest?.let { d -> prefs.put(PreferenceKeys.RESUME, org.json.JSONObject().put("n", d.name).put("s", d.sub).put("la", d.pos.lat).put("lo", d.pos.lon).put("t", System.currentTimeMillis()).toString()) }
         following = true
@@ -3442,7 +3586,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         map.setRoute(emptyList(), emptyList()); map.setDest(null); map.setTurnPulse(false); laneKey = null; map.setLanes(emptyList()); map.setLaneSign(null, emptyList()); laneSignFor = -1.0; map.setRouteShift(emptyList()); laneLatAt = null; laneShiftEnd = 0.0
         map.highlightDestination(null)
         stopSim()
-        tts?.stop()
+        tts?.stop(); try { clearVia() } catch (e: Exception) { }
         glideRoute = null; glideOnRoute = false
         // back to the zoom you use when not on a route
         zoomOffset = try { savedFreeZoom() } catch (e: Exception) { 0.0 }
@@ -3692,9 +3836,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // then it's measured against the limit showing from the road data. It used to stop there, so the sign on the map hardly
         // ever appeared (GitHub #257)
         val curMs = hit?.ms ?: speedLimit
+        // about 15 seconds ahead at the speed you're doing (at least 250 m, at most 800 m): it came up to 45 s early in town
+        // (desko1973 #319). A little more once showing, so it doesn't come and go as you slow down
+        val ahead = (max(p.speed, 0.0) * 15.0).coerceIn(250.0, 800.0) * (if (nextLimit != null) 1.3 else 1.0)
         var nx: Pair<Double, Double>? = null
         for (sc in secs) {
-            if (sc.off <= at || sc.off - at > 800.0) continue
+            if (sc.off <= at || sc.off - at > ahead) continue
             // (a stretch with no known limit is 0: it isn't a limit, and showed as "0 in 700 m")
             if (sc.ms < 2.0) continue
             if (curMs == null || kotlin.math.abs(sc.ms - curMs) > 0.5) { nx = sc.ms to (sc.off - at); break }
@@ -3783,8 +3930,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val over = prefs.b(PreferenceKeys.SPEEDWARN, true) && lim != null && !limitEstimated && ps > lim + tol && ps > 4.0
             // fork FR : écran (compteur rouge), bip et voix au choix (Réglages › Alertes › Comment être prévenu › Excès de vitesse)
             overLimit = over && alertOn("speed", "screen")
-            if (over && soundMode != 2 && now - lastBeep > 9000) {
-                lastBeep = now
+            // un seul bip en dépassant (l'original), réarmé une fois revenu sous la limite ou quand elle change
+            run {
+                // (towns: limits up to 60 km/h, or 40 mph; the margin is in your units, or a share of the limit)
+                val town = lim != null && lim <= (if (imperial) 40.5 * 0.44704 else 60.5 / 3.6)
+                val m = prefs.s(if (town) PreferenceKeys.FLASH_TOWN else PreferenceKeys.FLASH_OUT, if (town) "10" else "15").toIntOrNull() ?: 10
+                val margin = if (lim == null) 0.0 else if (prefs.b(PreferenceKeys.FLASH_PCT, false)) lim * m / 100.0 else m * (if (imperial) 0.44704 else 0.27778)
+                val fl = prefs.b(PreferenceKeys.FLASH_OVER, true) && lim != null && !limitEstimated && ps > 4.0 &&
+                    (if (flashOver) ps > lim + margin - 0.5 else ps > lim + margin)
+                if (fl != flashOver) flashOver = fl
+            }
+            if (lim == null || ps <= lim || lim != beepLim) { beepArmed = true; beepLim = lim }
+            if (over && beepArmed && soundMode != 2 && now - lastBeep > 9000) {
+                lastBeep = now; beepArmed = false
                 if (alertOn("speed", "beep")) chime(android.media.ToneGenerator.TONE_PROP_BEEP2)
             }
             if (over && alertOn("speed", "voice") && (!wasOver || now - overSaidAt > 30000L)) {
@@ -4549,6 +4707,32 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         } catch (e: Throwable) { 60 }
         return heatCapNow
     }
+    // ---- Android Auto's cool running (Settings › Android Auto › Cool running, TheDMAl #327) ----
+    // Full 3D on the car screen while the phone also makes Android Auto's video gets a phone hot. Cool running draws 30 frames a
+    // second, a flat map with the lighter detail, and no street lamps or falling rain or snow. "Automatic" turns it on when the phone
+    // says it's getting warm (moderate, or worse) and off again once it's cool; "Always" keeps it on.
+    /** Cool running is on now. */
+    @Volatile var coolOn = false
+        private set
+    private fun updateCool() {
+        val mode = prefs.s(PreferenceKeys.CAR_COOL, "off")
+        val h = heatLevel
+        val want = when (mode) {
+            "always" -> true
+            "auto" -> if (coolOn) h > android.os.PowerManager.THERMAL_STATUS_NONE else h >= android.os.PowerManager.THERMAL_STATUS_MODERATE
+            else -> false
+        }
+        if (want == coolOn) return
+        coolOn = want
+        scope.launch {
+            try {
+                map.setMapDetail(if (want) (if (prefs.mapDetail() == "lightest") "lightest" else "lite") else prefs.mapDetail())
+                map.lampsEnabled(!want && prefs.b(PreferenceKeys.LAMPS, true))
+                map.setNoEffects(want)
+            } catch (e: Exception) { }
+        }
+    }
+
     private var vsyncLastNs = 0L
     private var vsyncNs = 16_666_667.0
     private var frameCount = 0L
@@ -4573,7 +4757,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val want = if (p == "auto") autoFps else (p.toIntOrNull() ?: 30).coerceIn(15, 60)
             // a hot phone or battery saver: fewer frames, whatever is chosen (60 a second on a phone running Android Auto drained
             // the battery and made it hot, and a hot phone slows itself down, which made the arrow lag)
-            glideFps = minOf(want, heatCap())
+            glideFps = minOf(want, heatCap(), if (coolOn) 30 else 60)
+            if (isCar) updateCool()
             arrowLead = (prefs.s("arrowlead", "1.0").toDoubleOrNull() ?: 1.0).coerceIn(0.0, 2.5)
         }
         // with another app in front (guidance carrying on in the background) a few updates a second is plenty: nobody sees the map
@@ -4773,6 +4958,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun onPosition(p: Fix, force: Boolean) {
         fix = p
         val newFix = p !== lastMeasured
+        if (newFix) try { noteDriven(p.pos) } catch (e: Exception) { }
         if (newFix) isStill = try { stillCheck(p) } catch (e: Exception) { false }
         // a route left running with the app put away and the car standing still for half an hour (parked, the journey long over):
         // it's ended, which also stops the GPS and the notification, so nothing runs on in the background for hours (pc4096)
@@ -4784,7 +4970,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val walkedOff = !isCar && RouteSync.carLeftParkedAt > 0L && p.speed < 3.0
             if (route == null || previewing || appVisible || !(isStill || p.speed < 1.0 || walkedOff) || simMode != 0 || (!isCar && RouteSync.carConnected())) idleSince = 0L
             else if (idleSince == 0L) idleSince = nowI
-            else if (nowI - idleSince > (if (walkedOff) 10 else 30) * 60_000L) { idleSince = 0L; scope.launch { try { endRoute() } catch (e: Exception) { } } }
+            else if (nowI - idleSince > (if (walkedOff) 10 else 30) * 60_000L) {
+                idleSince = 0L
+                // (ended because you stopped for a while, at a shop say, not because you'd finished: kept, so back in the car the
+                // trip is offered again, pc4096)
+                scope.launch { try { val keep = prefs.s(PreferenceKeys.RESUME, "{}"); endRoute(); keepPaused(keep) } catch (e: Exception) { } }
+            }
         }
         // on Android Auto: the map moved by hand and then the car drives off (over about 10 mph, 5 seconds after the last touch):
         // back to following the car, so it doesn't drive off the screen and need a tap on Re-centre while driving (GitHub #273).
@@ -5125,6 +5316,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // the small live preview in Settings: the full screen's steep tilt and low arrow showed little but sky in a short, wide box,
         // so there the view is gentler, with your arrow in the middle
         if (settingsPreview) { tilt = minOf(tilt, 40.0); pad = 0.0 }
+        // (cool running on the car screen: a flat map, which draws far less, #327)
+        if (isCar && coolOn && !settingsPreview) { tilt = 0.0; pad = minOf(pad, flatPad) }
+        // (the picture-in-picture window: your arrow low down, so more of the road ahead shows, but clear of the time strip along
+        // the bottom; it sat in the middle. Also while stopped, when the traffic view centres it on the full screen, #301)
+        if (pipPad >= 0.0) pad = pipPad
         tTilt = tilt; tPad = pad
         val requestedZoom = autoZoom(sp, navigating) + zoomOffset + (if (isCar) carViewportZoomOffset else 0.0) + (if (!navigating) defaultZoom else 0.0)
         // Road-level lane ribbons are only useful when their lane boundaries and the route are
@@ -5149,6 +5345,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // (the Settings preview as far out as the 3D buildings still show, about zoom 15.5 (they fade out below 15), so as much of
         // the map as possible fits its small box with the buildings still in it)
         if (settingsPreview) tZoom = 15.5
+        // (the small picture-in-picture window: further out, so about as much of the road shows as on the full screen, #301)
+        tZoom -= pipZoomShift
         // landscape: your arrow moves sideways just enough to clear whatever card is beside it at its height (the search panel
         // and saved places, the turn card, the trip card), and back to the middle when they fold away, e.g. once you're driving.
         // Portrait: the cards span the width, so it stays centred. Mirrored for left-hand drive.
@@ -5252,7 +5450,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** "Police directing traffic" in the app's language where it's known (desko1973, #297); null for the others (they say "Police"). */
     private fun policeDirecting(): String? = when (L.lang) {
-        "pl" -> "Sterowanie ruchem przez policję"; "de" -> "Verkehrsregelung durch die Polizei"; "fr" -> "Circulation réglée par la police"
+        "pl" -> "Ruch sterowany przez policję"; "de" -> "Verkehrsregelung durch die Polizei"; "fr" -> "Circulation réglée par la police"
         "es" -> "Tráfico dirigido por la policía"; "it" -> "Traffico regolato dalla polizia"; "nl" -> "Verkeersregeling door de politie"
         "pt", "ptbr" -> "Trânsito controlado pela polícia"; else -> null
     }
@@ -6463,6 +6661,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private val liveSaid = HashSet<Int>()
     private var lastBeat = 0L
 
+    /** "Not now" on the offer to carry on: it's forgotten. */
+    fun forgetResume() { resume = null; prefs.put(PreferenceKeys.RESUME, "{}") }
+
+    /** A trip ended by itself while you were stopped part way (see onPosition): kept as paused, to offer for 3 hours (#pc4096). */
+    private fun keepPaused(saved: String) {
+        try {
+            val o = org.json.JSONObject(saved)
+            if (!o.has("la")) return
+            prefs.put(PreferenceKeys.RESUME, o.put("pause", true).put("b", System.currentTimeMillis()).toString())
+        } catch (e: Exception) { }
+    }
+
     /** While navigating, notes every 20 s that a route is running (with its stops), so a restart can carry straight on. */
     private fun saveResumeBeat() {
         val now = System.currentTimeMillis()
@@ -6599,7 +6809,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val span = max(1.0, d.end - d.off)
             d.secs * ((d.end - max(p, d.off)) / span).coerceIn(0.0, 1.0)
         }
-        return r.freeFlow * frac + ahead
+        return NavigationPolicy.remainingSegmentTime(r.cum, r.segmentTimes, p) ?: (r.freeFlow * frac + ahead)
     }
 
     private var etaSmoothSecs = -1.0
@@ -6634,7 +6844,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 d.secs * ((d.end - max(progress, d.off)) / span).coerceIn(0.0, 1.0)
             }
             val ahead2 = ahead + incAhead
-            var secs = r.freeFlow * frac + ahead2
+            // Mapbox supplies a duration for each road segment. Sum the time still ahead on those segments rather than
+            // spreading the whole route's free-flow time evenly by distance (which made ETA wrong on mixed-speed roads).
+            // Those segment durations already include traffic, so add only separately detected incident delays here.
+            val segmentRemaining = NavigationPolicy.remainingSegmentTime(r.cum, r.segmentTimes, progress)
+            var secs = (segmentRemaining ?: (r.freeFlow * frac + ahead)) + incAhead
+            // Keep the delay figure separate from travel time; it is the traffic delay still ahead, not a second addition.
             var delayMin = Math.round(ahead2 / 60.0).toInt()
             // TomTom's own timing of this road (a Mapbox route with a TomTom key): the longer of the two is used
             ttTiming?.takeIf { it.route === r && it.span > 0 }?.let { t ->
@@ -6811,7 +7026,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val secsT = (System.currentTimeMillis() - navStartMs) / 1000.0
                 val dd = max(0.0, tripDist - navStartDist)
                 val sideA = try { arrivalSide(r, r.steps.lastOrNull()?.maneuver ?: "") } catch (e: Exception) { "" }
-                val a = ArrivalInfo(dest, dest?.name ?: "Destination", dd, secsT, if (secsT > 0) dd / secsT else 0.0, sideA)
+                val a = ArrivalInfo(dest, dest?.name ?: "Destination", dd, secsT, if (secsT > 0) dd / secsT else 0.0, sideA, if (liveFuelOn()) fuelCostOf(dd) else null)
+                try { finishDriven(dest?.name ?: "Destination") } catch (e: Exception) { }
                 // how long it really took, for next time ([JourneyTimes]; offline routes, real drives only)
                 val tf = tripFrom; val td = dest?.pos
                 if (tripBase > 0 && tf != null && td != null && simMode == 0 && (isCar || !RouteSync.carConnected())) {
@@ -7194,7 +7410,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Closes the arrival card and goes back to following the car. */
     fun dismissArrival() {
-        arrival = null; arrivalParking = null
+        arrival = null; arrivalParking = null; finishedDrive = null
         if (!following && route == null) recenter()
     }
 
@@ -8075,6 +8291,107 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         try { map.setTomTomLabelLanguage(L.locale) } catch (e: Throwable) { }
     }
 
+    // ---- the voice played by the app itself (Settings › Sound & voice › Play the voice like the chimes, bluelions25 #331) ----
+    // The speech engine plays the voice from its own process, and some head units only lower the music for sound the navigation
+    // app plays itself (the chimes were lowered for, the voice wasn't). With this on, the voice is made into a short sound file and
+    // played here, on the voice channel, like a chime. A direction still cuts off what's being said; an alert waits its turn.
+    private class ViaItem(val id: String, val file: java.io.File, var ready: Boolean = false, var failed: Boolean = false, val text: String)
+    private val viaQueue = java.util.ArrayDeque<ViaItem>()
+    private var viaPlayer: android.media.MediaPlayer? = null
+    private var viaSeq = 0
+    /** The app is making or playing a spoken line (counts as speaking for giving the music back). */
+    @Volatile private var viaBusy = false
+    private val viaMain = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** Queues [text] to be made into a file and played; false if that couldn't be started (then it's spoken as usual). */
+    private fun speakViaApp(text: String, alert: Boolean): Boolean {
+        val t = tts ?: return false
+        val dir = java.io.File(ctx.cacheDir, "voice").apply { mkdirs() }
+        val item = synchronized(viaQueue) {
+            // (nothing waiting or playing: any lines left from before, cut off part way, are cleared out)
+            if (viaQueue.isEmpty() && !viaBusy) try { dir.listFiles()?.forEach { it.delete() } } catch (e: Exception) { }
+            if (!alert) { for (q in viaQueue) try { q.file.delete() } catch (e: Exception) { }; viaQueue.clear(); viaMain.post { stopViaPlayer() } }
+            // (never more than a few waiting: a backlog would be out of date by the time it's heard)
+            while (viaQueue.size >= 4) viaQueue.pollFirst()?.let { try { it.file.delete() } catch (e: Exception) { } }
+            val id = "file${++viaSeq}"
+            ViaItem(id, java.io.File(dir, "$id.wav"), text = text).also { viaQueue.addLast(it); viaBusy = true }
+        }
+        val r = try { t.synthesizeToFile(text, null, item.file, item.id) } catch (e: Exception) { TextToSpeech.ERROR }
+        if (r != TextToSpeech.SUCCESS) { synchronized(viaQueue) { viaQueue.remove(item); viaBusy = viaQueue.isNotEmpty() || viaPlayer != null }; return false }
+        // (a speech engine that never says the file is made mustn't hold up everything after it: after 6 s it's said the usual way)
+        viaMain.postDelayed({
+            val stuck = synchronized(viaQueue) { if (!item.ready && viaQueue.remove(item)) true else false }
+            if (stuck) { try { item.file.delete() } catch (e: Exception) { }; try { tts?.speak(item.text, TextToSpeech.QUEUE_ADD, null, "nav") } catch (e: Exception) { }; playNextVia() }
+        }, 6_000L)
+        return true
+    }
+
+    private fun voiceFileReady(id: String, ok: Boolean) {
+        synchronized(viaQueue) { viaQueue.firstOrNull { it.id == id }?.let { it.ready = true; it.failed = !ok } }
+        viaMain.post { playNextVia() }
+    }
+
+    /** Plays the first line in the queue once it's made (main thread). */
+    private fun playNextVia() {
+        if (viaPlayer != null) return
+        val item = synchronized(viaQueue) {
+            val f = viaQueue.firstOrNull()
+            if (f == null) { viaBusy = false; null } else if (!f.ready) null else viaQueue.pollFirst()
+        } ?: return
+        if (item.failed || !item.file.exists() || item.file.length() < 100) {
+            // (the file couldn't be made: said the usual way instead)
+            try { item.file.delete() } catch (e: Exception) { }
+            try { tts?.speak(item.text, TextToSpeech.QUEUE_ADD, null, "nav") } catch (e: Exception) { }
+            playNextVia(); return
+        }
+        try {
+            val mp = android.media.MediaPlayer()
+            viaPlayer = mp
+            mp.setAudioAttributes(speechAttrs)
+            phoneSpeaker()?.let { d -> try { mp.setPreferredDevice(d) } catch (e: Exception) { } }
+            mp.setDataSource(item.file.absolutePath)
+            mp.setOnCompletionListener { finishVia(it, item.file) }
+            mp.setOnErrorListener { m, _, _ -> finishVia(m, item.file); true }
+            mp.prepare()
+            mp.start()
+        } catch (e: Exception) {
+            viaPlayer?.let { try { it.release() } catch (x: Exception) { } }
+            viaPlayer = null
+            try { item.file.delete() } catch (x: Exception) { }
+            playNextVia()
+        }
+    }
+
+    private fun finishVia(mp: android.media.MediaPlayer, file: java.io.File) {
+        try { mp.release() } catch (e: Exception) { }
+        if (viaPlayer === mp) viaPlayer = null
+        try { file.delete() } catch (e: Exception) { }
+        playNextVia()
+    }
+
+    /**
+     * The phone's own speaker, when Settings › Sound & voice › Voice comes out of is "Phone speaker" (benkkwok #314): the voice
+     * (played by the app, as with Play the voice like the chimes) and the chimes go there, while music carries on over Bluetooth.
+     * Only on the phone itself (not for Android Auto, whose sound is the car's), and on Android 9 or later. Null otherwise.
+     */
+    private fun phoneSpeaker(): android.media.AudioDeviceInfo? {
+        if (isCar || android.os.Build.VERSION.SDK_INT < 28 || prefs.s(PreferenceKeys.VOICE_OUT, "auto") != "phone") return null
+        return try { audioMgr.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER } } catch (e: Exception) { null }
+    }
+
+    /** Drops what's waiting and stops what's playing (the route ended, or the app is closing). */
+    private fun clearVia() {
+        synchronized(viaQueue) { for (q in viaQueue) try { q.file.delete() } catch (e: Exception) { }; viaQueue.clear(); viaBusy = false }
+        viaMain.post { stopViaPlayer() }
+    }
+
+    private fun stopViaPlayer() {
+        val mp = viaPlayer ?: return
+        viaPlayer = null
+        try { mp.stop() } catch (e: Exception) { }
+        try { mp.release() } catch (e: Exception) { }
+    }
+
     fun speak(text: String, alert: Boolean = false) {
         if (quiet()) return
         val m = soundMode
@@ -8086,6 +8403,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // cut a direction off half way (with limits changing often in town, some directions were never heard)
         val mode = if (alert) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH
         val parts = try { foreignParts(text) } catch (e: Exception) { null }
+        if (parts == null && (prefs.b(PreferenceKeys.VOICE_VIA_APP, false) || phoneSpeaker() != null) && speakViaApp(text, alert)) return
         if (parts == null) { tts?.speak(text, mode, null, "nav"); return }
         // a street name in letters the voice can't read (Hebrew names with an English voice, say): it used to be skipped. Each such
         // part is said in the phone's voice for those letters, and the rest in the usual voice (Dotancom). Each part takes the

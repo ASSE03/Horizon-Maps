@@ -283,7 +283,7 @@ private fun SettingsBody(prefs: Prefs, engine: NavEngine, onClose: () -> Unit) {
                         7 -> AlertsSection(prefs, engine)
                         8 -> SoundSection(prefs, engine)
                         9 -> WhileDrivingSection(prefs)
-                        10 -> { PlacesSection(engine); GpxGroup(engine, onShown = onClose); PhoneLinkGroup(prefs); SharingGroups(prefs) }
+                        10 -> { PlacesSection(engine); MyRoutesGroup(engine, onShown = onClose); GpxGroup(engine, onShown = onClose); PhoneLinkGroup(prefs); SharingGroups(prefs) }
                         11 -> FuelSection(prefs, engine)
                         12 -> { OfflineMapsContent(prefs, engine); OfflinePlacesGroup(engine) }
                         13 -> ScreenSection(prefs, engine)
@@ -488,6 +488,7 @@ private fun OnTheMapSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Vue du trafic à l'arrêt", PreferenceKeys.STOPPED_OVERVIEW, true, "Après 30 secondes d'arrêt (feu, file), la carte recule pour montrer le trafic autour de vous vu de dessus, et revient quand vous repartez")
         SToggle(prefs, "Trafic uniquement sur l'itinéraire pendant le guidage", "routetrafficonly", false, "Désactivé : le trafic des routes autour de vous s'affiche aussi, comme dans Google Maps")
         SToggle(prefs, "Trafic fluide en vert", PreferenceKeys.TRAFFIC_GREEN, false, "Grands axes fluides en vert, en plus du trafic ralenti en orange et rouge")
+        SToggle(prefs, "Couleurs du trafic fondues", PreferenceKeys.BLEND_TRAFFIC, true, "Sur le tracé et la barre du trajet, les couleurs du trafic se fondent l'une dans l'autre au lieu de changer par paliers")
     }
     SGroup("Sur votre itinéraire") {
         SToggle(prefs, "Feux tricolores", "signals", true, if (prefs.b(PreferenceKeys.SIGNALS, true)) "Seulement ceux de votre itinéraire. Actuellement : " + engine.map.signalInfo() else null)
@@ -818,6 +819,15 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Vitesse") {
         SToggle(prefs, "Avertir en cas d'excès de vitesse", "speedwarn", true)
         if (prefs.b(PreferenceKeys.SPEEDWARN, true)) SChoice("Avertir au-delà de", listOf("0", "5", "10").map { it to it + if (engine.imperial) " mph" else " km/h" }, prefs.s(PreferenceKeys.TRAFFIC_WARNING, "5")) { prefs.put(PreferenceKeys.TRAFFIC_WARNING, it) }
+        SToggle(prefs, "Faire clignoter le panneau en excès", PreferenceKeys.FLASH_OVER, true, "Le panneau de limitation clignote quand vous dépassez de plus que la marge ci-dessous")
+        if (prefs.b(PreferenceKeys.FLASH_OVER, true)) {
+            val pct = prefs.b(PreferenceKeys.FLASH_PCT, false)
+            val unit = if (pct) "%" else if (engine.imperial) " mph" else " km/h"
+            SChoice("Marge en", listOf("speed" to (if (engine.imperial) "mph" else "km/h"), "pct" to "% de la limitation"), if (pct) "pct" else "speed") { prefs.put(PreferenceKeys.FLASH_PCT, it == "pct") }
+            SChoice("En agglomération", listOf("5", "10", "15", "20").map { it to it + unit }, prefs.s(PreferenceKeys.FLASH_TOWN, "10"),
+                "Limitations jusqu'à 60 km/h") { prefs.put(PreferenceKeys.FLASH_TOWN, it) }
+            SChoice("Hors agglomération", listOf("5", "10", "15", "20").map { it to it + unit }, prefs.s(PreferenceKeys.FLASH_OUT, "15")) { prefs.put(PreferenceKeys.FLASH_OUT, it) }
+        }
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
         SToggle(prefs, "Ignorer les hausses sur un petit tronçon", "limithold", true, "Une limite plus haute n'est prise qu'après 200 m dessus : un petit tronçon mal renseigné (un 90 entre un 50 et un 70) n'est ni affiché ni annoncé. Les baisses sont prises tout de suite")
         SToggle(prefs, "50 en agglomération", "towncap", true, "Entre les panneaux d'entrée et de sortie d'une agglomération (d'après OpenStreetMap), une limite à 80 ou 90 lue sur la carte est ramenée à 50 : c'est presque toujours une erreur de la carte")
@@ -869,6 +879,9 @@ private fun SoundSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Voix et volume") {
         SChoice("Canal audio de la voix", listOf("nav" to "Navigation", "media" to "Média", "notif" to "Notification", "alarm" to "Alarme", "ring" to "Sonnerie"), prefs.s(PreferenceKeys.VOICE_CHANNEL, "nav"),
             "Si vous entendez les bips mais pas la voix, choisissez Média : certains autoradios ne jouent pas le canal navigation. Si la voix suit le volume de la musique, essayez Notification, Alarme ou Sonnerie (certains autoradios appellent l'un d'eux Diffusion)", wrap = true) { prefs.put(PreferenceKeys.VOICE_CHANNEL, it) }
+        if (android.os.Build.VERSION.SDK_INT >= 28 && !engine.isCar) SChoice("Sortie de la voix", listOf("auto" to "Automatique", "phone" to "Haut-parleur du téléphone"), prefs.s(PreferenceKeys.VOICE_OUT, "auto"),
+            "Haut-parleur du téléphone : les indications et les bips restent sur le téléphone pendant que la musique passe en Bluetooth. Pas pour Android Auto, qui utilise les haut-parleurs de la voiture") { prefs.put(PreferenceKeys.VOICE_OUT, it) }
+        SToggle(prefs, "Jouer la voix comme les bips", PreferenceKeys.VOICE_VIA_APP, false, "À activer si la musique baisse pour les bips mais pas pour la voix : certains autoradios ne la baissent que pour les sons joués par l'appli elle-même")
         SItem("Voix et langue", "Utilise la synthèse vocale du système (installez la voix française)") { SButton("Ouvrir") { openSystemSettings(ctx, "com.android.settings.TTS_SETTINGS") } }
         SItem("Volume") { SButton("Ouvrir") { openSystemSettings(ctx, Settings.ACTION_SOUND_SETTINGS) } }
         SSlider("Volume des bips", prefs.i(PreferenceKeys.CHIME_VOL, 70).coerceIn(5, 100).toFloat(), 5f..100f, "%",
@@ -1248,6 +1261,10 @@ private fun FuelSection(prefs: Prefs, engine: NavEngine) {
         val sym = try { cur.getSymbol(java.util.Locale.getDefault()) } catch (e: Exception) { cur.currencyCode }
         SFieldItem(if (!small) "Prix du carburant au litre ($sym)" else if (mi) "Prix du carburant (pence par litre)" else "Prix du carburant (centimes par litre)", prefs.s(PreferenceKeys.FUELPPL, ""), placeholder = if (small) "ex. 1,899" else "", number = true) { s -> prefs.put(PreferenceKeys.FUELPPL, s.filter { it.isDigit() || it == '.' || it == ',' }.take(6)) }
     }
+    // (ZarulOfficial #316)
+    SGroup("Coût réel du carburant") {
+        SToggle(prefs, "Coût réel du carburant", PreferenceKeys.LIVE_FUEL, false, "Ce que le trajet a coûté jusqu'ici, d'après la distance vraiment parcourue, sous les chiffres de la carte de trajet, et le total à l'arrivée. Utilise la consommation et le prix ci-dessus")
+    }
 }
 
 
@@ -1320,6 +1337,9 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
         }
         if (mainAdvanced) {
             SSlider("Taille des cartes", prefs.i(PreferenceKeys.MAIN_CARD_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Cartes de direction, de trajet et d'itinéraire", steps = 15, reset = 100f) { prefs.put(PreferenceKeys.MAIN_CARD_SIZE, it) }
+            SSlider("Taille de la flèche de direction", prefs.i(PreferenceKeys.TURN_ARROW, 100).toFloat(), 80f..200f, "%", sub = "La flèche de la carte de direction, seule", steps = 11, reset = 100f) { prefs.put(PreferenceKeys.TURN_ARROW, it) }
+            SSlider("Largeur de la carte de direction", prefs.i(PreferenceKeys.TURN_WIDTH, 100).toFloat(), 60f..130f, "%", sub = "Jusqu'où la carte de direction s'étend sur la carte", steps = 13, reset = 100f) { prefs.put(PreferenceKeys.TURN_WIDTH, it) }
+            SSlider("Hauteur de la carte de direction", prefs.i(PreferenceKeys.TURN_HEIGHT, 100).toFloat(), 70f..130f, "%", sub = "L'espace au-dessus et au-dessous du texte", steps = 11, reset = 100f) { prefs.put(PreferenceKeys.TURN_HEIGHT, it) }
             SSlider("Taille des boutons", prefs.i(PreferenceKeys.MAIN_BUTTON_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Commandes à l'écran", steps = 15, reset = 100f) { prefs.put(PreferenceKeys.MAIN_BUTTON_SIZE, it) }
             SSlider("Taille du texte", prefs.i(PreferenceKeys.MAIN_TEXT_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Mise à l'échelle indépendante du texte", steps = 15, reset = 100f) { prefs.put(PreferenceKeys.MAIN_TEXT_SIZE, it) }
             SSlider("Taille du nom de rue", prefs.i(PreferenceKeys.ROAD_NAME_SIZE, 100).toFloat(), 70f..200f, "%", sub = "Le nom de la route où vous êtes, sous votre flèche", steps = 12, reset = 100f) { prefs.put(PreferenceKeys.ROAD_NAME_SIZE, it) }
@@ -1365,6 +1385,7 @@ private fun WhileDrivingSection(prefs: Prefs) {
         if (prefs.b("cruise", true)) SToggle(prefs, "Direction à côté du nom de la route", PreferenceKeys.CRUISE_HEADING, true, "« Direction E » après la route. Désactivé n'affiche que la route")
         SToggle(prefs, "Assombrir la carte dans les tunnels", "tunneldim", true)
         SToggle(prefs, "Moins de boutons en conduisant", "drivesimple", true)
+        if (android.os.Build.VERSION.SDK_INT >= 26) SToggle(prefs, "Image dans l'image", PreferenceKeys.PIP, true, "Sur un téléphone, en guidage : en allant sur l'écran d'accueil ou dans une autre appli, la carte, la prochaine direction et le temps restant restent dans une petite fenêtre")
         SToggle(prefs, "Horloge sur la carte", PreferenceKeys.CLOCK_MAP, false, "L’heure, avec le compteur de vitesse. Pratique quand la barre d’état de l’autoradio est masquée")
         SToggle(prefs, "Bloquer la saisie en conduisant", "drivelock", true, "La recherche vocale fonctionne toujours")
         SToggle(prefs, "Commandes multimédia", PreferenceKeys.MEDIA_BAR, false, "Précédent, lecture / pause et suivant en bas de l'écran pendant que de la musique ou la radio joue sur cet appareil, depuis n'importe quelle appli")
@@ -1405,7 +1426,11 @@ private fun AndroidAutoSection(prefs: Prefs) {
     }
     CarTripButtonsGroup(prefs)
     SGroup {
+        SChoice("Fonctionnement au frais", listOf("off" to "Désactivé", "auto" to "Automatique", "always" to "Toujours"), prefs.s(PreferenceKeys.CAR_COOL, "off"),
+            "Pour les téléphones qui chauffent : 30 images par seconde, carte à plat, sans pluie ni lumières. Automatique l'active quand le téléphone signale qu'il chauffe") { prefs.put(PreferenceKeys.CAR_COOL, it) }
         SToggle(prefs, "Barre de recherche et lieux sur la carte", PreferenceKeys.CAR_MAPUI, true, "Désactivé pour une voiture à molette : toute la carte, avec Rechercher, Domicile et Travail dans Lieux (★)")
+        if (prefs.b(PreferenceKeys.CAR_MAPUI, true)) SChoice("Les masquer après", listOf("30" to "30 s", "60" to "1 min", "120" to "2 min", "300" to "5 min", "0" to "Jamais"),
+            prefs.s(PreferenceKeys.CAR_MAPUI_HIDE, "0"), "Reviennent quand vous touchez l'écran") { prefs.put(PreferenceKeys.CAR_MAPUI_HIDE, it) }
         SToggle(prefs, "Bouton du son sur la carte", PreferenceKeys.CAR_SOUND_BTN, true, "Son activé / Alertes seulement / Muet, hors navigation. Désactivé laisse plus de place aux Lieux récents ; le même choix est dans les Réglages de la voiture")
     }
     // Voice search from the car screen's microphone button listens through the app, which needs the microphone allowed. Android
@@ -1445,6 +1470,9 @@ private fun AndroidAutoSection(prefs: Prefs) {
         }
         if (carAdvanced) {
             SSlider("Taille des cartes", prefs.i(PreferenceKeys.CAR_CARD_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Cartes de direction, de trajet et d'itinéraire", steps = 16, reset = 100f) { prefs.put(PreferenceKeys.CAR_CARD_SIZE, it) }
+            SSlider("Taille de la flèche de direction", prefs.i(PreferenceKeys.CAR_TURN_ARROW, 100).toFloat(), 80f..200f, "%", sub = "La flèche de la carte de direction, seule", steps = 11, reset = 100f) { prefs.put(PreferenceKeys.CAR_TURN_ARROW, it) }
+            SSlider("Largeur de la carte de direction", prefs.i(PreferenceKeys.CAR_TURN_WIDTH, 100).toFloat(), 60f..130f, "%", sub = "Jusqu'où la carte de direction s'étend sur la carte", steps = 13, reset = 100f) { prefs.put(PreferenceKeys.CAR_TURN_WIDTH, it) }
+            SSlider("Hauteur de la carte de direction", prefs.i(PreferenceKeys.CAR_TURN_HEIGHT, 100).toFloat(), 70f..130f, "%", sub = "L'espace au-dessus et au-dessous du texte", steps = 11, reset = 100f) { prefs.put(PreferenceKeys.CAR_TURN_HEIGHT, it) }
             SSlider("Taille des boutons", prefs.i(PreferenceKeys.CAR_BUTTON_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Commandes rondes et boutons tactiles", steps = 16, reset = 100f) { prefs.put(PreferenceKeys.CAR_BUTTON_SIZE, it) }
             SSlider("Taille du texte", prefs.i(PreferenceKeys.CAR_TEXT_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Indépendant de la taille des cartes et des boutons", steps = 16, reset = 100f) { prefs.put(PreferenceKeys.CAR_TEXT_SIZE, it) }
             SSlider("Taille de la flèche de navigation", prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).toFloat(), 30f..180f, "%", reset = 100f) { prefs.put(PreferenceKeys.CAR_ARROW_SIZE, it) }
@@ -1723,9 +1751,10 @@ private fun FeedbackDialog(engine: NavEngine, onClose: () -> Unit) {
     val ctx = LocalContext.current
     var note by remember { mutableStateOf("") }
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
-        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.panel).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Avis ou problème", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text("Que s'est-il passé, ou que souhaitez-vous ? Où vous étiez et ce que vous avez touché aide beaucoup.", color = c.sub, fontSize = 14.sp)
+        // (scrolls: on a short, wide head unit screen the buttons were below the bottom of the screen and couldn't be reached, bluelions25 #329)
+        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.panel).verticalScroll(rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Un retour ou un problème", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("Que s'est-il passé, ou que souhaitez-vous ? L'endroit et ce que vous avez touché aident.", color = c.sub, fontSize = 14.sp)
             SField(note, { note = it.take(600) }, placeholder = "ex. Mauvais recalcul près de Lyon", width = 516.dp, fill = true)
             Text("Envoyés avec : la version de l'appli, votre autoradio, les principaux réglages, vos zones téléchargées le dernier plantage et les derniers changements de limitation avec leur position (aucune clé API).", color = c.sub, fontSize = 12.sp)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
@@ -1771,7 +1800,8 @@ private fun LanguageRequestDialog(engine: NavEngine, onClose: () -> Unit) {
     var note by remember { mutableStateOf("") }
     var helper by remember { mutableStateOf(false) }
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
-        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.panel).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // (scrolls: on a short, wide head unit screen the buttons were below the bottom of the screen and couldn't be reached, bluelions25 #329)
+        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.panel).verticalScroll(rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Demander une langue", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Text("Dans quelle langue voulez-vous Horizon Nav ? Si vous la parlez, dites-le : vous pourriez aider à vérifier les textes.", color = c.sub, fontSize = 14.sp)
             SField(lang, { lang = it.take(40) }, placeholder = "ex. suédois", width = 516.dp, fill = true)

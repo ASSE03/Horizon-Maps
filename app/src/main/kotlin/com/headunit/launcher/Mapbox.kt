@@ -539,6 +539,8 @@ object MapboxRest {
         val laneSecs = ArrayList<LaneSec>()
         val sevList = ArrayList<Int>()
         val segDur = ArrayList<Double>()
+        val segEta = ArrayList<Double>()
+        var segEtaComplete = true
         // your top speed for arrival times (Settings > Vehicle): the extra time where the route expects you to go faster, GitHub #134
         val topMs = Vehicle.topMs()
         var capExtra = 0.0
@@ -680,12 +682,18 @@ object MapboxRest {
             val ffs = ann?.optJSONArray("freeflow_speed")
             val dists = ann?.optJSONArray("distance")
             val n = max(cong?.length() ?: 0, max(dur?.length() ?: 0, ms?.length() ?: 0))
+            if (dur == null || dur.length() != n) segEtaComplete = false
             for (i in 0 until n) {
                 sevList += when (cong?.optString(i)) { "severe", "heavy" -> 2; "moderate" -> 1; else -> 0 }
-                segDur += dur?.optDouble(i, 0.0) ?: 0.0
+                val rawDuration = dur?.optDouble(i, Double.NaN) ?: Double.NaN
+                if (!rawDuration.isFinite() || rawDuration < 0.0) segEtaComplete = false
+                val segmentDuration = if (rawDuration.isFinite() && rawDuration >= 0.0) rawDuration else 0.0
+                segDur += segmentDuration
                 val ffKmh = ffs?.optDouble(i, -1.0) ?: -1.0
                 val dm = dists?.optDouble(i, -1.0) ?: -1.0
-                if (topMs > 0.0 && dm > 0.0) capExtra += max(0.0, dm / topMs - (dur?.optDouble(i, 0.0) ?: 0.0))
+                val cap = if (topMs > 0.0 && dm > 0.0) max(0.0, dm / topMs - segmentDuration) else 0.0
+                capExtra += cap
+                segEta += segmentDuration + cap
                 segFree += if (ffKmh > 3.0 && dm >= 0.0) dm / (ffKmh / 3.6) else -1.0
                 val idx = legPtStart + i
                 val spd = ms?.optJSONObject(i)
@@ -768,7 +776,12 @@ object MapboxRest {
                 if (s1 > s0 + 5.0) tun += s0 to s1
             }
         } catch (e: Exception) { }
-        return Route(pts, cum, steps, total, time, delay, laneSecs, sev).also { it.delays = delays; it.limits = limits; it.incidents = incidents; it.tunnels = tun }
+        return Route(pts, cum, steps, total, time, delay, laneSecs, sev).also {
+            it.delays = delays
+            // Only use segment timings when they map one-for-one to the returned route geometry.
+            if (segEtaComplete && segEta.size == max(0, cum.size - 1)) it.segmentTimes = segEta.toDoubleArray()
+            it.limits = limits; it.incidents = incidents; it.tunnels = tun
+        }
     }
 
     // ------------------------------------------------------------------ search

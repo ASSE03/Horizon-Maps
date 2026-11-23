@@ -292,7 +292,7 @@ class CarNavSession : Session() {
         }
         // what was said is searched for in the card, as if it had been typed
         voice = CarVoice(carContext, onNoMic = { screen.screenManager.push(SearchScreen(carContext, holder, keyboard = false, mode = if (com.headunit.launcher.ui.CarSearch.forStop) "stop" else "ask")) }) { text -> com.headunit.launcher.ui.CarSearch.query = text }
-        screen.closeSearch = { voice.finish(""); com.headunit.launcher.ui.CarSearch.open = false; com.headunit.launcher.ui.CarSettingsCard.open = false; com.headunit.launcher.ui.CarStops.open = false; screen.invalidate() }
+        screen.closeSearch = { CarCardLog.note(carContext.applicationContext); voice.finish(""); holder.engine?.pendingSave = null; com.headunit.launcher.ui.CarSearch.open = false; com.headunit.launcher.ui.CarSettingsCard.open = false; com.headunit.launcher.ui.CarStops.open = false; screen.invalidate() }
         // (Android Auto works the visible area out again when it lays the screen out)
         surface.onAreaDoubt = { try { screen.invalidate() } catch (e: Exception) { } }
         try { carContext.getCarService(AppManager::class.java).setSurfaceCallback(surface) } catch (e: Exception) { }
@@ -344,6 +344,7 @@ class CarNavSession : Session() {
         map.setArrowScale(prefs.carArrowScale())
         map.setMapDetail(prefs.mapDetail())
         map.setTrafficGreen(prefs.b(PreferenceKeys.TRAFFIC_GREEN, false))
+        map.setBlendTraffic(prefs.b(PreferenceKeys.BLEND_TRAFFIC, true))
         map.setCarModel(prefs.s(PreferenceKeys.CAR_MODEL, "saloon"))
         map.setRoadNameScale(prefs.i(PreferenceKeys.CAR_ROAD_NAME_SIZE, 100).coerceIn(70, 200) / 100f)
         val mapCols = prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")
@@ -770,7 +771,7 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
         val t = e.turn; val eta = e.eta
         // Android Auto's buttons only change with the state (rebuilding them every second while the distance counts down made the
         // host redo its layout for nothing); the turn and distance go to the car's displays through updateTrip
-        val sig = "${guiding}|${e.previewing}|${e.active}|${e.routes.size}|${e.busy}|${e.simMode}|${e.faster?.savedMin}|${e.soundMode}|${e.demoNext}|${stopOnCard(e)}|${com.headunit.launcher.ui.CarSearch.open}|${com.headunit.launcher.ui.CarSettingsCard.open}|${com.headunit.launcher.ui.CarStops.open}"
+        val sig = "${guiding}|${e.previewing}|${e.active}|${e.routes.size}|${e.busy}|${e.simMode}|${e.faster?.savedMin}|${e.soundMode}|${e.demoNext}|${stopOnCard(e)}|${com.headunit.launcher.ui.CarSearch.open}|${com.headunit.launcher.ui.CarSettingsCard.open}|${com.headunit.launcher.ui.CarStops.open}|${e.resume != null}"
         if (sig != lastSig) { lastSig = sig; invalidate() }
         val tsig = "${t?.maneuver}|${t?.street}|${t?.landmark}|${t?.exit}|${t?.dist?.let { Math.round(it / 10) }}|${eta?.secs?.let { Math.round(it / 30) }}|${eta?.dist?.let { Math.round(it / 100) }}|${System.identityHashCode(t?.lanes)}"
         if (guiding && t != null && eta != null && tsig != lastTrip) {
@@ -788,7 +789,11 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
      * showing and this car is known to pass taps on to the app (otherwise Stop is the only way to end the route from the car;
      * "End route" is also the first row of the car's settings, for a rotary knob).
      */
-    private fun stopOnCard(e: NavEngine?): Boolean = e != null && CarLayout.endOnCard && e.prefs.b(PreferenceKeys.CAR_TAPS_SEEN, false)
+    // (a car with a rotary knob, Search bar and places on the map switched off for it: Stop, sound and Report stay in Android Auto's
+    // own row, the only buttons a knob can reach. A tap on the screen while parked, which some such cars allow, used to move them
+    // onto the trip card, out of reach while driving, corocota1975 #333)
+    private fun stopOnCard(e: NavEngine?): Boolean = e != null && CarLayout.endOnCard && e.prefs.b(PreferenceKeys.CAR_TAPS_SEEN, false) &&
+        e.prefs.b(PreferenceKeys.CAR_MAPUI, true)
 
     /** Report (police, crash, hazard...): opens the "Report here" screen. It has the Search button's place. */
     private fun reportAction(): Action = (if (CarLayout.short) Action.Builder().setIcon(icon(R.drawable.ic_car_report)) else Action.Builder().setTitle("Signaler"))
@@ -862,6 +867,9 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
             // Report has the Search button's place, and Search is the first row in Places. Every car gets Places: a rotary knob or
             // the car's buttons can only reach Android Auto's own buttons, never the search bar and chips the app draws on the map
             // (cars that pass taps on still have those too)
+            // a trip to carry on (paused by a stop on the way): first, where a rotary knob can reach it (pc4096)
+            val rp = e?.resume
+            if (rp != null && e != null && e.route == null) strip.addAction(Action.Builder().setTitle("Carry on").setOnClickListener { e.startRoute(rp, startNow = true); invalidate() }.build())
             strip.addAction(reportAction())
             // (on a short car screen these are icons, so Android Auto's row of buttons takes less of the map)
             strip.addAction((if (CarLayout.short) Action.Builder().setIcon(icon(R.drawable.ic_car_star)) else Action.Builder().setTitle("Lieux"))
@@ -1374,6 +1382,8 @@ class SearchScreen(carContext: CarContext, private val holder: CarHolder, initia
         if (e == null) return
         // (the search card this was opened from has done its job)
         if (mode.isNotEmpty()) com.headunit.launcher.ui.CarSearch.open = false
+        // (Set home / Set work, then the car's keyboard: the place is saved there, TheDMAl #326)
+        if (e.pendingSave != null) { e.pickPlace(p); return }
         when { mode == "stop" && e.driving() -> e.addStop(p); mode == "ask" -> e.goOrAsk(p); else -> e.startRoute(p) }
     }
     private var query = initial

@@ -47,6 +47,8 @@ class Route(
     @Volatile var delays: List<DelaySeg> = emptyList()
     /** Seconds the whole route takes with no traffic at all. */
     @Volatile var freeFlow: Double = max(0.0, time - delay)
+    /** Actual Mapbox duration for each route segment (point i to i+1), including traffic and vehicle speed caps. */
+    @Volatile var segmentTimes: DoubleArray = DoubleArray(0)
     /** Stretches of the route in tunnels, as (from, to) metres along it (from Mapbox's junction data; empty when not known). */
     @Volatile var tunnels: List<Pair<Double, Double>> = emptyList()
     /** Posted speed limits along the route from TomTom's road data (empty when the route came without them, e.g. offline). */
@@ -58,6 +60,11 @@ class Route(
     @Volatile var lorry: String = ""
     /** Which service planned it ("mapbox", "tomtom"; "" offline). */
     @Volatile var from: String = ""
+    /** One of your own saved routes (Settings › Places & trips › My routes, #321): its name ("" for a normal route), its id, and the
+     *  points along it the route goes through. */
+    @Volatile var mine: String = ""
+    @Volatile var mineId: String = ""
+    @Volatile var mineVia: List<LL> = emptyList()
     /** Picked first for having far fewer turns than the quickest (Prefer simpler routes): labelled "Simplest" on the route choice. */
     @Volatile var simpler: Boolean = false
     /** An offline route's own time before the usual-traffic estimate ([JourneyTimes]) was added; 0 for other routes. */
@@ -66,7 +73,7 @@ class Route(
     /** The same route taking [secs] (no live traffic), with everything else kept. */
     fun withTime(secs: Double): Route {
         val n = Route(pts, cum, steps, len, secs, 0.0, lanes, sev)
-        n.delays = delays; n.tunnels = tunnels; n.limits = limits; n.incidents = incidents; n.lorry = lorry; n.from = from; n.simpler = simpler
+        n.delays = delays; n.segmentTimes = segmentTimes.copyOf(); n.tunnels = tunnels; n.limits = limits; n.incidents = incidents; n.lorry = lorry; n.from = from; n.simpler = simpler
         n.baseTime = if (baseTime > 0) baseTime else time
         return n
     }
@@ -836,10 +843,15 @@ object Weather {
             if (sn != null) for (i in 0 until minOf(2, sn.length())) { val v = sn.optDouble(i, 0.0); if (!v.isNaN()) snow = maxOf(snow, v) }
         } catch (e: Exception) { }
         val falling = code in 51..67 || code in 71..77 || code in 80..86 || code in 95..99
+        // (the amounts only count when the sky isn't clear: outside Europe and North America the quarter-hour figures are worked
+        // out from hourly forecasts, and a trace of forecast drizzle (0.1 mm) put rain on the map on a clear, sunny day in New
+        // Zealand, pc4096. Clear or mostly clear (codes 0 to 2) is taken as dry, and it takes a little more than a trace)
+        val clearSky = code <= 2
         val shown = when {
             falling -> code
-            snow > 0.05 -> if (snow > 0.5) 73 else 71
-            wet >= 0.1 -> if (wet >= 2.5) 63 else if (wet >= 0.5) 61 else 51
+            clearSky -> code
+            snow > 0.1 -> if (snow > 0.5) 73 else 71
+            wet >= 0.3 -> if (wet >= 2.5) 63 else if (wet >= 0.8) 61 else 51
             else -> code
         }
         Now(cur.getDouble("temperature_2m"), shown)

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.ExpandLess
 import com.headunit.launcher.L
+import com.headunit.launcher.NavigationPolicy
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -161,6 +162,15 @@ fun RouteBar(engine: NavEngine, modifier: Modifier = Modifier, thin: Boolean = f
         }
         out
     }
+    // (blended: each bin's level is averaged with the bins a little either side, so the colours run into each other where the
+    // traffic changes instead of stepping, #334; the same colours as before)
+    val blend = engine.prefs.b(com.headunit.launcher.PreferenceKeys.BLEND_TRAFFIC, true)
+    val smooth = remember(levels, blend) {
+        FloatArray(bins) { b -> if (!blend) levels[b].toFloat() else {
+            var sum = 0f; var wsum = 0f
+            for (k in -3..3) { val i = b + k; if (i !in 0 until bins) continue; val w = 4f - kotlin.math.abs(k); sum += levels[i] * w; wsum += w }
+            sum / wsum } }
+    }
     val accent = c.accent
     val theme = engine.map.theme
     // [thin]: the slimmer bar on the car screen (smaller markers, a thinner track and a smaller arrow)
@@ -184,7 +194,8 @@ fun RouteBar(engine: NavEngine, modifier: Modifier = Modifier, thin: Boolean = f
             clipPath(ends) {
                 for (b in 0 until bins) {
                     val done = (b + 1f) / bins <= frac
-                    val col = when (levels[b]) { 2 -> Bad; 1 -> Warn; else -> accent }
+                    val v = smooth[b]
+                    val col = if (v <= 1f) androidx.compose.ui.graphics.lerp(accent, Warn, v) else androidx.compose.ui.graphics.lerp(Warn, Bad, (v - 1f).coerceAtMost(1f))
                     drawRect(if (done) Color(0xFF8A8F99) else col, Offset(b * bw, y0), Size(bw + 0.6f, th))
                 }
             }
@@ -1122,11 +1133,9 @@ fun RoundaboutView(engine: NavEngine, t: com.headunit.launcher.TurnInfo, modifie
             leg(180.0, blue, sw * 0.75f)
             leg(exitA, blue, sw * 0.75f)
             // the ring from the entry (bottom) to the exit, the way traffic goes
-            val startCanvas = 90f   // drawArc angles: 0 = right, 90 = bottom (clockwise on screen)
-            val exitCanvas = ((exitA - 90.0) % 360.0 + 360.0).toFloat() % 360f
-            // (on screen a positive sweep goes clockwise: bottom, then left, then top, then right)
-            val sweep = if (clockwise) (exitCanvas - startCanvas + 360f) % 360f else -((startCanvas - exitCanvas + 360f) % 360f)
-            drawArc(blue, startCanvas, sweep, false, topLeft = Offset(cx - r, cy - r), size = androidx.compose.ui.geometry.Size(r * 2, r * 2), style = Stroke(sw * 0.75f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+            val sweep = NavigationPolicy.roundaboutSweep(exitA, clockwise)
+            // A positive canvas sweep follows the clockwise roundabout used where traffic keeps left.
+            drawArc(blue, 90f, sweep, false, topLeft = Offset(cx - r, cy - r), size = androidx.compose.ui.geometry.Size(r * 2, r * 2), style = Stroke(sw * 0.75f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
         }
     }
 }
