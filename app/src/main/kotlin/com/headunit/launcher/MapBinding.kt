@@ -179,6 +179,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             mapView.gestures.rotateEnabled = true
             mapView.gestures.pitchEnabled = true
         } catch (e: Throwable) { }
+        // two fingers moved up or down tilt the map even when they aren't held level: Mapbox only counts it as a tilt within 20
+        // degrees of level, so most tries moved the map instead (ILDEMONICO, GitHub #335)
+        try { mapView.gestures.getGesturesManager().shoveGestureDetector.setMaxShoveAngle(40f) } catch (e: Throwable) { }
         // counted all the time: the automatic frame rate compares frames drawn with camera moves asked for
         subs += mbMap.subscribeRenderFrameStarted { PerfStats.renders++ }
         subs += mbMap.subscribeMapLoadingError { e ->
@@ -2808,8 +2811,14 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         addL(st, SymbolLayer("dl-lim", "dl-lim")
             .iconImage(Expression.get("img")).iconAllowOverlap(true).iconIgnorePlacement(false)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
-            .iconSize(Expression.switchCase(Expression.eq(Expression.get("k"), Expression.literal(0)),
-                zoomed(1.0, 10 to 0.75, 14 to 0.9, 17 to 1.0), zoomed(1.0, 8 to 0.3, 12 to 0.4, 15 to 0.6, 18 to 0.8))))
+            // (the zoom has to be the outermost part: Mapbox refuses a zoom curve inside a case, and then the whole layer was
+            // never added, so neither the speed limit sign on the route nor the lorry signs ever showed)
+            .iconSize(run {
+                val isSpeed = Expression.eq(Expression.get("k"), lit(0))
+                fun both(speed: Double, lorry: Double) = Expression.switchCase(isSpeed, lit(speed), lit(lorry))
+                zoomedExpr(1.0, 8 to both(0.75, 0.3), 10 to both(0.75, 0.35), 12 to both(0.825, 0.4), 14 to both(0.9, 0.533),
+                    15 to both(0.933, 0.6), 17 to both(1.0, 0.733), 18 to both(1.0, 0.8))
+            }))
         pushLimits()
         addS(st, GeoJsonSource.Builder("dl-cams").featureCollection(empty()).build())
         // fork FR : sous l'icône des radars à sens unique, une flèche dans le sens contrôlé

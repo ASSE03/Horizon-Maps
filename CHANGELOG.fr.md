@@ -5,6 +5,9 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Dire « Ralentissez » après le bip d'excès de vitesse (Réglages › Vitesse).
+- Alerte de vitesse maximale : un bip et « Ralentissez » quand vous atteignez la vitesse choisie, quelle que soit la limitation.
+- Mettre la musique en pause pour la voix, au lieu de seulement la baisser.
 - Mes itinéraires : enregistrer le chemin que vous avez pris, proposé (ou pris directement) la prochaine fois que le trajet convient.
 - Coût réel du carburant : ce que le trajet a coûté jusqu'ici, d'après la distance vraiment parcourue, et le total à l'arrivée (Réglages › Lieux et trajets).
 - Panneau de limitation qui clignote quand vous dépassez de plus que la marge choisie (en agglomération et hors agglomération, en km/h ou en %).
@@ -149,6 +152,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Panneau de limitation sur l'itinéraire : il s'affiche bien sur la carte.
+- Parkings près de l'arrivée : de nouveau leur propre carte sous la carte de direction, et leurs tracés sur Android Auto.
+- Barre du trajet : les petits bouchons y apparaissent.
+- Modèle 3D perso : les gros modèles sont réduits pour passer ; inclinaison à deux doigts plus facile.
+- Bouton Terminer qui ne sort plus de l'écran.
 - Un seul bip en dépassant la limitation, réarmé une fois revenu dessous (votre grille d'alertes reste la règle).
 - Heure d'arrivée calculée tronçon par tronçon, plus juste en cours de route et aux étapes.
 - Position au démarrage : une ancienne position GPS ne bloque plus la position réseau récente.

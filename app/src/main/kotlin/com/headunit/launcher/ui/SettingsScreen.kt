@@ -526,7 +526,8 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
         val own = OwnModel.info(prefs)
         val pickModel = rememberModelPicker(prefs) { why ->
             if (why == null) prefs.put(PreferenceKeys.MODEL_SHAPE, "own")
-            else android.widget.Toast.makeText(ctx, "Ce fichier n'est pas un modèle 3D .glb (ou il dépasse 8 Mo)", android.widget.Toast.LENGTH_LONG).show()
+            else android.widget.Toast.makeText(ctx, if (why == "too big") "Ce modèle est trop lourd, même avec ses images réduites. Réduisez son nombre de polygones (dans l'appli qui l'a créé, ou avec Decimate dans Blender) et réessayez"
+                else "Ce fichier n'est pas un modèle 3D .glb", android.widget.Toast.LENGTH_LONG).show()
         }
         fun chooseModel() { if (!pickModel()) android.widget.Toast.makeText(ctx, "Aucune application de cet appareil ne peut choisir un fichier (installez un gestionnaire de fichiers)", android.widget.Toast.LENGTH_LONG).show() }
         if (loc == "model") {
@@ -535,7 +536,7 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
             }
             if (prefs.s(PreferenceKeys.MODEL_SHAPE, "arrow") == "own" && own != null) {
                 SItem("Fichier du modèle 3D", own.first + " · " + String.format(java.util.Locale.UK, "%.1f MB", own.second / (1024.0 * 1024.0))) { SButton("Modifier") { chooseModel() } }
-                SNote("Un .glb de 8 Mo maximum. Orientez-le dans votre sens de marche avec Rotation ; au-delà de 3 Mo il peut saccader sur les autoradios lents")
+                SNote("Un modèle .glb. Au-delà de 8 Mo, ses images sont réduites pour qu'il passe. Orientez-le dans le sens de la marche avec Tourner ; au-delà de 3 Mo, il peut saccader sur les autoradios lents")
                 if (engine.map.ownFailed) SNote("Votre modèle 3D n'a pas pu être affiché, la voiture intégrée est donc utilisée")
                 SSlider("Rotation", prefs.s(PreferenceKeys.MODEL_TURN, "0").toFloatOrNull() ?: 0f, 0f..345f, "°", steps = 22, reset = 0f) { prefs.put(PreferenceKeys.MODEL_TURN, it.toString()) }
             }
@@ -828,6 +829,9 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
                 "Limitations jusqu'à 60 km/h") { prefs.put(PreferenceKeys.FLASH_TOWN, it) }
             SChoice("Hors agglomération", listOf("5", "10", "15", "20").map { it to it + unit }, prefs.s(PreferenceKeys.FLASH_OUT, "15")) { prefs.put(PreferenceKeys.FLASH_OUT, it) }
         }
+        SToggle(prefs, "Dire « Ralentissez »", PreferenceKeys.SAY_SLOW_DOWN, false, "Le mot « Ralentissez » après le bip quand vous dépassez la limitation, au lieu du bip seul")
+        SChoice("Alerte de vitesse maximale", (if (engine.imperial) listOf("0", "60", "70", "80", "90") else listOf("0", "90", "100", "110", "120", "130", "140")).map { it to (if (it == "0") "Désactivé" else it + if (engine.imperial) " mph" else " km/h") },
+            prefs.s(PreferenceKeys.ALERT_TOP_SPEED, "0"), "Un bip et « Ralentissez » quand vous atteignez cette vitesse, quelle que soit la limitation") { prefs.put(PreferenceKeys.ALERT_TOP_SPEED, it) }
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
         SToggle(prefs, "Ignorer les hausses sur un petit tronçon", "limithold", true, "Une limite plus haute n'est prise qu'après 200 m dessus : un petit tronçon mal renseigné (un 90 entre un 50 et un 70) n'est ni affiché ni annoncé. Les baisses sont prises tout de suite")
         SToggle(prefs, "50 en agglomération", "towncap", true, "Entre les panneaux d'entrée et de sortie d'une agglomération (d'après OpenStreetMap), une limite à 80 ou 90 lue sur la carte est ramenée à 50 : c'est presque toujours une erreur de la carte")
@@ -881,6 +885,7 @@ private fun SoundSection(prefs: Prefs, engine: NavEngine) {
             "Si vous entendez les bips mais pas la voix, choisissez Média : certains autoradios ne jouent pas le canal navigation. Si la voix suit le volume de la musique, essayez Notification, Alarme ou Sonnerie (certains autoradios appellent l'un d'eux Diffusion)", wrap = true) { prefs.put(PreferenceKeys.VOICE_CHANNEL, it) }
         if (android.os.Build.VERSION.SDK_INT >= 28 && !engine.isCar) SChoice("Sortie de la voix", listOf("auto" to "Automatique", "phone" to "Haut-parleur du téléphone"), prefs.s(PreferenceKeys.VOICE_OUT, "auto"),
             "Haut-parleur du téléphone : les indications et les bips restent sur le téléphone pendant que la musique passe en Bluetooth. Pas pour Android Auto, qui utilise les haut-parleurs de la voiture") { prefs.put(PreferenceKeys.VOICE_OUT, it) }
+        SToggle(prefs, "Mettre la musique en pause pour la voix", PreferenceKeys.VOICE_PAUSES_MUSIC, false, "Arrête la musique pendant les indications et la reprend après, au lieu de seulement la baisser. Pour quand la baisse ne suffit pas : de combien la musique baisse dépend de votre appli de musique")
         SToggle(prefs, "Jouer la voix comme les bips", PreferenceKeys.VOICE_VIA_APP, false, "À activer si la musique baisse pour les bips mais pas pour la voix : certains autoradios ne la baissent que pour les sons joués par l'appli elle-même")
         SItem("Voix et langue", "Utilise la synthèse vocale du système (installez la voix française)") { SButton("Ouvrir") { openSystemSettings(ctx, "com.android.settings.TTS_SETTINGS") } }
         SItem("Volume") { SButton("Ouvrir") { openSystemSettings(ctx, Settings.ACTION_SOUND_SETTINGS) } }
