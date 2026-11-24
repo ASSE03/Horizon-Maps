@@ -291,6 +291,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Réglages › Performances : la partie Diagnostic est traduite.
 - Radars sans itinéraire : la route devant vous est suivie dans ses virages, un radar après une courbe est annoncé à 300 m et non plus à 150 m ; un radar déjà annoncé l'est de nouveau au retour.
 - Mes itinéraires, enregistrement à l'arrivée et « Continuer vers… » sur Android Auto : textes traduits en français.
 - Plantage sur un résultat de recherche.

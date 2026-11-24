@@ -1548,9 +1548,9 @@ private fun PerformanceSection(prefs: Prefs) {
     SGroup("Démo") {
         SToggle(prefs, "Bouton de trajet de démo", "demo", false, "Rejoue un itinéraire pour essayer le guidage à l'arrêt")
     }
-    SGroup("Diagnostics") {
-        SToggle(prefs, "Show lane data diagnostics", PreferenceKeys.HD_LANE_DIAGNOSTICS, false,
-            "Only shown in Demo mode; does not affect lane guidance.")
+    SGroup("Diagnostic") {
+        SToggle(prefs, "Afficher le diagnostic des voies", PreferenceKeys.HD_LANE_DIAGNOSTICS, false,
+            "Visible seulement en mode démo ; ne change pas le guidage par voie.")
     }
 }
 
