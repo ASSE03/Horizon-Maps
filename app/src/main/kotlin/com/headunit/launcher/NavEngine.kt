@@ -4082,9 +4082,23 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             }
         } else if (p.speed > 3.0) {
+            // fork FR : la route devant vous en suivant ses virages (paquets OSM) ; un radar à moins de 30 m de cette route est
+            // compté à sa distance le long de la route. Avant, seule une ligne droite servait : après un virage, le radar n'était
+            // vu qu'à 150 m (Davézieux, 24/11 : 300 m à l'aller, 150 m au retour)
+            val ahead = if (cameras.any { Geo.dist(p.pos, it) < warnAt + 50.0 }) roadAheadCached(p) else null
+            val aheadLen = ahead?.let { pathLen(it) } ?: 0.0
             for (c in cameras) {
                 val d = Geo.dist(p.pos, c)
                 if (d > warnAt || d >= bestD) continue
+                if (ahead != null) {
+                    val along = alongPath(ahead, c, 30.0)
+                    if (along != null) {
+                        if (along <= warnAt && along < bestD && camFacesUs(c, p.heading)) { best = c; bestD = along }
+                        continue
+                    }
+                    // la route est connue jusque-là et le radar n'est pas dessus : il est sur une autre route
+                    if (aheadLen >= d + 40.0) continue
+                }
                 val diff = abs(((Geo.bearing(p.pos, c) - p.heading + 540.0) % 360.0) - 180.0)
                 // ahead of you and close to the line you're driving along (how far to the side, not an angle: 35 degrees is 280 m
                 // to the side at 500 m, so cameras on other roads set off alerts). A little more room close in, where the camera
@@ -4097,11 +4111,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         cameraDist = if (best != null) bestD.toInt() else null
         if (best != null) {
             if (camAlerted.size > 100) { camAlerted.clear(); camStep.clear() }
+            // fork FR : un radar annoncé il y a plus de 10 min (dépassé depuis) peut être annoncé de nouveau, au retour par exemple
+            camAlertedAt[best]?.let { if (now - it > 600_000L) { camAlerted.remove(best); camStep.remove(best); camAlertedAt.remove(best) } }
             // fork FR : une alerte à 300 m (avec la vitesse contrôlée, d'après la liste officielle), puis un rappel à 150 m
             val v = RadarsFr.vma[Overpass.camKey(best)]
             val radar = if (v != null && !imperial) "Radar à $v" else "Radar"
             if (bestD <= 300.0 && camAlerted.add(best)) {
-                camStep[best] = 2
+                camStep[best] = 2; camAlertedAt[best] = now
                 val say = if (bestD < 60.0) "$radar tout de suite" else "$radar dans ${Geo.spoken(bestD, imperial)}"
                 achime("camera", android.media.ToneGenerator.TONE_PROP_PROMPT); raiseAlert("camera", say); aspeak("camera", say, true)
             } else if (bestD <= 160.0 && bestD >= 60.0 && (camStep[best] ?: 0) == 2) {
@@ -4114,6 +4130,43 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Fork FR : la dernière centaine de mètres annoncée pour chaque radar. */
     private val camStep = HashMap<LL, Int>()
+    /** Fork FR : l'heure de la première annonce de chaque radar. */
+    private val camAlertedAt = HashMap<LL, Long>()
+    private var aheadCache: List<LL>? = null
+    private var aheadAt = 0L
+    private var aheadFrom: LL? = null
+
+    /** Fork FR : la route devant vous (paquets OSM), recalculée toutes les 2 s ou tous les 40 m. */
+    private fun roadAheadCached(p: Fix): List<LL>? {
+        val now = System.currentTimeMillis(); val f = aheadFrom
+        if (f != null && now - aheadAt < 2000L && Geo.dist(f, p.pos) < 40.0) {
+            // on garde la route, en repartant de votre position
+            return aheadCache?.let { listOf(p.pos) + it.drop(1) }
+        }
+        aheadAt = now; aheadFrom = p.pos
+        aheadCache = try { MgSpeedLimit.roadAhead(p.pos.lat, p.pos.lon, p.heading) } catch (e: Exception) { null }
+        return aheadCache
+    }
+
+    private fun pathLen(path: List<LL>): Double { var l = 0.0; for (i in 1 until path.size) l += Geo.dist(path[i - 1], path[i]); return l }
+
+    /** Fork FR : la distance le long de [path] jusqu'au point le plus proche de [c], si [c] est à moins de [maxOff] m de la ligne. */
+    private fun alongPath(path: List<LL>, c: LL, maxOff: Double): Double? {
+        val kx = kotlin.math.cos(Math.toRadians(c.lat)) * 111_320.0; val ky = 110_574.0
+        var acc = 0.0; var bestOff = maxOff; var bestAlong: Double? = null
+        for (i in 0 until path.size - 1) {
+            val a = path[i]; val b = path[i + 1]
+            val ax = (a.lon - c.lon) * kx; val ay = (a.lat - c.lat) * ky
+            val dx = (b.lon - a.lon) * kx; val dy = (b.lat - a.lat) * ky
+            val l2 = dx * dx + dy * dy
+            val seg = kotlin.math.sqrt(l2)
+            val t = if (l2 < 0.01) 0.0 else (-(ax * dx + ay * dy) / l2).coerceIn(0.0, 1.0)
+            val off = Math.hypot(ax + dx * t, ay + dy * t)
+            if (off < bestOff) { bestOff = off; bestAlong = acc + seg * t }
+            acc += seg
+        }
+        return bestAlong
+    }
 
     private fun trackParking(p: Fix) {
         if (simMode != 0) return

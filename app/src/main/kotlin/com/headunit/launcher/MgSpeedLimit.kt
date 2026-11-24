@@ -518,6 +518,73 @@ object MgSpeedLimit {
     }
 
     /**
+     * Fork FR : la route devant vous, en suivant ses virages (routes OpenStreetMap des paquets), sur [maxAhead] mètres au plus,
+     * en commençant à votre position. Sert à trouver les radars en conduite libre : en ligne droite, un radar après un virage
+     * n'était vu qu'à 150 m. null si la route n'est pas connue.
+     */
+    fun roadAhead(lat: Double, lon: Double, heading: Double, maxAhead: Double = 650.0): List<LL>? {
+        val list = ways
+        if (list.isEmpty()) return null
+        val kx = cos(Math.toRadians(lat)) * 111_320.0; val ky = 110_574.0
+        fun x(w: Way, i: Int) = (w.lon[i] / E5 - lon) * kx
+        fun y(w: Way, i: Int) = (w.lat[i] / E5 - lat) * ky
+        fun brg(dx: Double, dy: Double) = (Math.toDegrees(Math.atan2(dx, dy)) + 360.0) % 360.0
+        fun diff(a: Double, b: Double) = abs(((a - b + 540.0) % 360.0) - 180.0)
+        // le tronçon sous vous, dans votre sens
+        var bw: Way? = null; var bi = -1; var bdir = 1; var bd = 25.0; var bt = 0.0
+        for (w in list) for (i in 0 until w.lat.size - 1) {
+            val ax = x(w, i); val ay = y(w, i); val dx = x(w, i + 1) - ax; val dy = y(w, i + 1) - ay
+            if ((ax > 60 && ax + dx > 60) || (ax < -60 && ax + dx < -60) || (ay > 60 && ay + dy > 60) || (ay < -60 && ay + dy < -60)) continue
+            val l2 = dx * dx + dy * dy; if (l2 < 0.01) continue
+            val t = (-(ax * dx + ay * dy) / l2).coerceIn(0.0, 1.0)
+            val d = Math.hypot(ax + dx * t, ay + dy * t)
+            if (d >= bd) continue
+            val sb = brg(dx, dy)
+            val dir = when { diff(sb, heading) < 50.0 -> 1; !w.dual && diff(sb + 180.0, heading) < 50.0 -> -1; else -> 0 }
+            if (dir == 0) continue
+            var dd = d; if (w === lastWay) dd -= 5.0
+            if (dd < bd) { bd = dd; bw = w; bi = i; bdir = dir; bt = t }
+        }
+        var w = bw ?: return null
+        val out = ArrayList<LL>()
+        out += LL(lat, lon)
+        var len = 0.0
+        fun push(p: LL) { len += Geo.dist(out.last(), p); out += p }
+        var i = if (bdir > 0) bi + 1 else bi
+        var dir = bdir
+        val seen = HashSet<Way>(); seen += w
+        var steps = 0
+        while (len < maxAhead && steps++ < 30) {
+            // jusqu'au bout de cette route
+            while (i in 0 until w.lat.size && len < maxAhead) { push(LL(w.lat[i] / E5, w.lon[i] / E5)); i += dir }
+            if (len >= maxAhead || out.size < 2) break
+            // la suite : la route qui part de ce point au plus droit (même nom de préférence)
+            val e = out.last(); val prev = out[out.size - 2]
+            val inB = brg((e.lon - prev.lon) * kx, (e.lat - prev.lat) * ky)
+            val elat = Math.round(e.lat * E5).toInt(); val elon = Math.round(e.lon * E5).toInt()
+            var nw: Way? = null; var ni = 0; var ndir = 1; var nbest = 60.0
+            for (c in list) {
+                if (c in seen) continue
+                for (j in 0 until c.lat.size) {
+                    if (abs(c.lat[j] - elat) > 2 || abs(c.lon[j] - elon) > 3) continue
+                    for (d2 in intArrayOf(1, -1)) {
+                        val k = j + d2
+                        if (k !in 0 until c.lat.size) continue
+                        if (c.dual && d2 < 0) continue
+                        val ob = brg((c.lon[k] - c.lon[j]) / E5 * kx, (c.lat[k] - c.lat[j]) / E5 * ky)
+                        var sc = diff(ob, inB)
+                        if (c.label == w.label) sc -= 10.0
+                        if (sc < nbest) { nbest = sc; nw = c; ni = k; ndir = d2 }
+                    }
+                }
+            }
+            w = nw ?: break
+            seen += w; i = ni; dir = ndir
+        }
+        return if (out.size >= 2) out else null
+    }
+
+    /**
      * Portage SWI68 (2026-10-23) : route sans limitation dans OpenStreetMap → limitation par défaut
      * française, jamais une valeur inventée : 50 en agglomération, 80 hors agglomération, 110 sur
      * une voie rapide à chaussées séparées. Agglomération = au moins 3 rues résidentielles à 150 m.
