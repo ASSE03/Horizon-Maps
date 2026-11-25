@@ -1133,7 +1133,7 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                 ) {
                     // A landscape screen can still be narrow when split-screen is in use. Keep the figures intact and move
                     // the action buttons below them rather than letting the End route button push the remaining distance away.
-                    val nStats = if (evStat) 4 else 3
+                    val nStats = (if (evPct != null) 5 else 3) + (if (evStop != null) 1 else 0)
                     val nButtons = 2 + (if (evPct != null) 1 else 0) + (if (canShare) 1 else 0)
                     val oneLine = maxWidth >= (nStats * 85 + nButtons * 54 + 35).dp
                     if (oneLine) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(22.dp)) {
