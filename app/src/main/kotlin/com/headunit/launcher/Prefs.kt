@@ -131,6 +131,8 @@ internal object PreferenceKeys {
     const val LIMIT_SOUNDS = "limitsounds"
     /** Says "Slow down" after the beep for going over the limit (Dotancom #345). */
     const val SAY_SLOW_DOWN = "sayslowdown"
+    /** Says "Slow down" when the driver's chosen top speed is reached (#345). */
+    const val SAY_TOP_SPEED = "saytopspeed"
     /** The sound of the over-the-limit and top-speed alerts: "double" (the usual beep), "siren" or "buzz" (ILDEMONICO, #335). */
     const val SPEED_ALERT_SOUND = "speedalertsound"
     /** Keeps the speed alert going with the app in the background, with or without a route (ILDEMONICO, #335). */
@@ -171,6 +173,8 @@ internal object PreferenceKeys {
     const val AVOID_MOTORWAY = "avoid_motorway"
     const val AVOID_TOLL = "avoid_toll"
     const val AVOID_UNPAVED = "avoid_unpaved"
+    /** Soft preference for higher-class roads in offline Valhalla car routes only. */
+    const val PREFER_MAIN_ROADS = "prefer_main_roads"
     const val AVOIDZONES = "avoidzones"
     const val BREAKREMIND = "breakremind"
     const val BRIGHT = "bright"
@@ -480,15 +484,23 @@ internal object PreferenceKeys {
  */
 class Prefs(ctx: Context) {
     private val sp = ctx.applicationContext.getSharedPreferences("drive_launcher", Context.MODE_PRIVATE)
+    // values written often while driving (the "carry on with this trip" note, every 20 s) live in a small file of their own: saved
+    // in the main file, each write rewrote every setting, past trip and familiar road there too
+    private val spOften = ctx.applicationContext.getSharedPreferences("drive_launcher_often", Context.MODE_PRIVATE)
     // one set of values for the whole app: the phone's screen, the Android Auto screen and the services all see a change at once
     private val raw: HashMap<String, String> = synchronized(LOCK) {
-        RAW ?: HashMap<String, String>().apply { sp.all.forEach { (k, v) -> put(k, v.toString()) } }.also { RAW = it }
+        RAW ?: HashMap<String, String>().apply {
+            sp.all.forEach { (k, v) -> put(k, v.toString()) }
+            spOften.all.forEach { (k, v) -> put(k, v.toString()) }
+        }.also { RAW = it }
     }
     private val states get() = STATES
 
     private companion object {
         val LOCK = Any()
         /** The API keys: only in a backup when asked for. */
+        /** Kept in the small, often-written file (see spOften). */
+        val OFTEN_KEYS = setOf(PreferenceKeys.RESUME)
         val SECRET_KEYS = setOf(PreferenceKeys.API_KEY, PreferenceKeys.MAPBOX_TOKEN, PreferenceKeys.GOOGLE_API_KEY, PreferenceKeys.METOFFICE_KEY)
         var RAW: HashMap<String, String>? = null
         val STATES = HashMap<String, MutableState<String?>>()
@@ -538,7 +550,11 @@ class Prefs(ctx: Context) {
         // nothing changed: no disk write and nothing on screen is redrawn
         synchronized(LOCK) { if (raw[k] == s) return; raw[k] = s }
         state(k).value = s
-        sp.edit().putString(k, s).apply()
+        if (k in OFTEN_KEYS) {
+            spOften.edit().putString(k, s).apply()
+            // (moved over from the main file the first time it's written)
+            if (sp.contains(k)) sp.edit().remove(k).apply()
+        } else sp.edit().putString(k, s).apply()
     }
 }
 

@@ -323,6 +323,8 @@ object MapboxRest {
     @Volatile var curbSide = true
     /** Ask for Mapbox's junction pictures (banner instructions). */
     @Volatile var junctionPics = false
+    /** Ask for banner components when road shields are enabled, independently of junction-picture display. */
+    @Volatile var roadShields = true
 
     fun routes(token: String, from: LL, to: LL, alternatives: Boolean, departAtMs: Long = 0L, via: List<LL> = emptyList(),
                headingDeg: Double = -1.0, quick: Boolean = false, leftHand: Boolean = false): List<Route> {
@@ -355,7 +357,7 @@ object MapboxRest {
         // arrive on your side of the road (the destination on the kerb side), the other points as Mapbox likes
         if (curbSide) base += "&approaches=" + enc((List(pts.size - 1) { "" } + listOf("curb")).joinToString(";"))
         // pictures of motorway junctions, when Mapbox has them for this account
-        if (junctionPics) base += "&banner_instructions=true"
+        if (junctionPics || roadShields) base += "&banner_instructions=true"
         val dep = if (departAtMs > 0) "&depart_at=" + enc(java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm", java.util.Locale.US).format(java.util.Date(departAtMs))) else ""
         val attempts = ArrayList<String>()
         if (!walk && dep.isNotEmpty() && !quick) { if (ex.isNotEmpty()) attempts += "$base&exclude=$ex$dep"; attempts += "$base$dep" }
@@ -621,17 +623,26 @@ object MapboxRest {
                     val exit = if (man.startsWith("ROUNDABOUT")) m.optInt("exit", 0) else 0
                     // Mapbox's picture of the junction (from its banner instructions, when asked for and it has one)
                     var pic = ""
+                    val shields = ArrayList<RoadShield>()
                     s.optJSONArray("bannerInstructions")?.let { bi ->
                         for (k in 0 until bi.length()) {
                             val comps = bi.optJSONObject(k)?.optJSONObject("view")?.optJSONArray("components") ?: continue
-                            for (q in 0 until comps.length()) { val u = comps.optJSONObject(q)?.optString("imageURL").orEmpty(); if (u.startsWith("https://")) { pic = u; break } }
-                            if (pic.isNotEmpty()) break
+                            for (q in 0 until comps.length()) {
+                                val component = comps.optJSONObject(q) ?: continue
+                                val u = component.optString("imageURL").orEmpty()
+                                if (u.startsWith("https://")) pic = u
+                                // Mapbox banner components may expose a shield image base plus its label.
+                                val imageBase = component.optString("imageBaseURL")
+                                val text = component.optString("text").ifBlank { ref }
+                                if (imageBase.isNotBlank() && text.isNotBlank()) shields += RoadShield(imageBase, text)
+                            }
                         }
                     }
                     // traffic lights or a stop sign at the turn itself (the step's first junction), for "At the traffic lights, turn right"
                     val j0 = s.optJSONArray("intersections")?.optJSONObject(0)
                     steps += Step(at, man, street, m.optString("instruction"), exit, if (type == "off ramp") s.optString("exits").substringBefore(';') else "", s.optString("destinations"), junctionPic = pic,
                         rbIn = if (type == "roundabout" || type == "rotary") m.optDouble("bearing_before", -1.0) else -1.0,
+                        shields = shields.distinctBy { it.content },
                         lights = j0?.optBoolean("traffic_signal", false) == true, stopSign = j0?.optBoolean("stop_sign", false) == true, lightsBefore = sigOnWay,
                         sides = sideRoads(j0), ref = if (name.isNotBlank() && type != "off ramp") ref else "")
                     sigOnWay = sigHere
@@ -890,7 +901,18 @@ object MapboxRest {
         @Volatile private var v: T? = null
         @Volatile var error: Exception? = null
         private val t = Thread { try { v = work() } catch (e: Exception) { error = e } }.apply { isDaemon = true; start() }
-        fun join(): T? { try { t.join(ms) } catch (e: InterruptedException) { }; return v }
+        /** Waits for the result (at most [ms]), giving up at once when [stale] says a newer search has replaced this one. */
+        fun join(stale: () -> Boolean = { false }): T? {
+            val end = System.currentTimeMillis() + ms
+            try {
+                while (t.isAlive && !stale()) {
+                    val left = end - System.currentTimeMillis()
+                    if (left <= 0) break
+                    t.join(minOf(left, 200L))
+                }
+            } catch (e: InterruptedException) { }
+            return if (stale()) null else v
+        }
     }
 
     /**
@@ -901,7 +923,9 @@ object MapboxRest {
      * Addresses come first when you type a house number or a postcode, otherwise places and businesses. OpenStreetMap's Nominatim
      * fills in when there's still little. [country]: ISO code, blank = anywhere.
      */
-    fun geocode(token: String, country: String, q: String, near: LL?): List<Place> {
+    /** [stale]: true once a newer search has replaced this one (typing on), so it stops before asking for anything more. */
+    fun geocode(token: String, country: String, q: String, near: LL?, stale: () -> Boolean = { false }): List<Place> {
+        if (stale()) return emptyList()
         val t = enc(token)
         val qq = enc(q.trim())
         val cc = country.trim().lowercase()
@@ -919,7 +943,8 @@ object MapboxRest {
         // Photon (OpenStreetMap, free): good with half-typed addresses and house numbers near you
         // (Photon only: Nominatim's rules don't allow it as an extra on every search)
         val osm = SearchJob(9000L) { OsmSearch.geocode(country, q, near, typed = true) }
-        val boxArr = box.join(); val geoArr = geo.join(); val pcPlace = pc?.join(); val osmList = osm.join()
+        val boxArr = box.join(stale); val geoArr = geo.join(stale); val pcPlace = pc?.join(stale); val osmList = osm.join(stale)
+        if (stale()) return emptyList()
         lastError = (box.error ?: geo.error)?.message?.takeIf { boxArr == null && geoArr == null }
         val out = ArrayList<Place>()
         fun addOne(p: Place) { if (out.none { (it.name.equals(p.name, true) && Geo.dist(it.pos, p.pos) < 80) || Geo.dist(it.pos, p.pos) < 15 }) out += p }
@@ -932,7 +957,7 @@ object MapboxRest {
         if (addressy) { add(geoArr); osmList?.forEach { addOne(it) }; add(boxArr) } else { add(boxArr); add(geoArr); osmList?.forEach { addOne(it) } }
         // both Mapbox searches failed (a refused token, a limit): say so, rather than "no matches"
         if (out.isEmpty() && boxArr == null && geoArr == null) (box.error ?: geo.error)?.let { if (it.message?.contains("(40") == true || it.message?.contains("limit") == true) throw it }
-        if (out.size < 5 && osmList == null) try {
+        if (out.size < 5 && osmList == null && !stale()) try {
             var url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=10&q=$qq"
             if (near != null) url += "&viewbox=${near.lon - 0.5},${near.lat + 0.35},${near.lon + 0.5},${near.lat - 0.35}"
             if (cc.isNotEmpty()) url += "&countrycodes=$cc"

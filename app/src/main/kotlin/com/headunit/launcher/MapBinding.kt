@@ -1370,6 +1370,16 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         }
     }
 
+    /** Give Way signs on the active route, kept separate from STOP markers so each uses its proper road-sign shape. */
+    private var giveWaySigns: List<LL> = emptyList()
+    private fun giveWayFeats(): List<Feature> = giveWaySigns.map { Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat)) }
+    fun setGiveWaySigns(list: List<LL>) {
+        main0.post {
+            giveWaySigns = list
+            try { src("dl-giveways")?.featureCollection(FeatureCollection.fromFeatures(giveWayFeats())) } catch (e: Throwable) { }
+        }
+    }
+
     /** A stop sign: a red octagon with a white rim and STOP across it (drawn at 2x, shown at half). */
     private fun stopBitmap(): Bitmap {
         val s = 72
@@ -1387,6 +1397,26 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         c.drawPath(octagon(30f), Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFC8102E.toInt() })
         val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); textSize = 18f; typeface = android.graphics.Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
         c.drawText("STOP", s / 2f, s / 2f - (tp.descent() + tp.ascent()) / 2f, tp)
+        return bmp
+    }
+
+    /** Standard inverted Give Way triangle: red border, white face and legible two-line label. */
+    private fun giveWayBitmap(): Bitmap {
+        val s = 72
+        val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        fun triangle(inset: Float): Path = Path().apply {
+            moveTo(s / 2f, 4f + inset)
+            lineTo(s - 4f - inset, s - 7f - inset)
+            lineTo(4f + inset, s - 7f - inset)
+            close()
+        }
+        c.drawPath(triangle(0f), Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); style = Paint.Style.STROKE; strokeWidth = 5f; strokeJoin = Paint.Join.ROUND })
+        c.drawPath(triangle(3f), Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFD71920.toInt() })
+        c.drawPath(triangle(9f), Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() })
+        val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF202020.toInt(); textSize = 9.5f; typeface = android.graphics.Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
+        c.drawText("GIVE", s / 2f, 43f, tp)
+        c.drawText("WAY", s / 2f, 53f, tp)
         return bmp
     }
 
@@ -2383,7 +2413,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         signalModels = empty(); signalKept = emptyList()
         if (r.size < 2) return empty()
         if (cellsFor !== r) rebuildCells(r)
-        // only lights that stand on the route's own road (within ~10 m of the line), and at each junction only the first one you reach:
+        // only lights that stand on the route's own road (within ~18 m of the line), and at each junction only the first one you reach:
         // a junction usually has a light on every arm, but only the one on your approach matters
         val near = signalPts.filter { onRoute(it) }
         if (near.isEmpty()) return empty()
@@ -2397,7 +2427,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             val k = cellKey(p.lat, p.lon)
             for (dy in -1..1) for (dx in -1..1) routeCells[k + dy * 1000003L + dx]?.let { segs.addAll(it) }
             val kx = Math.cos(Math.toRadians(p.lat)) * 111320.0; val ky = 110574.0
-            var bd = 10.0; var bo = -1.0; var bi = -1
+            var bd = 18.0; var bo = -1.0; var bi = -1
             for (i in segs) {
                 val ax = (r[i].lon - p.lon) * kx; val ay = (r[i].lat - p.lat) * ky
                 val bx = (r[i + 1].lon - p.lon) * kx; val by = (r[i + 1].lat - p.lat) * ky
@@ -2415,7 +2445,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val models = ArrayList<Feature>()
         var lastOff = -1e9
         for ((off, p) in placed) {
-            if (off - lastOff < 70.0) { lastOff = off; continue }   // same junction: you have already passed its first light
+            if (off - lastOff < 70.0) continue   // same junction: keep its first light, not the last one
             lastOff = off
             keep += Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat))
             keepPts += p
@@ -2676,12 +2706,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             .lineCap(LineCap.ROUND).lineJoin(LineJoin.ROUND)
             .minZoom(8.0)
             .visibility(vis(trafficOn && !(routing && hideTraffic))))
-        addS(st, GeoJsonSource.Builder("dl-alts").featureCollection(empty()).build())
-        addS(st, GeoJsonSource.Builder("dl-live-alts").featureCollection(empty()).build())
+        addS(st, GeoJsonSource.Builder("dl-alts").featureCollection(empty()).tolerance(0.1).build())
+        addS(st, GeoJsonSource.Builder("dl-live-alts").featureCollection(empty()).tolerance(0.1).build())
         addS(st, GeoJsonSource.Builder("dl-live-bub").featureCollection(empty()).build())
-        addS(st, GeoJsonSource.Builder("dl-route").featureCollection(empty()).build())
+        addS(st, GeoJsonSource.Builder("dl-route").featureCollection(empty()).tolerance(0.1).build())
         addS(st, GeoJsonSource.Builder("dl-flow").featureCollection(empty()).lineMetrics(true).build())
-        addS(st, GeoJsonSource.Builder("dl-done").featureCollection(empty()).build())
+        addS(st, GeoJsonSource.Builder("dl-done").featureCollection(empty()).tolerance(0.1).build())
         addS(st, GeoJsonSource.Builder("dl-dest").featureCollection(empty()).build())
         // fork FR : les étapes de l'itinéraire (vertes pour un arrêt recharge)
         addS(st, GeoJsonSource.Builder("dl-via").featureCollection(viaFeatures()).build())
@@ -2727,6 +2757,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         addImg(st, "dl-stop", stopBitmap())
         addS(st, GeoJsonSource.Builder("dl-stops").featureCollection(FeatureCollection.fromFeatures(stopFeats())).build())
         addL(st, SymbolLayer("dl-stop", "dl-stops").inSlot(TOP).iconImage("dl-stop").iconAllowOverlap(true).iconIgnorePlacement(true)
+            .iconAnchor(IconAnchor.BOTTOM).iconPitchAlignment(IconPitchAlignment.VIEWPORT)
+            .iconSize(zoomed(1.5, 14 to 0.35, 17 to 0.55, 20 to 0.8)).iconEmissiveStrength(1.0).minZoom(14.0))
+        // Give Way signs use the same compact, upright route-marker treatment as STOP signs.
+        addImg(st, "dl-giveway", giveWayBitmap())
+        addS(st, GeoJsonSource.Builder("dl-giveways").featureCollection(FeatureCollection.fromFeatures(giveWayFeats())).build())
+        addL(st, SymbolLayer("dl-giveway", "dl-giveways").inSlot(TOP).iconImage("dl-giveway").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconAnchor(IconAnchor.BOTTOM).iconPitchAlignment(IconPitchAlignment.VIEWPORT)
             .iconSize(zoomed(1.5, 14 to 0.35, 17 to 0.55, 20 to 0.8)).iconEmissiveStrength(1.0).minZoom(14.0))
         addL(st, SymbolLayer("dl-beacon", "dl-beacons").inSlot(TOP).iconImage("dl-beacon").iconAllowOverlap(true).iconIgnorePlacement(true)
@@ -3908,20 +3944,11 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             if (cardsMirrored) btn + halfW else side + halfW, h * 0.14f + cardH,
             if (cardsMirrored) w - side - halfW else w - btn - halfW, h * 0.84f)
         val loose = floatArrayOf(halfW + 12f * dp, cardH + 12f * dp, w - halfW - 12f * dp, h - 24f * dp)
+        // Keep each card on the actual branch point, not an arbitrary visible stretch farther along.
         val spots = liveLines.map { line ->
-            if (line.size < 2) return@map null
-            // look along the line (about 150 points at most), from the turn-off outwards
-            val step = maxOf(1, line.size / 150)
-            val sample = ArrayList<LL>()
-            var i = minOf(2, line.size - 1)
-            while (i < line.size) { sample += line[i]; i += step }
-            val px = pixels(sample)
-            if (px.size != sample.size) return@map null
-            fun first(b: FloatArray): LL? {
-                for (k in sample.indices) { val p = px[k]; if (p.x >= b[0] && p.x <= b[2] && p.y >= b[1] && p.y <= b[3]) return sample[k] }
-                return null
-            }
-            first(strict) ?: first(loose)
+            val branch = line.firstOrNull() ?: return@map null
+            val p = pixels(listOf(branch)).firstOrNull() ?: return@map null
+            if (p.x >= loose[0] && p.x <= loose[2] && p.y >= loose[1] && p.y <= loose[3]) branch else null
         }
         val zoom = try { mbMap.cameraState.zoom } catch (e: Throwable) { 15.0 }
         val moved = spots.size != cardSpots.size || spots.indices.any { k ->
@@ -5320,7 +5347,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             var againstNear = false
             for (rp in list) {
                 val pts = rp.pts
-                val oneway = rp.oneway == true
+                // Mapbox may omit the explicit flag on motorway features; those carriageways and their links are one-way regardless.
+                val oneway = rp.oneway == true || rp.cls == "motorway" || rp.cls == "motorway_link"
                 for (i in 0 until pts.size - 1) {
                     val ax = (pts[i].longitude() - p.lon) * k; val ay = (pts[i].latitude() - p.lat) * k2
                     val bx = (pts[i + 1].longitude() - p.lon) * k; val by = (pts[i + 1].latitude() - p.lat) * k2

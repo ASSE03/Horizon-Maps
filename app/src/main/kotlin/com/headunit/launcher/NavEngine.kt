@@ -588,7 +588,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     /** The turns a driver actually makes on [r]: every step but "carry on", the start and the end. */
-    private fun turnCount(r: Route): Int = r.steps.count { s ->
+    private fun turnCount(r: Route): Int = RouteGuidancePolicy.guidanceSteps(r.steps, r.mine.isNotBlank()).count { s ->
         val m = s.maneuver.uppercase()
         !(m == "STRAIGHT" || m == "FOLLOW" || m.startsWith("DEPART") || m.startsWith("ARRIVE"))
     }
@@ -679,7 +679,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      * you as you type), topped up with Mapbox's when TomTom finds little; Settings > Keys & accounts > Search with can pick Mapbox
      * instead. Without a key it's Mapbox's (with OpenStreetMap's alongside), or OpenStreetMap's alone with neither.
      */
-    private fun netGeocode(country: String, q: String, near: LL?, typed: Boolean = false): List<Place> {
+    /** Counts searches: each new one makes the one before it stale, so it stops instead of finishing lookups nobody will see. */
+    @Volatile private var searchGen = 0L
+
+    private fun netGeocode(country: String, q: String, near: LL?, typed: Boolean = false, gen: Long = -1L): List<Place> {
+        // (gen -1: a search that isn't replaced by typing, a voice command or a route to a named place, so it's never stale)
+        val stale = { gen >= 0 && gen != searchGen }
         // search follows Keys & accounts > Routes, search and traffic > Use (the separate "Search with" setting was folded into
         // it): Mapbox picks Mapbox's search, while Mapbox is working; Auto and TomTom ask TomTom with Mapbox's alongside, as before
         val with = if (prefs.s(PreferenceKeys.DATAPROV, "auto") == "mapbox" && hasMapbox && System.currentTimeMillis() >= mbDownUntil) "mapbox" else "auto"
@@ -690,22 +695,28 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // found fewer than 4). TomTom's still come first; the same place from both is listed once, and exact matches go
             // nearest first (rankResults)
             val mbJob = if (hasMapbox) java.util.concurrent.CompletableFuture.supplyAsync {
-                try { MapboxRest.geocode(mbToken, country, q, near) } catch (e: Throwable) { emptyList<Place>() }
+                try { MapboxRest.geocode(mbToken, country, q, near, stale) } catch (e: Throwable) { emptyList<Place>() }
             } else null
             val tt = try { TomTomRest.geocode(apiKey, country, q, near) } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) { mbJob?.cancel(true); throw e }; null }
             // TomTom refused the search (a key without the Search API, the daily limit): said once a session, as the results
             // otherwise just look thin
             TomTomRest.lastSearchError?.let { err -> if (!ttSearchWarned) { ttSearchWarned = true; scope.launch { toast("La recherche TomTom n'a pas fonctionné : ${err.take(160)}", 8000) } } }
+            if (stale()) { mbJob?.cancel(true); return emptyList() }
             if (mbJob == null) return tt ?: OsmSearch.geocode(country, q, near)
-            // (Mapbox is given a few seconds more at most: TomTom's results aren't held up for long by a slow answer)
-            val mb = try { mbJob.get(if (tt.isNullOrEmpty()) 10L else 4L, java.util.concurrent.TimeUnit.SECONDS) } catch (e: Exception) { mbJob.cancel(true); emptyList() }
+            // (Mapbox is given a few seconds more at most: TomTom's results aren't held up for long by a slow answer; and no wait at
+            // all once a newer search has replaced this one)
+            val mbEnd = System.currentTimeMillis() + (if (tt.isNullOrEmpty()) 10_000L else 4_000L)
+            while (!mbJob.isDone && !stale() && System.currentTimeMillis() < mbEnd) try { mbJob.get(200L, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (e: java.util.concurrent.TimeoutException) { } catch (e: Exception) { break }
+            if (stale()) { mbJob.cancel(true); return emptyList() }
+            val mb = try { mbJob.get(1L, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (e: Exception) { mbJob.cancel(true); emptyList() }
             val out = ArrayList(tt ?: emptyList())
             for (p in mb) if (out.none { (it.name.equals(p.name, true) && Geo.dist(it.pos, p.pos) < 80) || Geo.dist(it.pos, p.pos) < 15 }) out += p
             return out
         }
         if (hasMapbox) {
-            val r = MapboxRest.geocode(mbToken, country, q, near)
-            if (r.isEmpty()) MapboxRest.lastError?.let { err -> scope.launch { toast("La recherche Mapbox n'a pas marché : ${err.take(120)}", 6000) } }
+            val r = MapboxRest.geocode(mbToken, country, q, near, stale)
+            if (stale()) return emptyList()
+            if (r.isEmpty()) MapboxRest.lastError?.let { err -> scope.launch { toast("La recherche Mapbox a échoué : ${err.take(120)}", 6000) } }
             return r
         }
         // no key or token: OpenStreetMap's free search
@@ -906,7 +917,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // moving the map with no route: the panel under the search bar tucks away so the map can be seen (TouristCreepy1884)
             if (route == null && !previewing && chain == null) homeTucked = true
         }
-        map.onAltTap = { i -> tapAlt(i) }
+        // Map cards switch immediately; the side routes list keeps its two-tap confirmation.
+        map.onAltTap = { i -> switchToAlt(i) }
         map.onChainTap = { i -> chainTapped(i) }
         // the parked-car spot is no longer used (the app lives in the car): drop any old one
         if (prefs.s(PreferenceKeys.PLACE_PARKED, "").isNotBlank()) places.clearParked()
@@ -1160,14 +1172,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** The country you're in (from the GPS), remembered between drives; blank until it's known. */
     var detectedCountry by mutableStateOf(prefs.s(PreferenceKeys.COUNTRYDETECTED, "").also { Overpass.knownCountry = it.uppercase() })
         private set
-    private var countryChecked = false
     private var countryTryAt = 0L
+    /** The first successful lookup establishes where this session started; it isn't announced as a border crossing. */
+    private var countryInitialised = false
 
-    private fun detectCountry(lat: Double, lon: Double) {
+    private fun detectCountry(lat: Double, lon: Double, speedMps: Double) {
         val now = android.os.SystemClock.elapsedRealtime()
-        // once per app start; if it couldn't tell (no signal), try again a couple of minutes later
-        if (countryChecked || (countryTryAt != 0L && now - countryTryAt < 120_000L)) return
-        countryChecked = true; countryTryAt = now
+        // Recheck periodically while GPS is moving: the old one-shot lookup never noticed a border crossed later in the drive.
+        if (countryTryAt != 0L && now - countryTryAt < 120_000L) return
+        // once known, only looked up again after driving 15 km from where it was last found: a lookup every 2 minutes cost a
+        // Mapbox request each time on head units with no geocoder of their own, about 30 an hour, for a country that rarely changes
+        countryCheckedAt?.let { if (countryInitialised && Geo.dist(it, LL(lat, lon)) < 15_000.0) return }
+        countryTryAt = now
         scope.launch {
             val cc = withContext(Dispatchers.IO) {
                 val g = try {
@@ -1180,12 +1196,24 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     // and roundabouts were drawn the British way round in the Netherlands, GitHub #285)
                     ?: (if (mbToken.isNotBlank() && online()) MapboxRest.countryAt(mbToken, LL(lat, lon)) else null)
             }
-            if (cc == null) { countryChecked = false; return@launch }
+            if (cc == null) { countryTryAt = now - 90_000L; return@launch }
             val up = cc.uppercase()
+            val previous = detectedCountry.uppercase()
             Overpass.knownCountry = up
-            if (up != detectedCountry) { detectedCountry = up; prefs.put(PreferenceKeys.COUNTRYDETECTED, up) }
+            if (up != previous) {
+                detectedCountry = up
+                prefs.put(PreferenceKeys.COUNTRYDETECTED, up)
+                // Don't announce the country already occupied when the app starts, or GPS drift while parked.
+                if (countryInitialised && previous.isNotBlank() && speedMps >= 2.0) {
+                    BorderDrivingInfo.forCountry(up)?.let { BorderCrossingNotifier.show(ctx, it) }
+                }
+            }
+            countryInitialised = true
+            countryCheckedAt = LL(lat, lon)
         }
     }
+    /** Where the country was last found (see detectCountry). */
+    @Volatile private var countryCheckedAt: LL? = null
 
     private var styleJob: kotlinx.coroutines.Job? = null
 
@@ -1595,7 +1623,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             demoFrom = null; demoIdleSince = 0L
             toast("Démo arrêtée : retour à votre position", 3500)
         } else demoIdleSince = 0L
-        detectCountry(l.latitude, l.longitude)
+        detectCountry(l.latitude, l.longitude, if (l.hasSpeed()) l.speed.toDouble() else 0.0)
         val now = System.currentTimeMillis()
         val slow = !l.hasSpeed() || l.speed < 1.0f
         // (a remembered position more than 2 minutes old, shown while the GPS starts up, isn't taken for a live GPS fix: it used to
@@ -1615,7 +1643,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         else if (l.provider != LocationManager.GPS_PROVIDER && now - lastGpsTime < 10000) return
         // with the GPS gone (a tunnel) a rough mobile-network position would throw the route off: keep estimating along the route instead
-        else if (route != null && !previewing && glideOnRoute && now - lastGpsTime < 120_000 && (!l.hasAccuracy() || l.accuracy > 30f)) return
+        else if (route != null && !previewing && glideOnRoute &&
+            NavigationPolicy.shouldRejectNetworkPositionOnRoute(if (l.hasAccuracy()) l.accuracy.toDouble() else null, now - lastGpsTime)) return
         val cur = LL(l.latitude, l.longitude)
         var h = fix?.heading ?: 0.0
         if (l.hasBearing() && l.hasSpeed() && l.speed > 1.0f) h = l.bearing.toDouble()
@@ -2121,7 +2150,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val fmt = Clock.format()
         val now = System.currentTimeMillis()
         val out = ArrayList<ItinRow>()
-        r.steps.forEachIndexed { i, s ->
+        val steps = RouteGuidancePolicy.guidanceSteps(r.steps, r.mine.isNotBlank() || drivingMine.isNotBlank())
+        steps.forEachIndexed { i, s ->
             if (s.off <= prog + 4) return@forEachIndexed
             val arriving = s.maneuver.uppercase().startsWith("ARRIVE")
             val road = s.street.ifBlank { s.sign }
@@ -2490,6 +2520,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private val osmOnly: Boolean get() = !hasKey && !hasMapbox
 
     fun search(q: String, typed: Boolean = false) {
+        val gen = ++searchGen
         if (q.length < 2) { results = emptyList(); return }
         val near = fix?.pos ?: map.center()
         searchJob?.cancel()
@@ -2508,7 +2539,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (local.size >= (if (typed) 3 else 5)) { results = postcodeFirst(postcodeJob(q), rankResults(q, near, emptyList(), local)); return@launch }
                 if (local.isNotEmpty()) results = rankResults(q, near, emptyList(), local)
                 val pcJob = postcodeJob(q)
-                val net = try { withContext(Dispatchers.IO) { netGeocode(countryCode(), q, near, typed) } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+                val net = try { withContext(Dispatchers.IO) { netGeocode(countryCode(), q, near, typed, gen) } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
                 val merged = postcodeFirst(pcJob, rankResults(q, near, net ?: emptyList(), local))
                 results = merged
                 if (merged.isEmpty() && !typed) toast(if (net == null) "Search failed: weak or no signal" else "No matches. Try adding a town or postcode.", 3500)
@@ -2629,13 +2660,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     // ---- "See all locations": every branch of a shop or chain near you, on the map and in a list ----
     /** One branch: [secs]/[road] from the matrix service (or -1 when it couldn't be timed), [detour] extra seconds on the route. */
-    class ChainSpot(val place: Place, val dist: Double, val secs: Double, val road: Double, val detour: Double,
+    data class ChainSpot(val place: Place, val dist: Double, val secs: Double, val road: Double, val detour: Double,
                     /** Adding a stop: how far along the route ahead it is, and how far off the route (metres; -1 not known). */
                     val ahead: Double = -1.0, val off: Double = -1.0,
                     /** Petrol stations: the price of your fuel there (pence or cents a litre, in [unit]), or null when not known. */
-                    val price: Double? = null, val unit: String = "p")
+                    val price: Double? = null, val unit: String = "p",
+                    val chargerExtra: String = "", val chargerId: String = "", val chargerFree: String = "")
     /** The list on show: [name] as searched, [domain] for its logo, [radius] metres looked within. */
-    class ChainView(val name: String, val domain: String?, val spots: List<ChainSpot>, val radius: Int, val centre: LL,
+    data class ChainView(val name: String, val domain: String?, val spots: List<ChainSpot>, val radius: Int, val centre: LL,
                     /** Picking a stop to add along the route (the list is about the detour, and the only button is Add as a stop). */
                     val forStop: Boolean = false)
     var chain by mutableStateOf<ChainView?>(null)
@@ -2728,22 +2760,59 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             var i = i0
             while (i < r.pts.size) { ahead += r.pts[i]; i += step }
             if (ahead.lastOrNull() != r.pts.last()) ahead += r.pts.last()
+            val chargerData = java.util.concurrent.ConcurrentHashMap<String, Nearby>()
+            fun chargerKey(p: Place) = String.format(Locale.US, "%.5f,%.5f", p.pos.lat, p.pos.lon)
             val found: List<Pair<Place, Int>> = withContext(Dispatchers.IO) {
                 val all = ArrayList<Pair<Place, Int>>()
-                if (hasKey && online()) try { all += TomTomRest.alongText(apiKey, q, ahead, if (evDetourMin > 0) evDetourMin * 60 else 1200) } catch (e: Exception) { }
+                if (hasKey && online()) {
+                    // TomTom returns at most 20 places per request. Split long routes so its result cap
+                    // cannot hide chargers (or a selected provider) farther along the journey.
+                    val chunks = ArrayList<List<LL>>()
+                    var chunk = ArrayList<LL>()
+                    var metres = 0.0
+                    for (p in ahead) {
+                        val prev = chunk.lastOrNull()
+                        if (prev != null) metres += Geo.dist(prev, p)
+                        chunk += p
+                        if (metres >= 30_000.0 && chunk.size >= 2) {
+                            chunks += chunk
+                            chunk = arrayListOf(p)
+                            metres = 0.0
+                        }
+                    }
+                    if (chunk.size >= 2) chunks += chunk
+                    // three stretches at a time rather than one after another: a 300 km route waited for 10 searches in a row
+                    val maxDetourS = if (evDetourMin > 0) evDetourMin * 60 else 1200
+                    for (batch in chunks.chunked(3)) {
+                        kotlinx.coroutines.coroutineScope {
+                            batch.map { part -> async {
+                                try {
+                                    if (chargers) TomTomRest.poiAlong(apiKey, "charging", part, maxDetourS).map { (n, seconds) -> chargerData[chargerKey(n.place)] = n; n.place to seconds }
+                                    else TomTomRest.alongText(apiKey, q, part, maxDetourS)
+                                } catch (e: Exception) { emptyList() }
+                            } }.forEach { all += it.await() }
+                        }
+                    }
+                }
                 if (all.isEmpty()) {
-                    // no TomTom: the usual search near a few points along the way (and what's already been found)
-                    val probes = listOf(0.15, 0.4, 0.65, 0.9).map { f -> ahead[((ahead.size - 1) * f).toInt()] }
-                    for (c in probes) {
-                        try { if (mbToken.isNotBlank() && online()) MapboxRest.chain(mbToken, q, c).forEach { all += it to -1 } } catch (e: Exception) { }
+                    // Without TomTom results, search the full route at regular intervals rather than four isolated points.
+                    val probes = ArrayList<LL>()
+                    probes += ahead.first()
+                    var walked = 0.0
+                    var last = ahead.first()
+                    for (p in ahead.drop(1)) {
+                        walked += Geo.dist(last, p)
+                        if (walked >= 25_000.0) { probes += p; walked = 0.0 }
+                        last = p
+                    }
+                    if (probes.lastOrNull() != ahead.last()) probes += ahead.last()
+                    for (p in probes) {
+                        try { if (mbToken.isNotBlank() && online()) MapboxRest.chain(mbToken, q, p).forEach { all += it to -1 } } catch (e: Exception) { }
                     }
                     try { findPlaces(q).forEach { all += it to -1 } } catch (e: Exception) { }
                 }
                 val out = ArrayList<Pair<Place, Int>>()
                 for ((p, t) in all) if (out.none { Geo.dist(it.first.pos, p.pos) < 80 }) out += p to t
-                // a shop or chain: only its own branches when there are some ("Western Union, Sainsbury's" is a counter inside one,
-                // not a Sainsbury's)
-                // (not for a kind of place, from Add a stop's buttons: "coffee" kept only the places with Coffee in their name)
                 val own = if (category) emptyList() else out.filter { chainHit(it.first, q) }
                 if (own.size >= 2) own else out
             }
@@ -2755,12 +2824,15 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 var j = i0
                 val st = maxOf(1, (r.pts.size - i0) / 600)
                 while (j < r.pts.size) { val d = Geo.dist(r.pts[j], p.pos); if (d < best) { best = d; at = j }; j += st }
-                if (at < 0 || best > 6000.0) return@mapNotNull null
+                if (at < 0 || best > (if (chargers && evDetourMin > 0) evDetourMin * 60.0 * 13.0 / 2.6 else 6000.0)) return@mapNotNull null
                 val detour = if (t >= 0) t.toDouble() else best * 2.6 / 13.0
-                ChainSpot(p, Geo.dist(from, p.pos), -1.0, -1.0, detour, ahead = (r.cum[at] - prog).coerceAtLeast(0.0), off = best)
+                val charger = if (chargers) chargerData[chargerKey(p)] else null
+                ChainSpot(p, Geo.dist(from, p.pos), -1.0, -1.0, detour, ahead = (r.cum[at] - prog).coerceAtLeast(0.0), off = best,
+                    chargerExtra = charger?.extra.orEmpty(), chargerId = charger?.chargeId.orEmpty())
             }
             // chargers: only the providers and speeds chosen in Settings, and none further off than the Charger detour (#343)
-            val spots1 = if (chargers) spots0.filter { s -> chargerPlaceOk(s.place) && (evDetourMin <= 0 || s.detour < 0 || s.detour <= evDetourMin * 60.0) } else spots0
+            val evKw = prefs.i(PreferenceKeys.EV_MIN_KW, 0); val evNames = chargerNames()
+            val spots1 = if (chargers) spots0.filter { s -> chargerPlaceOk(s.place, evKw, evNames, s.chargerExtra) && (evDetourMin <= 0 || s.detour < 0 || s.detour <= evDetourMin * 60.0) } else spots0
             // petrol stations: each one's price for your fuel, from the price service the app already uses (and any priced station
             // the search missed); everything else as it was
             val spots = if (fuelList) {
@@ -2771,14 +2843,34 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             withContext(Dispatchers.IO) { spots.mapNotNull { Logos.domainFor(it.place) }.distinct().take(6).forEach { Logos.load(ctx, it) } }
             val domain = spots.asSequence().mapNotNull { Logos.domainFor(it.place) }.firstOrNull()
             val n = spots.first().place.name
-            chain = ChainView(title ?: if (Logos.norm(n).startsWith(Logos.norm(q)) && n.length <= q.length + 14) n else q.replaceFirstChar { it.uppercase() },
+            val view = ChainView(title ?: if (Logos.norm(n).startsWith(Logos.norm(q)) && n.length <= q.length + 14) n else q.replaceFirstChar { it.uppercase() },
                 domain, spots, 0, from, forStop = true)
+            chain = view
             chainSort = "route"
             chainSel = chainSorted().firstOrNull()
             chainMoved = false
             chainBusy = false
             following = false
             drawChain()
+            if (chargers && hasKey && online()) {
+                val ids = spots.map { it.chargerId }.filter { it.isNotBlank() }.distinct()
+                if (ids.isNotEmpty()) scope.launch {
+                    val live = withContext(Dispatchers.IO) {
+                        val out = LinkedHashMap<String, Pair<Int, Int>?>()
+                        for (batch in ids.chunked(3)) {
+                            batch.map { id -> async { id to TomTomRest.chargingFree(apiKey, id) } }.forEach { (id, value) -> out[id] = value }
+                        }
+                        out
+                    }
+                    if (chain !== view) return@launch
+                    val updated = view.spots.map { s ->
+                        if (s.chargerId.isBlank()) s else s.copy(chargerFree = live[s.chargerId]?.let { (free, total) -> "$free of $total free" } ?: "No live info")
+                    }
+                    chain = view.copy(spots = updated)
+                    chainSel = chainSel?.let { selected -> updated.firstOrNull { it.place.pos == selected.place.pos } } ?: updated.firstOrNull()
+                    drawChain(fit = false)
+                }
+            }
         }
     }
 
@@ -2926,24 +3018,58 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val rects = ArrayList<Pair<LL, LL>>(sessionAvoid)
         val rings = ArrayList<List<LL>>()
         for ((sw, ne) in sessionAvoid) rings += listOf(sw, LL(sw.lat, ne.lon), ne, LL(ne.lat, sw.lon), sw)
-        // closed roads: kept off by every route source (a closure at the start or the destination itself is left out, or there'd be
-        // no route at all). TomTom gets a small box round each, Mapbox points along it, the offline router the boxes
+        // Avoid only full-road closures matched to this route, never every closure in the surrounding 7 km.
+        // Use short segment rectangles instead of one large bounding box, which can accidentally block parallel roads.
         val closedPts = ArrayList<LL>()
-        for (pts in closedRoads()) {
-            if (pts.isEmpty()) continue
-            if ((from != null && pts.any { Geo.dist(it, from) < 150.0 }) || (to != null && pts.any { Geo.dist(it, to) < 150.0 })) continue
-            var minLat = 90.0; var maxLat = -90.0; var minLon = 180.0; var maxLon = -180.0
-            for (q in pts) { minLat = min(minLat, q.lat); maxLat = max(maxLat, q.lat); minLon = min(minLon, q.lon); maxLon = max(maxLon, q.lon) }
-            val pad = 0.0003
-            val sw = LL(minLat - pad, minLon - pad); val ne = LL(maxLat + pad, maxLon + pad)
-            rects += sw to ne
-            rings += listOf(sw, LL(sw.lat, ne.lon), ne, LL(ne.lat, sw.lon), sw)
-            // the middle of a short closure, or a few points along a long one
-            if (pts.size <= 2) closedPts += pts.last() else { closedPts += pts[pts.size / 2]; closedPts += pts.first(); closedPts += pts.last() }
+        // Each closure is covered end to end: split along its length into short pieces (80 m, or longer when the closure is long, so
+        // that no more than 8 boxes are used in all). Small boxes only covered the first 640 m before, so the router could still use
+        // the rest of a long closure.
+        val closures = closedRoads().filter { it.isNotEmpty() }
+        val boxBudget = minOf(8, 10 - rects.size).coerceAtLeast(0)
+        if (closures.isNotEmpty() && boxBudget > 0) {
+            val perClosure = (boxBudget / closures.size).coerceAtLeast(1)
+            var used = 0
+            for (pts in closures) {
+                if (used >= boxBudget) break
+                var len = 0.0
+                for (i in 0 until pts.lastIndex) len += Geo.dist(pts[i], pts[i + 1])
+                val pieceLen = maxOf(80.0, len / minOf(perClosure, boxBudget - used))
+                // walk the closure, cutting a piece every pieceLen metres
+                val pieces = ArrayList<List<LL>>()
+                var cur = arrayListOf(pts[0]); var acc = 0.0
+                for (i in 0 until pts.lastIndex) {
+                    var a0 = pts[i]; val b0 = pts[i + 1]
+                    var seg = Geo.dist(a0, b0)
+                    while (acc + seg >= pieceLen && seg > 0.0) {
+                        val t = (pieceLen - acc) / seg
+                        val cut = LL(a0.lat + (b0.lat - a0.lat) * t, a0.lon + (b0.lon - a0.lon) * t)
+                        cur += cut; pieces += cur
+                        cur = arrayListOf(cut); seg -= (pieceLen - acc); acc = 0.0; a0 = cut
+                    }
+                    acc += seg; cur += b0
+                }
+                if (cur.size >= 2 || pieces.isEmpty()) pieces += cur
+                for (piece in pieces) {
+                    if (used >= boxBudget) break
+                    var minLat = 90.0; var maxLat = -90.0; var minLon = 180.0; var maxLon = -180.0
+                    for (q in piece) { minLat = min(minLat, q.lat); maxLat = max(maxLat, q.lat); minLon = min(minLon, q.lon); maxLon = max(maxLon, q.lon) }
+                    val mid = LL((minLat + maxLat) / 2.0, (minLon + maxLon) / 2.0)
+                    // (a closure at the start or the destination itself is left out, or there'd be no route at all)
+                    if ((from != null && Geo.dist(mid, from) < 150.0) || (to != null && Geo.dist(mid, to) < 150.0)) continue
+                    val latPad = 10.0 / 110540.0
+                    val lonPad = 10.0 / (111320.0 * kotlin.math.cos(Math.toRadians(mid.lat)).coerceAtLeast(0.2))
+                    val sw = LL(minLat - latPad, minLon - lonPad); val ne = LL(maxLat + latPad, maxLon + lonPad)
+                    rects += sw to ne
+                    rings += listOf(sw, LL(sw.lat, ne.lon), ne, LL(ne.lat, sw.lon), sw)
+                    closedPts += mid
+                    used++
+                }
+            }
         }
         MapboxRest.avoidPoints = closedPts.take(25)
         MapboxRest.curbSide = prefs.b(PreferenceKeys.ARRIVE_SIDE, true)
         MapboxRest.junctionPics = prefs.b(PreferenceKeys.JUNCTION_PICS, false)
+        MapboxRest.roadShields = prefs.b(PreferenceKeys.UKSIGNS, true)
         if (prefs.b(PreferenceKeys.AVOIDZONES, false)) {
             for (z in Zones.all(ctx)) {
                 if ((from != null && Zones.inside(z, from)) || (to != null && Zones.inside(z, to))) continue
@@ -4029,7 +4155,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 else if (ps >= top && topArmed && soundMode != 2 && now - lastBeep > 4000) {
                     topArmed = false; lastBeep = now
                     speedChime()
-                    scope.launch { delay(450); speak("Ralentissez", true) }
+                    if (prefs.b(PreferenceKeys.SAY_TOP_SPEED, true)) scope.launch { delay(450); speak("Ralentissez", true) }
                     raiseAlert("limit", "Vitesse maximale de ${prefs.s(PreferenceKeys.ALERT_TOP_SPEED, "0")} atteinte")
                 }
             }
@@ -4661,13 +4787,13 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Drops chargers known to be slower than the wanted speed, or from other providers. A charger whose speed isn't known stays. */
     /** The Settings charger filter (providers, speed) for a place in the along-the-route list; unknown speeds stay in. */
-    private fun chargerPlaceOk(p: Place): Boolean {
-        val minKw = prefs.i(PreferenceKeys.EV_MIN_KW, 0)
-        val names = prefs.s(PreferenceKeys.EV_PROVIDERS, "").split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
-        val text = (p.name + " " + p.sub).lowercase()
-        val kw = Regex("(\\d+(?:\\.\\d+)?)\\s*kW", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)?.toDoubleOrNull()
+    private fun chargerPlaceOk(p: Place, minKw: Int = prefs.i(PreferenceKeys.EV_MIN_KW, 0), names: List<String> = chargerNames(), extra: String = ""): Boolean {
+        val text = (p.name + " " + p.sub + " " + extra).lowercase()
+        val kw = if (minKw > 0) kwRe.find(text)?.groupValues?.get(1)?.toDoubleOrNull() else null
         return (minKw <= 0 || kw == null || kw >= minKw) && (names.isEmpty() || names.any { it in text })
     }
+    private val kwRe = Regex("(\\d+(?:\\.\\d+)?)\\s*kW", RegexOption.IGNORE_CASE)
+    private fun chargerNames() = prefs.s(PreferenceKeys.EV_PROVIDERS, "").split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
 
     /** The Chargers button: on a route, the overview of chargers along it (pins on the whole route, with the detour each adds); otherwise the nearby list. */
     fun showChargers() {
@@ -4680,7 +4806,6 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val names = prefs.s(PreferenceKeys.EV_PROVIDERS, "").split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
         val maxDetour = prefs.i(PreferenceKeys.EV_DETOUR_MIN, 0)
         if (minKw <= 0 && names.isEmpty() && maxDetour <= 0) return l
-        val kwRe = Regex("(\\d+(?:\\.\\d+)?)\\s*kW", RegexOption.IGNORE_CASE)
         return l.filter { n ->
             val kw = kwRe.find(n.extra)?.groupValues?.get(1)?.toDoubleOrNull()
             val fastEnough = minKw <= 0 || kw == null || kw >= minKw
@@ -4693,18 +4818,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun sortNearby(l: List<Nearby>): List<Nearby> =
         if (nearbySort == "cheap" && l.any { it.price != null }) l.sortedWith(compareBy<Nearby> { it.price ?: 9999.0 }.thenBy { it.dist }) else l.sortedBy { it.dist }
 
-    /**
-     * Live availability for the chargers in the list ("8 of 12 free"), asked of TomTom for the first 10 that have it, all at once in
-     * the background. The list shows straight away and the counts appear as they come; a charger without live data says so.
-     */
+    /** Live connector counts, with no more than three TomTom requests in flight at once. */
     private fun fillChargerAvailability() {
         val list = nearby
         fillChargerPrices(list)
         if (!hasKey || !online() || list.none { it.chargeId.isNotBlank() }) return
         scope.launch {
-            val ids = list.map { it.chargeId }.filter { it.isNotBlank() }.distinct().take(10)
+            val ids = list.map { it.chargeId }.filter { it.isNotBlank() }.distinct()
             val got = withContext(Dispatchers.IO) {
-                ids.map { id -> async { id to TomTomRest.chargingFree(apiKey, id) } }.map { it.await() }.toMap()
+                val out = LinkedHashMap<String, Pair<Int, Int>?>()
+                for (batch in ids.chunked(3)) {
+                    batch.map { id -> async { id to TomTomRest.chargingFree(apiKey, id) } }.forEach { (id, value) -> out[id] = value }
+                }
+                out
             }
             if (nearbyKind != "charging") return@launch
             nearby = nearby.map { n -> if (n.chargeId in got) n.copy(free = got[n.chargeId]?.let { (f, t) -> "$f sur $t libres" } ?: "Pas d'info en direct") else n }
@@ -4741,7 +4867,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     // ---- guidance ----
     private fun snap(r: Route, p: LL): RouteSnap {
-        val result = RouteMatcher.snap(r, p, lastIdx)
+        val heading = fix?.takeIf { it.speed > 2.5 }?.heading ?: goodHead
+        val result = RouteMatcher.snap(r, p, lastIdx, heading)
         lastIdx = result.segmentIndex
         return result
     }
@@ -6305,12 +6432,16 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Road closures the route is being kept off this trip (id to the closed road's points). */
     private val closuresAvoided = LinkedHashMap<String, List<LL>>()
 
-    /** Every closed road known now: on the route (and already being avoided) and round about. */
+    /**
+     * Closures that may affect route planning: confirmed full-road closures on the current route, and those the trip has already
+     * been routed round. Without the second, a closure stopped counting as soon as the new route went round it, so the next
+     * reroute or faster-route check could send you straight back into it, and back and forth.
+     */
     private fun closedRoads(): List<List<LL>> {
-        val out = ArrayList<List<LL>>(closuresAvoided.values)
-        val seen = HashSet(closuresAvoided.keys)
-        for (inc in nearIncidents) if (inc.cat.equals("roadclosed", true) && seen.add(inc.id)) out += inc.pts
-        for ((inc, _, _) in incMatches) if (inc.cat.equals("roadclosed", true) && seen.add(inc.id)) out += inc.pts
+        val out = ArrayList<List<LL>>()
+        val seen = HashSet<String>()
+        for ((id, pts) in closuresAvoided) if (pts.isNotEmpty() && seen.add(id)) out += pts
+        for ((inc, _, _) in incMatches) if (inc.cat.equals("roadclosed", true) && inc.pts.isNotEmpty() && seen.add(inc.id)) out += inc.pts
         return out.take(20)
     }
 
@@ -6878,7 +7009,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val old = route; val oldProg = curProgress
         routeFracBase = routeFrac.coerceIn(0f, 1f)
         routes = listOf(a.route); active = 0
-        said.clear(); offCount = 0; lastIdx = 0; trustProg = -1.0; liveSaid.clear()
+        // Seed matching at the car's actual location and direction instead of route index zero.
+        val atCar = fix?.let { f -> RouteMatcher.snap(a.route, f.pos, 0, if (f.speed > 2.5) f.heading else goodHead) }
+        lastIdx = atCar?.segmentIndex ?: 0
+        if (atCar != null) curProgress = atCar.progress
+        said.clear(); offCount = 0; trustProg = atCar?.progress ?: -1.0; liveSaid.clear()
         clearLiveAlts()
         lastFasterCheck = System.currentTimeMillis()
         drawRoutes()
@@ -6993,6 +7128,20 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         return NavigationPolicy.remainingSegmentTime(r.cum, r.segmentTimes, p) ?: (r.freeFlow * frac + ahead)
     }
 
+    /** Arrival estimates for intermediate stops while choosing between route options (#405). */
+    fun previewStopEtas(r: Route, departAtMs: Long): List<StopEta> {
+        if (via.isEmpty() || r.pts.isEmpty() || r.time <= 0.0) return emptyList()
+        val offsets = stopOffsFor(r, 0.0)
+        val estimates = RouteStopPreviewPolicy.estimate(
+            offsets, stopNear, r.time, remainFrom(r, 0.0),
+        ) { p -> remainFrom(r, p) }
+        return estimates.mapNotNull { estimate ->
+            val place = via.getOrNull(estimate.index) ?: return@mapNotNull null
+            StopEta(place, Clock.hm(departAtMs + (estimate.travelSeconds * 1000.0).toLong()),
+                estimate.distanceMeters, estimate.travelSeconds)
+        }
+    }
+
     private var etaSmoothSecs = -1.0
     private var etaSmoothAt = 0L
     /** The route the smoothing is for: a new route, a reroute or another route picked shows its own time straight away. */
@@ -7076,7 +7225,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
 
         if (!light && !shadow()) try { routeExtrasTick(r, progress) } catch (e: Exception) { android.util.Log.w("NavEngine", "route extras failed", e) }
-        val ins = r.steps
+        val ins = RouteGuidancePolicy.guidanceSteps(r.steps, r.mine.isNotBlank() || drivingMine.isNotBlank())
         var k = ins.indexOfFirst { it.off > progress + 4 }
         if (k < 0) k = ins.size - 1
         if (k >= 0) {
@@ -7084,7 +7233,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // a turn at the end of a slip road (the route data puts it where the slip road meets the next road): until you're on
             // the slip road, the card, the voice and the lanes are for leaving the main road where the slip road splits off, so the
             // countdown runs to there (the start of the slip road), not to the far end of it. The turn itself comes after.
-            val split = slipSplit(r, k, realCur, progress)
+            val split = slipSplit(r, k, realCur, progress, ins)
             val onApproach = split != null && progress < split - 3.0
             val cur = if (onApproach) realCur.copy(off = split!!, maneuver = if (splitLeft) "MOTORWAY_EXIT_LEFT" else "MOTORWAY_EXIT_RIGHT", roundExit = 0, exitNo = "") else realCur
             // (its own keys, so the turn at the end of the slip road still gets its spoken call-outs and arrow afterwards)
@@ -7150,11 +7299,12 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 junctionPic = cur.junctionPic, sides = cur.sides,
                 thenStreet = if (thenOn) nxt?.street.orEmpty() else "",
                 ref = cur.ref, thenRef = if (thenOn) nxt?.ref.orEmpty() else "",
+                shields = cur.shields, shieldAtlasUrl = r.shieldAtlasUrl,
                 landmark = if (d <= 500) when (lm) { 1 -> "Aux feux"; 2 -> "Aux deuxièmes feux"; 3 -> "Au stop"; else -> "" } else "",
             )
             // only publish a new turn card when something a driver can see changed (about 3 m of distance), so the screen is not redrawn four times a second for nothing
             val ot = turn
-            if (ot == null || ot.maneuver != newTurn.maneuver || ot.street != newTurn.street || ot.lanes !== newTurn.lanes || ot.thenText != newTurn.thenText || ot.landmark != newTurn.landmark || abs(ot.dist - newTurn.dist) >= 3.0 || newTurn.dist < 30.0) turn = newTurn
+            if (ot == null || ot.maneuver != newTurn.maneuver || ot.street != newTurn.street || ot.lanes !== newTurn.lanes || ot.thenText != newTurn.thenText || ot.landmark != newTurn.landmark || ot.shields != newTurn.shields || ot.shieldAtlasUrl != newTurn.shieldAtlasUrl || abs(ot.dist - newTurn.dist) >= 3.0 || newTurn.dist < 30.0) turn = newTurn
             val word = Geo.maneuverText(cur.maneuver, cur.roundExit)
             // (Settings > Sound > Say road names off: just the direction, "In 200 metres, turn left")
             val tail = if (arriving || cur.street.isBlank() || !prefs.b(PreferenceKeys.VOICE_ROADS, true)) "" else " sur ${cur.street}"
@@ -7204,8 +7354,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (atEnd && said.add("end")) {
             toast("Vous êtes arrivé", 5000)
             // (why it counted as arrived, for the problem report: distances only, never places; carlb051, #360)
+            val stationarySeconds = if (parkedSince > 0L) ((nowP - parkedSince) / 1000L) else 0L
+            val speedKmh = f0?.let { Math.round(it.speed * 3.6).toString() + " km/h" } ?: "unknown"
             arrivedWhy = "arrived: " + listOf(if (nearEnd) "end of route" else "", if (parked) "parked near" else "", if (atDoor) "stopped at the door" else "").filter { it.isNotEmpty() }.joinToString("+") +
                 " · route " + Math.round(r.len) + " m, " + Math.round(rem) + " m left, " + (f0?.let { Math.round(Geo.dist(it.pos, dest?.pos ?: r.pts.last())).toString() + " m from the destination" } ?: "no GPS fix") +
+                ", speed " + speedKmh + ", stationary " + stationarySeconds + " s, mode " + (if (simMode == 0) "live" else "simulation") +
                 ", started " + (if (navStartMs > 0) ((System.currentTimeMillis() - navStartMs) / 1000).toString() + " s ago" else "unknown")
             if (navStartMs > 0) {
                 val secsT = (System.currentTimeMillis() - navStartMs) / 1000.0
@@ -7374,7 +7527,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      * a slip road) along the route, looking back from the turn. Null when it isn't one, or the map hasn't shown it yet (asked again
      * every 2 seconds while the turn is within a kilometre).
      */
-    private fun slipSplit(r: Route, k: Int, cur: Step, progress: Double): Double? {
+    private fun slipSplit(r: Route, k: Int, cur: Step, progress: Double, steps: List<Step>): Double? {
         if (splitFor != cur.off) { splitFor = cur.off; splitAt = null; splitDone = false }
         if (splitDone) return splitAt
         val m = cur.maneuver.uppercase()
@@ -7393,7 +7546,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // just before the turn the route has to be on a slip road; if the map says it isn't, it's an ordinary turn
         val last = cls(cur.off - 25.0) ?: return null
         if (!last.endsWith("_link")) { splitDone = true; return null }
-        val prevOff = r.steps.getOrNull(k - 1)?.off ?: 0.0
+        val prevOff = steps.getOrNull(k - 1)?.off ?: 0.0
         val stopAt = max(prevOff + 5.0, max(progress - 50.0, cur.off - 700.0))
         var o = cur.off - 25.0
         var start: Double? = null
@@ -7598,7 +7751,35 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Closes the arrival card and goes back to following the car. */
     fun dismissArrival() {
         arrival = null; arrivalParking = null; finishedDrive = null
-        if (!following && route == null) recenter()
+        if (route == null) {
+            // The arrival camera deliberately leaves the locator at the destination view. The route glide can
+            // still hold its last route-projected point when the route ends, so rebuild every position anchor
+            // from the latest GPS fix before following again. Do not reuse the cached fix through onPosition:
+            // it is the same object, so its normal new-fix path will not refresh these anchors.
+            val latest = fix
+            if (latest != null) {
+                val heading = if (latest.speed > 2.5) latest.heading else goodHead ?: latest.heading
+                gPos = latest.pos
+                gHead = heading
+                gSpeed = 0.0
+                gProg = 0.0
+                glideRoute = null
+                glideOnRoute = false
+                mAt = android.os.SystemClock.elapsedRealtime()
+                mProg = 0.0
+                mSpeed = 0.0
+                mPos = latest.pos
+                mHead = heading
+                camReady = false
+                camCatchUp = false
+                camTargetAt = 0L
+                lastCamSet = null
+                map.setMe(latest.pos, heading, 0)
+            }
+            // Always return the map to the actual last-known GPS position, even if the arrival
+            // camera had already left following enabled (for example when the arrival effect is off).
+            recenter()
+        }
     }
 
     /** "left" or "right" for the side of the road the destination is on, from the route's own instruction or from where the pin is. */
@@ -8107,7 +8288,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (hzWinRoute !== r) {
             rawHz = emptyList(); hzWinRoute = r; hzWinEnd = -1.0; hzRetryAt = 0L
             placed = null; placedSig = 0
-            map.setStopSigns(emptyList()); map.setCrossings(emptyList())
+            map.setStopSigns(emptyList()); map.setGiveWaySigns(emptyList()); map.setCrossings(emptyList())
         }
         barProgress = progress
         val d = dest
@@ -8198,8 +8379,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     // zebra and other marked crossings on the route, painted on the road
                     map.setCrossings(if (prefs.b(PreferenceKeys.ZEBRAS, true)) pl.hz.filter { it.poi.kind == "crossing" && it.poi.name in setOf("zebra", "marked", "uncontrolled") }
                         .take(300).map { Triple(it.poi.pos, pointAt(r, it.off).second, it.poi.name == "zebra") } else emptyList())
-                    // stop signs on the route
+                    // STOP and Give Way signs on the route (only where OpenStreetMap has a road-matched sign)
                     map.setStopSigns(if (prefs.b(PreferenceKeys.STOP_SIGNS, true)) pl.hz.filter { it.poi.kind == "stop" }.take(300).map { it.poi.pos } else emptyList())
+                    map.setGiveWaySigns(if (prefs.b(PreferenceKeys.STOP_SIGNS, true)) pl.hz.filter { it.poi.kind == "give_way" }.take(300).map { it.poi.pos } else emptyList())
                 } catch (e: Exception) { placedSig = sig } finally { placing = false }
             }
         }
@@ -8307,7 +8489,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (prefs.b(PreferenceKeys.BUMPS, true) && sp > 6.7 && ahead < max(100.0, sp * 6.0) && now - lastBumpAt > 25_000L && hzAlerted.add(key)) {
                     lastBumpAt = now
                     achime("bump", android.media.ToneGenerator.TONE_PROP_ACK)
-                    raiseAlert("bump", "Ralentisseur devant", 3500)
+                    raiseAlert("bump", "Ralentisseur devant", 5000)
                 }
             } else if (prefs.b(PreferenceKeys.SCHOOLS, true) && ahead < 300.0 && RouteExtras.schoolTime(now) && hzAlerted.add(key)) {
                 raiseAlert("school", "École devant : ${h.poi.name}", 5000)

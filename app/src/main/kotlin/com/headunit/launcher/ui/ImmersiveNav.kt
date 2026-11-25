@@ -356,7 +356,10 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         var turnExtraMax by remember { mutableStateOf(3) }
         var boxTopPx by remember { mutableStateOf(0f) }
         var railHPx by remember { mutableStateOf(0) }
-        val railBelow = narrow && routing && !hudOff && engine.turn != null && !engine.itineraryOpen && engine.results.isEmpty() && turnBottomPx > 0f
+        // (only whether there is a turn card is read here: the turn itself changes every few metres, and reading it here redrew the whole
+        // screen up to 4 times a second at motorway speed; the card below reads it in its own, much smaller part)
+        val hasTurn by remember { derivedStateOf { engine.turn != null } }
+        val railBelow = narrow && routing && !hudOff && hasTurn && !engine.itineraryOpen && engine.results.isEmpty() && turnBottomPx > 0f
         Box(Modifier.matchParentSize().onGloballyPositioned { boxTopPx = it.positionInRoot().y })
         // Settings › sizes › Turn card width (ZarulOfficial #317): the card size slider scales what's in the cards, this how wide they are
         val turnWK = engine.prefs.i(PreferenceKeys.TURN_WIDTH, 100).coerceIn(60, 130) / 100f
@@ -403,11 +406,10 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
             if (routing && !hudOff) {
                 if (engine.results.isNotEmpty()) ImmResults(engine, q) { q = "" }
                 else {
-                    val curTurn = engine.turn
-                    val lastTurn = remember { mutableStateOf(curTurn) }
-                    if (curTurn != null) lastTurn.value = curTurn
-                    AnimatedVisibility(curTurn != null, enter = fadeIn(tween(240)) + androidx.compose.animation.slideInVertically(tween(300)) { -it / 4 }, exit = fadeOut(tween(160))) {
-                        lastTurn.value?.let { t ->
+                    // (the last turn is kept so the card can fade out showing it)
+                    val lastTurn = remember { arrayOfNulls<com.headunit.launcher.TurnInfo>(1) }
+                    AnimatedVisibility(hasTurn, enter = fadeIn(tween(240)) + androidx.compose.animation.slideInVertically(tween(300)) { -it / 4 }, exit = fadeOut(tween(160))) {
+                        (engine.turn?.also { lastTurn[0] = it } ?: lastTurn[0])?.let { t ->
                             if (engine.itineraryOpen) {
                                 val itineraryDensity = LocalDensity.current
                                 val itineraryScale = engine.prefs.i(PreferenceKeys.MAIN_CARD_SIZE, 100).coerceIn(70, 150) / 100f
@@ -1125,12 +1127,22 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                         Icon(Icons.Rounded.Close, "Terminer l'itinéraire", tint = Color.White, modifier = Modifier.size(23.dp))
                     }
                 }
-                if (!narrow) Row(
-                    Modifier.widthIn(min = 360.dp).onSizeChanged { rowPx = it.width }.padding(start = 18.dp, end = 12.dp, top = 9.dp, bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(22.dp),
+                if (!narrow) androidx.compose.foundation.layout.BoxWithConstraints(
+                    Modifier.widthIn(max = 620.dp).onSizeChanged { rowPx = it.width }
+                        .padding(start = 18.dp, end = 12.dp, top = 9.dp, bottom = 10.dp)
                 ) {
-                    stats()
-                    Row(Modifier.padding(start = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { buttons() }
+                    // A landscape screen can still be narrow when split-screen is in use. Keep the figures intact and move
+                    // the action buttons below them rather than letting the End route button push the remaining distance away.
+                    val nStats = if (evStat) 4 else 3
+                    val nButtons = 2 + (if (evPct != null) 1 else 0) + (if (canShare) 1 else 0)
+                    val oneLine = maxWidth >= (nStats * 85 + nButtons * 54 + 35).dp
+                    if (oneLine) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                        stats()
+                        Row(Modifier.padding(start = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { buttons() }
+                    } else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(22.dp)) { stats() }
+                        Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(10.dp)) { buttons() }
+                    }
                 } else androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
                     // portrait: one compact line (figures, then the buttons), so the card stays low and clear of your arrow. When it can't
                     // all fit (an electric car adds a fourth figure and a fifth button), the buttons go on a line under the figures:
@@ -1495,6 +1507,7 @@ internal fun ImmTurnCard(
         "purple" -> Color(0xFF462870) to Color(0xFF2E1A4C)
         else -> GmGreen to GmGreenDeep
     }
+    val ukSign = engine.prefs.b(PreferenceKeys.UKSIGNS, true) && (t.sign.isNotBlank() && t.sign != t.street || t.tag.startsWith("Sortie") || t.shields.isNotEmpty() || t.exitNo.isNotBlank())
     Column(
         Modifier.fillMaxWidth()
             // (grows from its top middle, evenly both ways: grown from its left edge, a card the full width of an upright phone went off
@@ -1532,7 +1545,6 @@ internal fun ImmTurnCard(
                 val lmk = t.landmark.isNotBlank()
                 if (lmk) Text(t.landmark, color = Color.White, fontSize = if (compact) 24.sp else 31.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 else RollText(Geo.fmtDist(t.dist, engine.imperial), Color.White, if (compact) 28.sp else 38.sp, fontWeight = FontWeight.Bold)
-                val ukSign = engine.prefs.b(PreferenceKeys.UKSIGNS, true) && (t.sign.isNotBlank() && t.sign != t.street || t.tag.startsWith("Sortie"))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (t.tag.isNotBlank() && !(ukSign && t.tag.startsWith("Sortie"))) Text(t.tag, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
                         modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.18f)).padding(horizontal = 7.dp, vertical = 2.dp))
@@ -1552,10 +1564,10 @@ internal fun ImmTurnCard(
         // (the blue "EXIT" strip that used to sit here is gone: the exit's number badge beside the road name already says it, and its
         // arrows always pointed right, even for an exit on the left: mjdshibly #232)
         // A proper UK direction sign: blue for motorways, green for primary roads, white for local roads.
-        if (engine.prefs.b(PreferenceKeys.UKSIGNS, true) && (t.sign.isNotBlank() && t.sign != t.street || t.tag.startsWith("Sortie")))
-            // fork FR : style des panneaux britanniques au Royaume-Uni et en Irlande, français partout ailleurs
-            if (engine.detectedCountry.uppercase() in setOf("GB", "IE", "IM", "JE", "GG")) UkSign(t.sign, t.tag.removePrefix("Sortie ").takeIf { t.tag.startsWith("Sortie") }.orEmpty(), t.street, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp))
-            else FrSign(t.sign, t.tag.removePrefix("Sortie ").takeIf { t.tag.startsWith("Sortie") }.orEmpty(), t.street, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp))
+        if (ukSign)
+            // fork FR : panneau britannique (avec les cartouches de route de l'original) au Royaume-Uni et en Irlande, français ailleurs
+            if (engine.detectedCountry.uppercase() in setOf("GB", "IE", "IM", "JE", "GG")) JunctionSign(t, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp), engine.mbToken)
+            else FrSign(t.sign.ifBlank { t.ref }, t.exitNo.ifBlank { t.tag.removePrefix("Sortie ").takeIf { t.tag.startsWith("Sortie") }.orEmpty() }, t.street, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp))
         // (the lanes stay on a small car screen too: they were left off with everything else, so small screens had no lane guidance)
         if ((!compact || car) && engine.prefs.b(PreferenceKeys.LANE_STRIP, true)) t.lanes?.let { ls ->
             // lane hero view: before a complex junction the lanes grow into a big picture with yours lit; simple ones keep the strip

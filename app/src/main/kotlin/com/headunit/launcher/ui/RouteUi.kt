@@ -17,6 +17,7 @@ import com.headunit.launcher.NavigationPolicy
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.aspectRatio
@@ -94,6 +95,7 @@ import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -1072,34 +1074,117 @@ fun MapboxKeyDialog(prefs: com.headunit.launcher.Prefs, refused: Boolean = false
  * box), green for main roads (yellow road numbers), the roads it leads to and the places on the sign. Only when the route has them.
  */
 @Composable
-fun JunctionSign(t: com.headunit.launcher.TurnInfo, modifier: Modifier = Modifier) {
-    if (t.sign.isBlank() || t.dist > 3200.0) return
-    val refRx = Regex("\\b([MAB][0-9]{1,4}(?:\\(M\\))?)\\b")
-    val refs = refRx.findAll(t.sign).map { it.groupValues[1] }.distinct().take(2).toList()
-    val places = refRx.replace(t.sign, " ").split(',', ';', ':', '/').map { it.trim().trim('-', '–').trim() }
-        .filter { it.length > 1 && !it.equals("J", true) && !Regex("^J?[0-9]+[A-Z]?$").matches(it) }.distinct().take(3)
-    if (refs.isEmpty() && places.isEmpty()) return
-    val motorway = t.exitNo.isNotBlank() || refs.any { it.startsWith("M") || it.endsWith("(M)") }
-    val bg = if (motorway) Color(0xFF1554A8) else Color(0xFF0D6B3A)
-    val shape = RoundedCornerShape(14.dp)
-    val left = t.maneuver.uppercase().contains("LEFT")
-    Column(modifier.widthIn(max = 380.dp).shadow(8.dp, shape).clip(shape).background(Color.White).padding(3.dp).clip(RoundedCornerShape(11.dp)).background(bg)
-        .padding(horizontal = 12.dp, vertical = 9.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+fun JunctionSign(t: com.headunit.launcher.TurnInfo, modifier: Modifier = Modifier, mapboxToken: String = "") {
+    if (t.dist > 3200.0) return
+    val refRx = Regex("\\b([A-Z]{1,3}[0-9]{1,4}(?:\\(M\\))?)\\b")
+    val shieldItems = t.shields.take(4)
+    val refs = (refRx.findAll(t.sign).map { it.groupValues[1] } +
+        listOfNotNull(t.ref.takeIf { it.isNotBlank() })).toList().filter { it.isNotBlank() }
+        .filterNot { road -> shieldItems.any { it.content == road || it.affixes.joinToString("") + it.content == road } }
+        .distinct().take((4 - shieldItems.size).coerceAtLeast(0))
+    val places = refRx.replace(t.sign, " ").split(',', ';', ':', '/')
+        .map { it.trim().trim('-', '–').trim() }
+        .filter { it.length > 1 && !it.equals("J", true) && !Regex("^J?[0-9]+[A-Z]?$").matches(it) }
+        .distinct().take(3)
+    if (shieldItems.isEmpty() && refs.isEmpty() && places.isEmpty() && t.exitNo.isBlank()) return
+    val motorway = t.exitNo.isNotBlank() || t.shields.any { it.reference.contains("highway", true) || it.reference.contains("motorway", true) } ||
+        refs.any { it.startsWith("M") || it.endsWith("(M)") }
+    val primary = t.shields.any { it.reference.contains("primary", true) || it.reference.contains("trunk", true) } ||
+        refs.any { it.startsWith("A") }
+    val bg = when { motorway -> Color(0xFF07569A); primary -> Color(0xFF087044); else -> Color.White }
+    val ink = if (bg == Color.White) Color(0xFF171717) else Color.White
+    val shape = RoundedCornerShape(9.dp)
+    val arrow = when {
+        t.maneuver.contains("LEFT", true) -> "↖"
+        t.maneuver.contains("RIGHT", true) -> "↗"
+        else -> "↑"
+    }
+    Column(modifier.fillMaxWidth().widthIn(max = 440.dp).shadow(7.dp, shape)
+        .clip(shape).background(Color.White).padding(2.dp).clip(RoundedCornerShape(7.dp))
+        .background(bg).padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (t.exitNo.isNotBlank()) {
-                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color.White).padding(1.5.dp).clip(RoundedCornerShape(3.dp)).background(Color.Black)
-                    .padding(horizontal = 7.dp, vertical = 1.dp)) { Text(t.exitNo, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold) }
-                Spacer(Modifier.width(6.dp))
+                Box(Modifier.clip(RoundedCornerShape(3.dp)).background(Color.Black).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                    Text(t.exitNo, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                }
             }
-            refs.forEach { r ->
-                if (motorway) Box(Modifier.padding(end = 6.dp).border(1.5.dp, Color.White, RoundedCornerShape(3.dp)).padding(horizontal = 6.dp, vertical = 1.dp)) {
-                    Text(r, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                } else Text(r, color = Color(0xFFFFD200), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(end = 8.dp))
+            shieldItems.forEach { shield ->
+                when {
+                    shield.reference.startsWith("https://") && mapboxToken.isNotBlank() -> MapboxRoadShieldImage(shield, mapboxToken)
+                    t.shieldAtlasUrl.isNotBlank() && shield.reference.isNotBlank() -> RoadShieldAtlasImage(shield, t.shieldAtlasUrl)
+                    else -> RoadShieldBadge((shield.content + if (shield.affixes.isNotEmpty()) " " + shield.affixes.joinToString(" ") else "").ifBlank { t.ref }, shield.reference)
+                }
             }
+            refs.forEach { RoadShieldBadge(it, "") }
             Spacer(Modifier.weight(1f))
-            Text(if (left) "↖" else "↗", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(arrow, color = ink, fontSize = 25.sp, fontWeight = FontWeight.Bold)
         }
-        places.forEach { p -> Text(p, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        places.forEach { p -> Text(p, color = ink, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        if (places.isEmpty() && t.sign.isNotBlank() && refs.isEmpty()) {
+            Text(t.sign.take(90), color = ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun MapboxRoadShieldImage(shield: com.headunit.launcher.RoadShield, token: String) {
+    val url = shield.reference.trimEnd('/') + "@2x.png"
+    var bitmap by remember(url) { mutableStateOf(JunctionPics.cached(url)) }
+    if (bitmap == null) {
+        LaunchedEffect(url, token) { bitmap = JunctionPics.load(url, token) }
+    }
+    if (bitmap != null) Image(bitmap!!.asImageBitmap(), contentDescription = shield.content,
+        modifier = Modifier.height(25.dp).widthIn(max = 66.dp), contentScale = ContentScale.Fit)
+    else RoadShieldBadge(shield.content, "mapbox")
+}
+
+@Composable
+private fun RoadShieldAtlasImage(shield: com.headunit.launcher.RoadShield, atlas: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var bitmap by remember(atlas, shield.reference) {
+        mutableStateOf(com.headunit.launcher.RoadShieldAtlas.cached(atlas, shield.reference))
+    }
+    if (bitmap == null) {
+        LaunchedEffect(atlas, shield.reference) {
+            bitmap = com.headunit.launcher.RoadShieldAtlas.load(context, atlas, shield.reference)
+        }
+    }
+    val label = shield.content.ifBlank { shield.affixes.joinToString("") }
+    if (bitmap != null) {
+        val ink = if (shield.reference.contains("white", true) || shield.reference.contains("nld", true)) Color(0xFF171717) else Color.White
+        Box(Modifier.height(27.dp).widthIn(min = 34.dp, max = 66.dp), contentAlignment = Alignment.Center) {
+            Image(bitmap!!.asImageBitmap(), contentDescription = label,
+                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                if (label.isNotBlank()) Text(label, color = ink, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                if (shield.affixes.isNotEmpty() && shield.content.isNotBlank()) Text(shield.affixes.joinToString(" "), color = ink, fontSize = 6.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
+        }
+    } else RoadShieldBadge((label + if (shield.affixes.isNotEmpty()) " " + shield.affixes.joinToString(" ") else "").ifBlank { "Road" }, shield.reference)
+}
+
+/** Text fallback used when the provider atlas has no matching sprite or cannot be downloaded. */
+@Composable
+private fun RoadShieldBadge(text: String, type: String) {
+    val k = type.lowercase()
+    val bg = when {
+        "usa" in k || "interstate" in k || "motorway" in k -> Color(0xFF07569A)
+        "europe" in k -> Color(0xFF1554A8)
+        "primary" in k || "trunk" in k -> Color(0xFF087044)
+        "national" in k -> Color(0xFFB52B27)
+        "county" in k -> Color(0xFF28633B)
+        else -> Color.White
+    }
+    val fg = if (bg == Color.White) Color(0xFF171717) else Color.White
+    val shape = when {
+        "europe" in k -> CircleShape
+        "interstate" in k -> RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 3.dp, bottomEnd = 3.dp)
+        else -> RoundedCornerShape(5.dp)
+    }
+    Box(Modifier.padding(end = 3.dp).clip(shape).background(bg)
+        .border(1.dp, if (bg == Color.White) Color(0xFF222222) else Color.White, shape)
+        .padding(horizontal = 6.dp, vertical = 2.dp)) {
+        Text(text, color = fg, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
     }
 }
 

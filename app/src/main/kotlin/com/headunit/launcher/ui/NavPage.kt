@@ -338,7 +338,13 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
                 Text(label.uppercase(), color = if (sel) c.accent else c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = if (narrowP) 0.3.sp else 1.sp,
                     maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                 Text(Geo.fmtDur(r.time), color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("${Geo.fmtDist(r.len, engine.imperial)} · ${fmt.format(java.util.Date(baseMs + (r.time * 1000).toLong()))}", color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${Geo.fmtDist(r.len, engine.imperial)} · arrivée ${fmt.format(java.util.Date(baseMs + (r.time * 1000).toLong()))}", color = c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // Show each intermediate stop's own distance and arrival time for this route option (#405).
+                val stopEtas = remember(r, engine.via, baseMs) { engine.previewStopEtas(r, baseMs) }
+                stopEtas.forEach { stop ->
+                    Text("Étape : ${stop.place.name}", color = c.text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${Geo.fmtDist(stop.dist, engine.imperial)} · arrivée ${stop.arrive}", color = c.sub, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 val via = viaOf(r)
                 val delayMin = Math.round(r.delay / 60.0).toInt()
                 val mine = mineLine(rs, r)

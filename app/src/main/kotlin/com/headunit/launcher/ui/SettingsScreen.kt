@@ -511,7 +511,7 @@ private fun OnTheMapSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Icônes des radars et travaux", "hazardicons", true, "Leurs icônes sur la carte. Les alertes sont dans Réglages > Alertes")
         if (prefs.b("hazardicons", true)) SPercent("Taille des radars", "Le badge rouge des radars sur la carte", prefs, PreferenceKeys.CAM_SIZE, 50, 350)
         SToggle(prefs, "Passages piétons", "zebras", true, "Passages piétons de votre itinéraire peints sur la route, avec balises lumineuses (de près)")
-        SToggle(prefs, "Panneaux stop", PreferenceKeys.STOP_SIGNS, true, "Stops de votre itinéraire affichés sur la carte, avec un petit signal sonore avant chacun (là où OpenStreetMap les connaît)")
+        SToggle(prefs, "Panneaux stop", PreferenceKeys.STOP_SIGNS, true, "Stops et cédez-le-passage de votre itinéraire affichés sur la carte, avec un petit signal sonore avant chaque stop (là où OpenStreetMap les connaît)")
         SToggle(prefs, "Caméras de lecture de plaques", PreferenceKeys.ALPR_CAMS, true, "Caméras Flock et autres lecteurs automatiques de plaques recensés sur OpenStreetMap. Affichées sur la carte seulement, sans alerte")
     }
     SGroup("Mobilier urbain 3D") {
@@ -653,6 +653,8 @@ private fun RoutesSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Choix de l'itinéraire") {
         SToggle(prefs, "Itinéraires éco", "route_eco", false, "Économes en carburant plutôt que les plus rapides")
         SToggle(prefs, "Préférer les itinéraires plus simples", "prefer_simple", true, "Quand un itinéraire n'est qu'environ une minute plus lent mais a bien moins de virages, il est choisi en premier (indiqué La plus simple). Désactivé choisit toujours le plus rapide")
+        SToggle(prefs, "Préférer les grands axes (hors ligne)", PreferenceKeys.PREFER_MAIN_ROADS, false,
+            "Hors ligne, les itinéraires voiture préfèrent un peu les grands axes quand c'est possible. En ligne et en poids lourd, rien ne change.")
         SToggle(prefs, "Proposer des itinéraires plus rapides", "fasterroute", true)
         if (prefs.b(PreferenceKeys.FASTER_ROUTE, true)) SToggle(prefs, "Garder les autres itinéraires sur la carte", "livealts", true, "Lignes grises avec +/− minutes à toucher à tout moment. Désactivé affiche plutôt une carte « Itinéraire plus rapide trouvé »")
         SToggle(prefs, "Suggérer votre destination", "predict", true, "Avec le temps de trajet en direct, y compris domicile et travail à vos heures habituelles")
@@ -851,6 +853,8 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Alerte de vitesse en arrière-plan", PreferenceKeys.BG_SPEED_ALERT, false, "Garde l'alerte de vitesse quand une autre appli est devant, même sans itinéraire. Consomme plus de batterie et affiche une notification")
         SChoice("Alerte de vitesse maximale", (if (engine.imperial) listOf("0", "60", "70", "80", "90") else listOf("0", "90", "100", "110", "120", "130", "140")).map { it to (if (it == "0") "Désactivé" else it + if (engine.imperial) " mph" else " km/h") },
             prefs.s(PreferenceKeys.ALERT_TOP_SPEED, "0"), "Un bip et « Ralentissez » quand vous atteignez cette vitesse, quelle que soit la limitation") { prefs.put(PreferenceKeys.ALERT_TOP_SPEED, it) }
+        if (prefs.s(PreferenceKeys.ALERT_TOP_SPEED, "0") != "0") SToggle(prefs, "Dire « Ralentissez » à la vitesse maximale", PreferenceKeys.SAY_TOP_SPEED, true,
+            "« Ralentissez » quand vous atteignez la vitesse maximale choisie")
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
         SToggle(prefs, "Ignorer les hausses sur un petit tronçon", "limithold", true, "Une limite plus haute n'est prise qu'après 200 m dessus : un petit tronçon mal renseigné (un 90 entre un 50 et un 70) n'est ni affiché ni annoncé. Les baisses sont prises tout de suite")
         SToggle(prefs, "50 en agglomération", "towncap", true, "Entre les panneaux d'entrée et de sortie d'une agglomération (d'après OpenStreetMap), une limite à 80 ou 90 lue sur la carte est ramenée à 50 : c'est presque toujours une erreur de la carte")

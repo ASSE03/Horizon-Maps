@@ -36,6 +36,21 @@ class NavigationPolicyTest {
         assertFalse(NavigationPolicy.gpsReliableForReroute(100.0))
     }
 
+    @Test fun poorOrMissingNetworkAccuracyIsRejectedWhileFollowingRoute() {
+        assertFalse(NavigationPolicy.shouldRejectNetworkPositionOnRoute(30.0))
+        assertFalse(NavigationPolicy.shouldRejectNetworkPositionOnRoute(5.0))
+        assertTrue(NavigationPolicy.shouldRejectNetworkPositionOnRoute(30.01))
+        assertTrue(NavigationPolicy.shouldRejectNetworkPositionOnRoute(null))
+        assertTrue(NavigationPolicy.shouldRejectNetworkPositionOnRoute(0.0))
+        assertTrue(NavigationPolicy.shouldRejectNetworkPositionOnRoute(-1.0))
+        assertTrue(NavigationPolicy.shouldRejectNetworkPositionOnRoute(Double.NaN))
+        assertTrue(NavigationPolicy.shouldRejectNetworkPositionOnRoute(Double.POSITIVE_INFINITY))
+        // after a minute without GPS, rough positions up to 150 m are taken again
+        assertFalse(NavigationPolicy.shouldRejectNetworkPositionOnRoute(120.0, 61_000L))
+        assertTrue(NavigationPolicy.shouldRejectNetworkPositionOnRoute(120.0, 30_000L))
+        assertTrue(NavigationPolicy.shouldRejectNetworkPositionOnRoute(400.0, 61_000L))
+    }
+
     @Test fun offRouteLimitWidensWithGpsAccuracyAndHandlesUnknownAccuracy() {
         assertEquals(30.0, NavigationPolicy.offRouteLimit(0.0), 0.0001)
         assertEquals(30.0, NavigationPolicy.offRouteLimit(Double.NaN), 0.0001)

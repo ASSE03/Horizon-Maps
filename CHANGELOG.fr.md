@@ -5,6 +5,12 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Cartouches de route (D, N, A, E…) dans le panneau de direction, avec les images de Mapbox ou de TomTom ; au Royaume-Uni et en Irlande, le panneau britannique de l'original.
+- Cédez-le-passage de l'itinéraire dessinés sur la route.
+- Changement de pays : une notification avec les limitations habituelles et le numéro d'urgence.
+- Heure d'arrivée à chaque étape dans les choix d'itinéraire.
+- Préférer les grands axes (hors ligne).
+- « Ralentissez » à la vitesse maximale désactivable.
 - Signaler un bouchon (Réglages › Signalements, ou « signale un bouchon » à l'Assistant).
 - Renfort de la voix : un curseur pour rendre la voix plus forte que la musique.
 - Son de l'alerte de vitesse au choix (double bip, sirène, bourdon grave), et alerte de vitesse en arrière-plan, même sans itinéraire.
@@ -162,6 +168,13 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Limitations : celle de la route vraiment suivie (plus de route voisine), plus stables.
+- Feux tricolores mieux placés le long de l'itinéraire ; flèche gardée sur sa chaussée d'autoroute ; tracé conservé dans les virages.
+- Itinéraires alternatifs : bascule et progression corrigées ; fermetures toujours évitées, même longues.
+- Bornes de recharge cherchées sur tout l'itinéraire, détails et disponibilité en direct dans l'aperçu.
+- Hors ligne : itinéraires entre deux cartes voisines, mémoire limitée, messages clairs.
+- Recherche : les recherches dépassées s'arrêtent tôt.
+- Ralentisseur affiché 5 s ; position réseau dans les tunnels ; taille globale d'Android Auto corrigée.
 - Boussole : elle suit la vraie orientation de la carte, le point rouge montre le nord.
 - Lumière du soleil qui s'estompe au coucher.
 - Serveurs Overpass : ceux qui viennent d'échouer sont sautés, et maps.mail.ru est joignable sur Android 10.
