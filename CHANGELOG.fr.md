@@ -5,6 +5,16 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Signaler un bouchon (Réglages › Signalements, ou « signale un bouchon » à l'Assistant).
+- Renfort de la voix : un curseur pour rendre la voix plus forte que la musique.
+- Son de l'alerte de vitesse au choix (double bip, sirène, bourdon grave), et alerte de vitesse en arrière-plan, même sans itinéraire.
+- Bouton « Vue épurée » (vue complète, minimale ou carte seule) et choix des boutons de la carte, avec Vue d'ensemble.
+- « Garé ici » à l'arrivée pour enregistrer l'emplacement de la voiture.
+- Bornes de recharge : filtres de puissance et d'opérateur, bornes à quelques minutes de l'itinéraire, bouton qui montre l'itinéraire avec les bornes filtrées.
+- Couleur de la carte de direction (vert, noir, gris foncé, bleu marine, violet), hauteur de la barre sur Android Auto.
+- Rechercher pendant la saisie (désactivable), résultats sur deux lignes.
+- Garder l'écran allumé sans itinéraire (téléphone).
+- Couleurs de carte perso et fiches des lieux aussi sur les cartes TomTom et OpenStreetMap ; numéros de route sur les itinéraires TomTom.
 - Dire « Ralentissez » après le bip d'excès de vitesse (Réglages › Vitesse).
 - Alerte de vitesse maximale : un bip et « Ralentissez » quand vous atteignez la vitesse choisie, quelle que soit la limitation.
 - Mettre la musique en pause pour la voix, au lieu de seulement la baisser.
@@ -152,6 +162,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Boussole : elle suit la vraie orientation de la carte, le point rouge montre le nord.
+- Lumière du soleil qui s'estompe au coucher.
+- Serveurs Overpass : ceux qui viennent d'échouer sont sautés, et maps.mail.ru est joignable sur Android 10.
+- Calcul hors ligne : plus de plantage par manque de mémoire, un message à la place.
+- Android Auto plus compact sur les petits écrans ; Arrêter reste accessible en écran partagé.
 - Panneau de limitation sur l'itinéraire : il s'affiche bien sur la carte.
 - Parkings près de l'arrivée : de nouveau leur propre carte sous la carte de direction, et leurs tracés sur Android Auto.
 - Barre du trajet : les petits bouchons y apparaissent.

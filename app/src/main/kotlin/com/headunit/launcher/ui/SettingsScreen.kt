@@ -340,9 +340,12 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
             SFieldItem("Le jour commence à", prefs.s(PreferenceKeys.DAY_FROM, "07:00"), "Format 24 h, par exemple 06:45", placeholder = "07:00") { prefs.put(PreferenceKeys.DAY_FROM, it.trim()) }
         }
     }
-    if (prefs.mapSource() == "mapbox") SGroup("Couleurs et lettrage") {
-        MapColoursPicker(prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")) { picked ->
-            val now = prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox")
+    val mapboxMap = prefs.mapSource() == "mapbox"
+    SGroup("Couleurs et lettrage") {
+        // TomTom and OpenStreetMap: Horizon, Twilight or your own colours
+        val shown = prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox").let { if (!mapboxMap && it !in setOf("horizon", "twilight", "custom")) "horizon" else it }
+        MapColoursPicker(shown, only = if (mapboxMap) null else setOf("horizon", "twilight", "custom")) { picked ->
+            val now = shown
             // Custom starts as exactly the theme you had (nothing changes until you change something)
             if (picked == "custom" && now != "custom") {
                 prefs.put(PreferenceKeys.CUSTOM_BASE, now)
@@ -364,10 +367,10 @@ private fun MapStyleSection(prefs: Prefs, engine: NavEngine) {
             SPercent("Intensité", "La part de cette couleur que prend la carte", prefs, PreferenceKeys.CAR_TINT_STR, 10, 100, 40)
         }
         // (karthikeyansr: Mapbox's own lettering is narrow, and hard to read at a glance; these are wider and heavier)
-        SChoice("Police", listOf("" to "Standard") + com.headunit.launcher.MAP_FONTS.map { it to it }, prefs.s(PreferenceKeys.MAP_FONT, ""),
+        if (mapboxMap) SChoice("Police", listOf("" to "Standard") + com.headunit.launcher.MAP_FONTS.map { it to it }, prefs.s(PreferenceKeys.MAP_FONT, ""),
             "La police des noms de routes et de lieux sur la carte", wrap = true) { prefs.put(PreferenceKeys.MAP_FONT, it) }
     }
-    if (prefs.mapSource() == "mapbox" && prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox") == "custom") CustomThemeGroup(prefs, engine)
+    if (prefs.s(PreferenceKeys.MAP_COLOURS, "mapbox") == "custom") CustomThemeGroup(prefs, engine)
     if (prefs.mapSource() == "mapbox") SavedThemesGroup(prefs)
     SGroup("La carte") {
         // only the choices that work here: the free Play version is always OpenStreetMap (no choice at all), Plus can't show
@@ -404,6 +407,15 @@ private fun LightSection(prefs: Prefs) {
         SToggle(prefs, "Soleil à sa vraie place", PreferenceKeys.SUN_REAL, false, "La lumière et les ombres viennent de la position réelle du soleil, et la nuit de la lune")
         // (Overcast light is in Settings > Weather, with everything else the weather changes)
     }
+    SGroup("Boutons de la carte", footer = "Les options de la carte sont toujours là. Vue d'ensemble montre tout l'itinéraire quelques secondes, puis revient à vous suivre") {
+        val hidden = prefs.s(PreferenceKeys.RAIL_HIDDEN, "overview").split(",").filter { it.isNotBlank() }
+        listOf("compass" to "Boussole", "report" to "Signaler", "sound" to "Son (en guidage)", "routes" to "Autres itinéraires (en guidage)",
+            "clean" to "Vue épurée (en guidage)", "overview" to "Vue d'ensemble (en guidage)").forEach { (id, name) ->
+            val on = id !in hidden
+            val set = { v: Boolean -> prefs.put(PreferenceKeys.RAIL_HIDDEN, (if (v) hidden - id else (hidden + id).distinct()).joinToString(",").ifEmpty { "none" }) }
+            SItem(name, onClick = { set(!on) }) { Switch(on, { set(it) }) }
+        }
+    }
     // everything that sets the map's angle in one place (the switches below were in Turn card & lanes and On the map, where the
     // flat view when stopped wasn't found: bluelions25, #312)
     SGroup("Vue de la carte", footer = "Inclinaison : de 30° à 65°. Auto est le choix de l'appli (54°, ou 52° avec une carte allégée). L'inclinaison selon la vitesse et l'aplatissement dans les virages s'ajoutent par-dessus.") {
@@ -413,6 +425,10 @@ private fun LightSection(prefs: Prefs) {
         SToggle(prefs, "Aplatir la carte en 2D aux virages", "turn2d", true)
         SToggle(prefs, "Inclinaison selon la vitesse", "speedtilt", true, "Plus plat à basse vitesse, vue plus longue à vitesse élevée")
         SToggle(prefs, "Aperçu du trafic à l'arrêt", PreferenceKeys.STOPPED_OVERVIEW, true, "Après 30 secondes à l'arrêt (feu, bouchon), la carte recule en vue du dessus du trafic autour de vous, puis revient quand vous repartez")
+    }
+    SGroup("Carte de direction") {
+        SChoice("Couleur de la carte de direction", listOf("green" to "Vert", "black" to "Noir", "grey" to "Gris foncé", "navy" to "Bleu marine", "purple" to "Violet"),
+            prefs.s(PreferenceKeys.TURN_CARD_COLOUR, "green"), "La couleur derrière la prochaine direction. Le texte reste blanc") { prefs.put(PreferenceKeys.TURN_CARD_COLOUR, it) }
     }
     SGroup("3D") {
         SToggle(prefs, "Ombrage du relief", PreferenceKeys.HILLSHADE, false, "Un ombrage doux sur les pentes, pour voir vallées et crêtes même sur une carte à plat. Plus léger que le relief 3D")
@@ -830,6 +846,9 @@ private fun AlertsSection(prefs: Prefs, engine: NavEngine) {
             SChoice("Hors agglomération", listOf("5", "10", "15", "20").map { it to it + unit }, prefs.s(PreferenceKeys.FLASH_OUT, "15")) { prefs.put(PreferenceKeys.FLASH_OUT, it) }
         }
         SToggle(prefs, "Dire « Ralentissez »", PreferenceKeys.SAY_SLOW_DOWN, false, "Le mot « Ralentissez » après le bip quand vous dépassez la limitation, au lieu du bip seul")
+        SChoice("Son de l'alerte de vitesse", listOf("double" to "Double bip", "siren" to "Sirène", "buzz" to "Bourdon grave"), prefs.s(PreferenceKeys.SPEED_ALERT_SOUND, "double"),
+            "Le son pour un excès de vitesse ou la vitesse maximale, pour ne pas le confondre avec les bips des radars et des dangers") { prefs.put(PreferenceKeys.SPEED_ALERT_SOUND, it); engine.testSpeedAlert(it) }
+        SToggle(prefs, "Alerte de vitesse en arrière-plan", PreferenceKeys.BG_SPEED_ALERT, false, "Garde l'alerte de vitesse quand une autre appli est devant, même sans itinéraire. Consomme plus de batterie et affiche une notification")
         SChoice("Alerte de vitesse maximale", (if (engine.imperial) listOf("0", "60", "70", "80", "90") else listOf("0", "90", "100", "110", "120", "130", "140")).map { it to (if (it == "0") "Désactivé" else it + if (engine.imperial) " mph" else " km/h") },
             prefs.s(PreferenceKeys.ALERT_TOP_SPEED, "0"), "Un bip et « Ralentissez » quand vous atteignez cette vitesse, quelle que soit la limitation") { prefs.put(PreferenceKeys.ALERT_TOP_SPEED, it) }
         SToggle(prefs, "Annoncer les changements de limitation", "limitchange", true)
@@ -892,6 +911,13 @@ private fun SoundSection(prefs: Prefs, engine: NavEngine) {
         SSlider("Volume des bips", prefs.i(PreferenceKeys.CHIME_VOL, 70).coerceIn(5, 100).toFloat(), 5f..100f, "%",
             sub = "Les bips d'excès de vitesse, de changement de limite et de radars, par rapport à la voix. Le volume de l'autoradio, réglé pendant qu'il parle, change les deux",
             reset = 70f) { prefs.put(PreferenceKeys.CHIME_VOL, it.toInt()); engine.testChime() }
+        SSlider("Renfort de la voix", prefs.i(PreferenceKeys.VOICE_GAIN, 0).coerceIn(0, 18).toFloat(), 0f..18f, " dB",
+            sub = "Rend la voix plus forte que la musique. Trop haut, elle peut saturer : montez petit à petit. La voix est alors jouée comme les bips, ce qui active cet interrupteur",
+            steps = 17, reset = 0f) {
+            prefs.put(PreferenceKeys.VOICE_GAIN, it)
+            if (it > 0) prefs.put(PreferenceKeys.VOICE_VIA_APP, true)
+            engine.testVoice()
+        }
     }
 }
 
@@ -1310,6 +1336,7 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
         SSlider("Luminosité", prefs.i(PreferenceKeys.BRIGHT, 100).toFloat(), 10f..100f, "%", sub = "100 % laisse le système décider", live = true) { prefs.put(PreferenceKeys.BRIGHT, it) }
         SToggle(prefs, "Assombrir l'écran la nuit", "dimnight", false)
         SToggle(prefs, "Garder l'écran allumé", "keepon", true)
+        SToggle(prefs, "Garder l'écran allumé sans itinéraire", PreferenceKeys.KEEPON_NOROUTE, false, "Sur un téléphone, l'écran ne reste allumé que pendant le guidage. Activez pour le garder allumé quand vous regardez juste la carte et le trafic. Consomme plus de batterie")
         SToggle(prefs, "Panneaux en verre", "glass", true, "Cartes translucides teintées par la carte. Désactivé : cartes opaques")
         SToggle(prefs, "Nouvelle disposition en portrait", PreferenceKeys.PORTRAIT_SHEET, true, "Sur un écran vertical sans itinéraire : seulement la barre de recherche en haut, et vos lieux, la musique et les messages dans un volet en bas")
         SChoice("Position du logo Mapbox", listOf("tl" to "En haut à gauche", "tr" to "En haut à droite", "bl" to "En bas à gauche", "br" to "En bas à droite"), prefs.s(PreferenceKeys.MAPBOX_LOGO, "tr"),
@@ -1479,6 +1506,7 @@ private fun AndroidAutoSection(prefs: Prefs) {
             SSlider("Largeur de la carte de direction", prefs.i(PreferenceKeys.CAR_TURN_WIDTH, 100).toFloat(), 60f..130f, "%", sub = "Jusqu'où la carte de direction s'étend sur la carte", steps = 13, reset = 100f) { prefs.put(PreferenceKeys.CAR_TURN_WIDTH, it) }
             SSlider("Hauteur de la carte de direction", prefs.i(PreferenceKeys.CAR_TURN_HEIGHT, 100).toFloat(), 70f..130f, "%", sub = "L'espace au-dessus et au-dessous du texte", steps = 11, reset = 100f) { prefs.put(PreferenceKeys.CAR_TURN_HEIGHT, it) }
             SSlider("Taille des boutons", prefs.i(PreferenceKeys.CAR_BUTTON_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Commandes rondes et boutons tactiles", steps = 16, reset = 100f) { prefs.put(PreferenceKeys.CAR_BUTTON_SIZE, it) }
+            SSlider("Hauteur de la barre", prefs.i(PreferenceKeys.CAR_BAR_HEIGHT, 100).toFloat(), 70f..100f, "%", sub = "La barre de recherche en haut, plus fine pour laisser plus de carte", steps = 5, reset = 100f) { prefs.put(PreferenceKeys.CAR_BAR_HEIGHT, it) }
             SSlider("Taille du texte", prefs.i(PreferenceKeys.CAR_TEXT_SIZE, 100).toFloat(), 70f..150f, "%", sub = "Indépendant de la taille des cartes et des boutons", steps = 16, reset = 100f) { prefs.put(PreferenceKeys.CAR_TEXT_SIZE, it) }
             SSlider("Taille de la flèche de navigation", prefs.i(PreferenceKeys.CAR_ARROW_SIZE, 100).toFloat(), 30f..180f, "%", reset = 100f) { prefs.put(PreferenceKeys.CAR_ARROW_SIZE, it) }
             SSlider("Taille du nom de rue", prefs.i(PreferenceKeys.CAR_ROAD_NAME_SIZE, 100).toFloat(), 70f..200f, "%", sub = "Le nom de la route où vous êtes, sous votre flèche", steps = 12, reset = 100f) { prefs.put(PreferenceKeys.CAR_ROAD_NAME_SIZE, it) }
@@ -1560,6 +1588,7 @@ private fun PerformanceSection(prefs: Prefs) {
 private fun KeysSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Recherche") {
         SChoice("Résultats de recherche", searchCountryOptions(engine), searchCountryValue(prefs)) { prefs.put(PreferenceKeys.COUNTRY, it) }
+        SToggle(prefs, "Rechercher pendant la saisie", PreferenceKeys.SEARCH_AS_TYPE, true, "Affiche les résultats pendant que vous tapez. Désactivé : attend la touche de recherche du clavier, pour taper toute l'adresse d'abord")
         if (engine.hasKey && engine.hasMapbox) SChoice("Rechercher avec", listOf("auto" to "TomTom", "mapbox" to "Mapbox"), if (prefs.s(PreferenceKeys.SEARCHWITH, "auto") == "mapbox") "mapbox" else "auto",
             "Horizon Nav utilise la recherche TomTom : la meilleure pour les adresses et numéros de rue") { prefs.put(PreferenceKeys.SEARCHWITH, it) }
         else if (!engine.hasKey) SNote("Pour la recherche d'adresse la plus précise, ajoutez une clé TomTom gratuite ci-dessous.")
@@ -1848,7 +1877,7 @@ private fun LanguageRequestDialog(engine: NavEngine, onClose: () -> Unit) {
  * Day colours are shown; each one has its night version.
  */
 @Composable
-private fun MapColoursPicker(value: String, onPick: (String) -> Unit) {
+private fun MapColoursPicker(value: String, only: Set<String>? = null, onPick: (String) -> Unit) {
     val c = LocalVw.current
     // land, water, park, road, building
     val sets = listOf(
@@ -1871,7 +1900,7 @@ private fun MapColoursPicker(value: String, onPick: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         SItem("Couleurs", "Horizon : la carte Mapbox aux couleurs douces de l'appli, bleu ardoise la nuit. Crépuscule : la même avec une nuit plus violette. Nuit monochrome : des gris, seuls l'itinéraire et les alertes en couleur. Assorties à ma voiture : une touche de la couleur de l'éclairage intérieur de la voiture. Personnalisé : vos propres couleurs. Couleurs de jour affichées (la nuit pour Assorties à ma voiture) ; chacune a une version de nuit")
         Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            for ((id, name, cols) in sets) {
+            for ((id, name, cols) in sets.filter { only == null || it.first in only }) {
                 val sel = id == value
                 Column(
                     Modifier.width(124.dp).clip(RoundedCornerShape(14.dp)).background(c.tile)

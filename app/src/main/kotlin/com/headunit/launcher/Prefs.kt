@@ -131,6 +131,10 @@ internal object PreferenceKeys {
     const val LIMIT_SOUNDS = "limitsounds"
     /** Says "Slow down" after the beep for going over the limit (Dotancom #345). */
     const val SAY_SLOW_DOWN = "sayslowdown"
+    /** The sound of the over-the-limit and top-speed alerts: "double" (the usual beep), "siren" or "buzz" (ILDEMONICO, #335). */
+    const val SPEED_ALERT_SOUND = "speedalertsound"
+    /** Keeps the speed alert going with the app in the background, with or without a route (ILDEMONICO, #335). */
+    const val BG_SPEED_ALERT = "bgspeedalert"
     /** A top speed of your own (km/h, or mph in miles): a beep and "Slow down" when you reach it, whatever the limit. "0" is off (Dotancom #345). */
     const val ALERT_TOP_SPEED = "topspeed"
     /** The pop-up banner when the limit changes (karthikeyansr #328): off leaves the sign itself (it pulses) and the one on the route. */
@@ -192,6 +196,10 @@ internal object PreferenceKeys {
     const val DRIVELOCK = "drivelock"
     /** The media bar on the driving screen (Reddit, mrEnmi). */
     const val MEDIA_BAR = "media_bar"
+    /** The Clean view button on the map: 0 everything, 1 minimal (turn card, speed, trip), 2 the map only (#358). */
+    const val CLEAN_VIEW = "cleanview"
+    /** Map buttons switched off in Settings > Map buttons, comma separated (compass, report, sound, routes, clean, overview). Overview starts off. */
+    const val RAIL_HIDDEN = "rail_hidden"
     const val DRIVESIMPLE = "drivesimple"
     const val EVMPK = "evmpk"
     const val EVPPK = "evppk"
@@ -210,6 +218,8 @@ internal object PreferenceKeys {
     const val HAZARDRADAR = "hazardradar"
     const val INCIDENTS = "incidents"
     const val KEEPON = "keepon"
+    /** Phone: keep the screen on with no route too, for watching the traffic on the map (#369). */
+    const val KEEPON_NOROUTE = "keepon_noroute"
     const val LAMPGAP = "lampgap"
     const val LANDMARKS3D = "landmarks3d"
     const val LANEMAP = "lanemap"
@@ -239,6 +249,12 @@ internal object PreferenceKeys {
     const val POLICEREP = "policerep"
     const val PREDICT = "predict"
     const val QUICKLIST = "quicklist"
+    /** Turn card colour: green (usual), black, grey, navy, purple. */
+    const val TURN_CARD_COLOUR = "turncardcolour"
+    /** Android Auto: search bar height, 70 to 100 per cent. */
+    const val CAR_BAR_HEIGHT = "carbarheight"
+    /** Search as you type (on), or only when you press the keyboard's search key (off). */
+    const val SEARCH_AS_TYPE = "searchastype"
     /** The largest Overall size (%) the car screen last seen fits without a cramped layout (written by the car, shown in the setting). */
     const val CARSCALE_MAX = "carscale_max"
     /** Android Auto: the search bar, Home / Work and shortcuts drawn on the map (off for rotary-knob cars that can't tap them, #222). */
@@ -423,6 +439,8 @@ internal object PreferenceKeys {
     const val VOICE_PAUSES_MUSIC = "voicepausesmusic"
     /** The voice is made into a sound file and played by the app itself, like the chimes (bluelions25 #331). */
     const val VOICE_VIA_APP = "voiceviaapp"
+    /** How much louder the voice the app plays itself is made, in dB (0 to 18; Mirrrik #362). */
+    const val VOICE_GAIN = "voicegain"
     /** Where the voice and chimes come out: "auto" (wherever Android sends them) or "phone" (the phone's own speaker; benkkwok #314). */
     const val VOICE_OUT = "voiceout"
     const val APP_LANG = "applang"
@@ -449,6 +467,10 @@ internal object PreferenceKeys {
     const val EV_PCT_CARD = "evpctcard"
     const val EV_CHARGE_PCT = "evcharge"
     const val EV_MIN_ARRIVE = "evminarr"
+    const val EV_MIN_KW = "evminkw"
+    const val EV_PROVIDERS = "evproviders"
+    /** Chargers along a route: the most minutes of detour to show, 0 for the usual (#343). */
+    const val EV_DETOUR_MIN = "evdetourmin"
 }
 
 /**
@@ -598,12 +620,15 @@ fun Prefs.locatorSpec(): Pair<String, String> {
     }
 }
 
+/** Android Auto: how much smaller the arrow goes on a small screen, 1 on a big one (#367). Set by CarNav when the screen size is known. */
+@Volatile var carScreenFit: Float = 1f
+
 /**
  * The arrow's size on the Android Auto map: the app's arrow size, normalised for the smaller car surface (so the 240% main-app
  * default doesn't make an enormous arrow there), times the car screen's own "Navigation arrow size".
  */
 fun Prefs.carArrowScale(): Float =
-    ((s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(0.6f, 5f) * 0.9f * (i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(30, 180) / 100f)
+    carScreenFit * ((s(PreferenceKeys.ARROW_PERCENT, "240").toIntOrNull() ?: 240) / 100f).coerceIn(0.6f, 5f) * 0.9f * (i(PreferenceKeys.CAR_ARROW_SIZE, 100).coerceIn(30, 180) / 100f)
 
 /** Settings > Map > Map detail: "full", "lite" or "lightest" (the old "Light map" switch counts as lite). */
 fun Prefs.mapDetail(): String = s(PreferenceKeys.MAP_DETAIL, if (b(PreferenceKeys.MAP_LITE, false)) "lite" else "full")

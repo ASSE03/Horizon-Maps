@@ -616,6 +616,10 @@ internal fun NearbyCard(engine: NavEngine) {
             if (engine.nearbyBusy) CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
             Icon(Icons.Rounded.Close, "Fermer", tint = c.sub, modifier = Modifier.padding(start = 12.dp).size(22.dp).clickable { engine.clearNearby() })
         }
+        if (engine.nearbyKind == "charging") engine.chargerFilterText().takeIf { it.isNotEmpty() }?.let { ft ->
+            Text("Filter: $ft", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.55f)).padding(horizontal = 12.dp, vertical = 6.dp))
+        }
         if (hasPrices) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Pill(if (along) "Les plus proches sur le trajet" else "Les plus proches", engine.nearbySort != "cheap", { engine.changeNearbySort("near") })
             Pill("Les moins chers", engine.nearbySort == "cheap", { engine.changeNearbySort("cheap") })
@@ -905,17 +909,30 @@ internal fun DemoChoiceBtn(engine: NavEngine, modifier: Modifier = Modifier, hei
  * (Settings › Places and trips › Live fuel cost, ZarulOfficial #316). Nothing when it's off or no economy and price are set.
  */
 @Composable
-internal fun LiveFuelLine(engine: NavEngine, modifier: Modifier = Modifier) {
+internal fun LiveFuelLine(engine: NavEngine, modifier: Modifier = Modifier, column: Boolean = false) {
     if (!engine.liveFuelOn()) return
     // (to the nearest 100 m: the line doesn't need redrawing for every metre)
     val driven = Math.round(engine.drivenThisRoute / 100.0) * 100.0
     val cost = engine.fuelCostOf(driven) ?: return
     val c = LocalVw.current
     val ev = engine.prefs.s(PreferenceKeys.FUEL_TYPE, "E10") == "EV"
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+    val costText = "${formatMoney(engine.prefs, cost)} so far"
+    val distanceText = "${Geo.fmtDist(driven, engine.imperial)} driven"
+    if (column) {
+        Column(modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Box(Modifier.width(100.dp).height(1.dp).background(c.line))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(if (ev) Icons.Rounded.EvStation else Icons.Rounded.LocalGasStation, null, tint = c.sub, modifier = Modifier.size(14.dp))
+                Text(costText, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.DirectionsCar, null, tint = c.sub, modifier = Modifier.size(14.dp))
+                Text(distanceText, color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp))
+            }
+        }
+    } else Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(if (ev) Icons.Rounded.EvStation else Icons.Rounded.LocalGasStation, null, tint = c.sub, modifier = Modifier.size(14.dp))
-        Text("${formatMoney(engine.prefs, cost)} so far" + " · " + "${Geo.fmtDist(driven, engine.imperial)} driven",
-            color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp))
+        Text("$costText · $distanceText", color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp))
     }
 }
 

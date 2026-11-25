@@ -120,6 +120,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private var meHeading = 0.0
 
     var onLongPress: ((LL) -> Unit)? = null
+    /** The map's turn from north, in degrees, whenever the camera moves. */
+    var onBearing: ((Double) -> Unit)? = null
     var onUserGesture: (() -> Unit)? = null
     var onStyleLoaded: (() -> Unit)? = null
 
@@ -213,7 +215,13 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         mapView.gestures.addOnMapLongClickListener { p -> onLongPress?.invoke(LL(p.latitude(), p.longitude())); true }
         mapView.gestures.addOnMapClickListener { p ->
             main0.postDelayed({ tapClears() }, 150L)
-            try { val s = mbMap.pixelForCoordinate(p); tapAt(android.graphics.PointF(s.x.toFloat(), s.y.toFloat())) } catch (e: Throwable) { false }
+            try {
+                val s = mbMap.pixelForCoordinate(p)
+                val pt = android.graphics.PointF(s.x.toFloat(), s.y.toFloat())
+                val handled = tapAt(pt)
+                if (!handled) classicPoiTap(pt)
+                handled
+            } catch (e: Throwable) { false }
         }
         // any touch that moves the map (drag, pinch, twist, two-finger tilt) stops the follow camera
         mapView.gestures.addOnMoveListener(object : OnMoveListener {
@@ -242,6 +250,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // zooming across the level where the turn arrow appears or goes: put the route back together (or cut it for the arrow)
             if (turnCut != null && cutZoomOk() != cutActive) try { setLine(main) } catch (e: Exception) { }
             placeAltCards(false)
+            // the compass on the side follows the map's real turn, however it was turned (your heading, your fingers, north up)
+            try { onBearing?.invoke(mbMap.cameraState.bearing) } catch (e: Throwable) { }
             refreshLamps(); refreshSignals(); sizeFurniture()
             // (while you drive the map never stops moving, so the roads on screen are read on the move too, every few seconds)
             refreshRoads()
@@ -555,8 +565,16 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val d = CustomLook.parse(dayJson); val n = CustomLook.parse(nightJson)
         val k = (if (on) widthPct.coerceIn(60, 180) else 100) / 100f
         if (on == customOn && d == customDay && n == customNight && k == customRouteK) return
+        val wasOn = customOn
         val reload = on != customOn || k != customRouteK || (on && (d.route != customDay.route || n.route != customNight.route))
         customOn = on; customDay = d; customNight = n; customRouteK = k
+        // TomTom and OpenStreetMap: recoloured in place while Custom stays on, otherwise the map is loaded again (with or without the colours)
+        if (!isMapboxStyle(wantedStyle)) {
+            val st = style
+            if (on && wasOn && st != null) { try { recolourClassic(st) } catch (e: Throwable) { } }
+            else if (st != null && wantedStyle != null && !slotsOn) { loadedStyle = null; setStyleUrl(wantedStyle!!) }
+            return
+        }
         if (reload) { if (isMapboxStyle(wantedStyle) && style != null) { loadedStyle = null; setStyleUrl(baseStyle()) } }
         else applyCustom()
     }
@@ -669,13 +687,15 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                     val wet = o.weatherLight && (raining() || snowing())
                     lightJson(if (wet) "#DCE0E6" else "#F2F4F7", (if (wet) 0.86 else 0.92) * kd, "#FFFFFF", 0.08 * kd, 180.0, 30.0, false, 0.0)
                 } else {
-                    var az = 180.0; var polar = 30.0
+                    var az = 180.0; var polar = 30.0; var sunUp = 1.0
                     if (o.sunReal) try {
                         val c = mbMap.cameraState.center
                         val (a, el) = Sun.position(c.latitude(), c.longitude(), System.currentTimeMillis())
                         az = a; polar = (90.0 - el).coerceIn(15.0, 75.0)
+                        // after sunset the sun's light and shadows fade out over the last few degrees, instead of staying on all evening (ILDEMONICO, #335)
+                        sunUp = (el / 8.0).coerceIn(0.0, 1.0)
                     } catch (e: Throwable) { }
-                    lightJson("#FFFFFF", 0.8 * kd, "#FFFFFF", 0.2 * kd, az, polar, o.shadows, 0.3)
+                    lightJson("#FFFFFF", 0.8 * kd, "#FFFFFF", 0.2 * kd * sunUp, az, polar, o.shadows && sunUp > 0.0, 0.3 * sunUp)
                 }
             }
             else -> null
@@ -1801,6 +1821,29 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         } catch (e: Throwable) { }
     }
 
+    /** A shop or place tapped on the TomTom or OpenStreetMap map (Mapbox's own map reports these itself): the same place card. */
+    private fun classicPoiTap(sp: android.graphics.PointF) {
+        if (!tapSelectOn || isMapboxStyle(wantedStyle) || wantedStyle == null) return
+        val st = style ?: return
+        val ids = try { st.styleLayers.filter { it.type == "symbol" && it.id.lowercase().contains("poi") }.map { it.id } } catch (e: Throwable) { emptyList() }
+        if (ids.isEmpty()) return
+        val r = 22f * mapView.resources.displayMetrics.density
+        query(RectF(sp.x - r, sp.y - r, sp.x + r, sp.y + r), ids, 1500L) { list ->
+            // (the first one with a name: nameless places are ignored)
+            for (f in list ?: return@query) {
+                var n: String? = null
+                for (k in listOf("name:latin", "name", "name_en")) {
+                    val v = try { f.getStringProperty(k) } catch (e: Throwable) { null }
+                    if (!v.isNullOrBlank()) { n = v; break }
+                }
+                if (n == null) continue
+                val g = f.geometry() as? com.mapbox.geojson.Point ?: continue
+                onPoiTap?.invoke(n, LL(g.latitude(), g.longitude()))
+                return@query
+            }
+        }
+    }
+
     private fun installTapSelect() {
         try {
             mbMap.addInteraction(com.mapbox.maps.ClickInteraction.standardBuildings { f, _ ->
@@ -2607,9 +2650,10 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val dayLook = !nightStyle
         bubImgs.clear(); laneImgs.clear()
         // the classic map in the Horizon colours
-        if (!slotsOn && !satellite && (hzFamily() || recolourBase)) try { recolourClassic(st) } catch (e: Throwable) { }
+        if (!slotsOn && !satellite && (hzFamily() || recolourBase || (customOn && !isMapboxStyle(wantedStyle)))) try { recolourClassic(st) } catch (e: Throwable) { }
         // Standard's newer settings are set once it's loaded (so a style that doesn't know one can't stop the map loading)
         if (!satellite) {
+            setBase("show3dObjects", Value.valueOf(buildings3d && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
             setBase("show3dTrees", Value.valueOf(treesOn)); setBase("showLandmarkIcons", Value.valueOf(!lite))
             // lane markings, turn arrows, stop lines and 3D overpasses where Mapbox has them (Full 3D only)
             setBase("showHdRoads", Value.valueOf(hdRoadsOn && MapStylePolicy.supportsFullDetailFeatures(mapDetail)))
@@ -2660,7 +2704,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // lane bands: each lane drawn as a strip along the road before a junction, the lane(s) you need lit, the others dimmed, with dashed dividers
         addS(st, GeoJsonSource.Builder("dl-lane-bands").featureCollection(empty()).build())
         addS(st, GeoJsonSource.Builder("dl-lane-divs").featureCollection(empty()).build())
-        fun ln(id: String, src: String) = LineLayer(id, src).inSlot(MID).lineEmissiveStrength(1.0).lineCap(LineCap.ROUND).lineJoin(LineJoin.ROUND)
+        fun ln(id: String, src: String, slot: String = MID) = LineLayer(id, src).inSlot(slot).lineEmissiveStrength(1.0).lineCap(LineCap.ROUND).lineJoin(LineJoin.ROUND)
         // average speed zones on the route: the stretch between the cameras shaded yellow, with dashed yellow edges (under the route)
         addS(st, GeoJsonSource.Builder("dl-avg").featureCollection(FeatureCollection.fromFeatures(avgZoneLines.filter { it.size >= 2 }.map { line(it) })).build())
         val bandW = zoomed(2.0, 12 to 8.0, 16 to 30.0, 20 to 480.0)
@@ -2734,19 +2778,6 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             .iconOpacity(0.75).iconEmissiveStrength(1.0)
             .iconSize(zoomed(1.0, 15 to 0.28, 18 to 0.5, 20 to 0.7))
             .minZoom(15.0).visibility(vis(chevOn)))
-        // the turn arrow: (by day) a soft dark halo so it stands out on the light map, a dark edge, a white shaft and a white head
-        if (dayLook) addL(st, ln("dl-turn-soft", "dl-turn").lineColor("#16467A").lineWidth(routeW(1.62f)).lineBlur(routeW(0.3f)).lineOpacity(0.35).minZoom(13.0))
-        addL(st, ln("dl-turn-case", "dl-turn").lineColor("#16467A").lineWidth(routeW(1.28f)).minZoom(13.0))
-        addL(st, ln("dl-turn-line", "dl-turn").lineColor("#FFFFFF").lineWidth(routeW(1.08f)).minZoom(13.0))
-        addImg(st, "dl-turn-head-img", turnHeadBitmap(dayLook))
-        addL(st, SymbolLayer("dl-turn-head", "dl-turn-head").inSlot(MID)
-            .iconImage("dl-turn-head-img").iconRotate(Expression.get("b"))
-            .iconRotationAlignment(IconRotationAlignment.MAP).iconPitchAlignment(IconPitchAlignment.MAP)
-            .iconAllowOverlap(true).iconIgnorePlacement(true).iconEmissiveStrength(1.0)
-            // the head's base sits exactly on the end of the shaft, and grows with the zoom the same way the line does
-            .iconAnchor(IconAnchor.BOTTOM)
-            .iconSize(zoomed(1.7, 10 to headSize(3f), 13 to headSize(6.5f), 15 to headSize(10f), 17 to headSize(16f), 19 to headSize(24f)))
-            .minZoom(13.0))
         // the part of the route you have already driven turns grey, drawn over the blue
         addL(st, ln("dl-done-casing", "dl-done").lineColor(if (im) "#B4B9CE" else "#C3C8D8").lineWidth(routeW(if (im) 1.5f else 1.25f)).lineOpacity(0.9).lineCap(LineCap.BUTT))
         addL(st, ln("dl-done-line", "dl-done").lineColor(if (im) "#7E849F" else "#8C92AC").lineWidth(routeW(if (im) 1.0f else 0.85f)).lineCap(LineCap.BUTT))
@@ -2777,6 +2808,19 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             addL(st, l)
             if (on == 1) lanesOnLayer = l
         }
+        // Keep the entire turn arrow above the route x-ray (in Standard's top slot) and lane overlays; classic uses insertion order.
+        if (dayLook) addL(st, ln("dl-turn-soft", "dl-turn", TOP).lineColor("#16467A").lineWidth(routeW(1.62f)).lineBlur(routeW(0.3f)).lineOpacity(0.35).minZoom(13.0))
+        addL(st, ln("dl-turn-case", "dl-turn", TOP).lineColor("#16467A").lineWidth(routeW(1.28f)).minZoom(13.0))
+        addL(st, ln("dl-turn-line", "dl-turn", TOP).lineColor("#FFFFFF").lineWidth(routeW(1.08f)).minZoom(13.0))
+        addImg(st, "dl-turn-head-img", turnHeadBitmap(dayLook))
+        addL(st, SymbolLayer("dl-turn-head", "dl-turn-head").inSlot(TOP)
+            .iconImage("dl-turn-head-img").iconRotate(Expression.get("b"))
+            .iconRotationAlignment(IconRotationAlignment.MAP).iconPitchAlignment(IconPitchAlignment.MAP)
+            .iconAllowOverlap(true).iconIgnorePlacement(true).iconEmissiveStrength(1.0)
+            // the head's base sits exactly on the end of the shaft, and grows with the zoom the same way the line does
+            .iconAnchor(IconAnchor.BOTTOM)
+            .iconSize(zoomed(1.7, 10 to headSize(3f), 13 to headSize(6.5f), 15 to headSize(10f), 17 to headSize(16f), 19 to headSize(24f)))
+            .minZoom(13.0))
         // street lamps (3D models, see StreetLamps below); and the road data used for lamps and road snapping
         installLamps(st)
         installRoadData(st)
@@ -3045,14 +3089,16 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
      */
     private fun recolourClassic(st: Style) {
         val dark = nightStyle
-        val land = if (dark) "#2D3358" else "#F4F2EE"
-        val water = if (dark) "#2A6682" else "#AADAF5"
-        val park = if (dark) "#2E5C5E" else "#CDEBC4"
-        val bld = if (dark) "#454C78" else "#E7E5E1"
+        // Custom colours (Settings > Map) on the TomTom and OpenStreetMap maps: the parts picked there replace the Horizon colours
+        val own = if (isMapboxStyle(wantedStyle)) emptyMap() else customSpec()?.colours ?: emptyMap()
+        val land = own["land"] ?: if (dark) "#2D3358" else "#F4F2EE"
+        val water = own["water"] ?: if (dark) "#2A6682" else "#AADAF5"
+        val park = own["green"] ?: if (dark) "#2E5C5E" else "#CDEBC4"
+        val bld = own["buildings"] ?: if (dark) "#454C78" else "#E7E5E1"
         // (by day the original made road fills 20% darker after painting them white: #CCCCCC)
-        val roadFill = if (dark) "#464E7C" else "#CCCCCC"
+        val roadFill = own["roads"] ?: if (dark) "#464E7C" else "#CCCCCC"
         val roadCase = if (dark) "#262B4B" else "#DCDAD5"
-        val hwyFill = if (dark) "#5E67A0" else "#CCCCCC"
+        val hwyFill = own["main"] ?: if (dark) "#5E67A0" else "#CCCCCC"
         val hwyCase = if (dark) "#2B3052" else "#CFCCC6"
         val rail = if (dark) "#454C70" else "#D2D0CB"
         val text = if (dark) "#C9CEE8" else "#5F6368"
@@ -3361,6 +3407,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         if (board == "us" || board == "ca") {
             val w = (44f * d).toInt(); val h = (54f * d).toInt(); val m = 3f * d
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            bmp.density = mapView.resources.displayMetrics.densityDpi
             val c = Canvas(bmp)
             c.drawRoundRect(RectF(m, m + 1.5f * d, w - m, h - m + 1.5f * d), 7f * d, 7f * d, p(0x55000000))
             c.drawRoundRect(RectF(0f, 0f, w.toFloat(), h - 1.5f * d), 8f * d, 8f * d, p(0xFFFFFFFF.toInt()))
@@ -3374,7 +3421,10 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             return bmp
         }
         val size = (54f * d).toInt()
+        // marked with the map's own screen density, as it's drawn at it: left unmarked it took the phone's, so on the car screen (a
+        // lower density) the sign came out a fraction of its size (as the "what's here" card did, #240)
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        bmp.density = mapView.resources.displayMetrics.densityDpi
         val c = Canvas(bmp)
         val cx = size / 2f; val cy = size / 2f - 1f * d
         val halo = size / 2f - 1.5f * d
@@ -3520,8 +3570,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     /** The route's badges' size by zoom, times each one's own scale ("sc": the camera size setting for speed cameras, 1 for the rest). */
     private val HAZ_SIZE = "[\"interpolate\",[\"linear\"],[\"zoom\"]," +
         listOf(11 to 0.45, 15 to 0.75, 18 to 1.0).joinToString(",") { (z, v) -> "$z,[\"*\",$v,[\"coalesce\",[\"get\",\"sc\"],1]]" } + "]"
-    /** Map icons by kind: camera, roadworks, closure, police, accident, hazard, breakdown, mobile camera. */
-    private val hazardNames = arrayOf("dl-hz-cam", "dl-hz-work", "dl-hz-closed", "dl-hz-police", "dl-hz-accident", "dl-hz-hazard", "dl-hz-breakdown", "dl-hz-mobilecam")
+    /** Map icons by kind: camera, roadworks, closure, police, accident, hazard, breakdown, mobile camera, traffic jam. */
+    private val hazardNames = arrayOf("dl-hz-cam", "dl-hz-work", "dl-hz-closed", "dl-hz-police", "dl-hz-accident", "dl-hz-hazard", "dl-hz-breakdown", "dl-hz-mobilecam", "dl-hz-traffic")
 
     /** Icons for speed cameras (0), roadworks (1) and closures (2) along the route. */
     fun setHazards(list: List<Pair<LL, Int>>) { hazards = list; pushHazards() }
@@ -3615,6 +3665,11 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                 c.drawRoundRect(android.graphics.RectF(cx - 11f, cx - 13f, cx + 11f, cx - 2f), 5f, 5f, p(0xFFFFFFFF.toInt()))
                 c.drawCircle(cx - 10f, cx + 11f, 4.5f, p(0xFF37474F.toInt()))
                 c.drawCircle(cx + 10f, cx + 11f, 4.5f, p(0xFF37474F.toInt()))
+            }
+            8 -> {
+                badge(0xFF7F1020.toInt(), 0xFFC62839.toInt(), "")
+                // a queue: three cars nose to tail
+                for (dx in floatArrayOf(-20f, -3f, 14f)) c.drawRoundRect(android.graphics.RectF(cx + dx - 6f, cx - 8f, cx + dx + 6f, cx + 9f), 3f, 3f, p(0xFFFFFFFF.toInt()))
             }
             7 -> {
                 c.drawCircle(cx, cx + 2f, 38f, p(0x55000000))

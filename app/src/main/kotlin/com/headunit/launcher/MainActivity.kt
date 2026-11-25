@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
         ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     /** A route is being followed (not just previewed) or the demo drive is on, so guidance should carry on when another app is in front. */
+    private var idleStopped = false
     private fun guiding() = (engine.route != null && !engine.previewing) || engine.simMode != 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -121,10 +122,11 @@ class MainActivity : ComponentActivity() {
 
         // while a route runs, a foreground service keeps GPS and voice going in the background; it stops when the route ends
         lifecycleScope.launch {
-            snapshotFlow { if (guiding()) (engine.dest?.name ?: "votre destination") else null }
+            // (Settings › Alerts › Speed alert in the background: with no route, "" keeps the service and GPS going just for the alert)
+            snapshotFlow { if (guiding()) (engine.dest?.name ?: "votre destination") else if (engine.prefs.b(PreferenceKeys.BG_SPEED_ALERT, false)) "" else null }
                 .distinctUntilChanged()
                 .collect { to ->
-                    if (to != null && hasLocation()) NavService.start(applicationContext, "Guidage vers $to")
+                    if (to != null && hasLocation()) NavService.start(applicationContext, if (to.isEmpty()) "Alerte de vitesse active" else "Guidage vers $to")
                     else if (to == null && !RouteSync.carConnected()) {
                         // (not while Android Auto is showing the map: its location service is the same one, and stays on)
                         NavService.stop(applicationContext)
@@ -132,6 +134,24 @@ class MainActivity : ComponentActivity() {
                         if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) engine.stopLocation()
                     }
                 }
+        }
+
+        // a route (or the background speed alert) left running while you've parked and gone off to something else: after 30 minutes
+        // without moving more than 200 m, with the app out of sight, the service and GPS rest (they start again when you open the app)
+        lifecycleScope.launch {
+            var anchor: LL? = null; var since = 0L
+            while (true) {
+                kotlinx.coroutines.delay(120_000L)
+                val p = engine.fix?.pos
+                val watching = !engine.appVisible && !RouteSync.carConnected() && (guiding() || engine.prefs.b(PreferenceKeys.BG_SPEED_ALERT, false))
+                if (!watching || p == null) { anchor = null; continue }
+                val a = anchor
+                if (a == null || Geo.dist(a, p) > 200.0) { anchor = p; since = System.currentTimeMillis(); continue }
+                if (System.currentTimeMillis() - since >= 30 * 60_000L) {
+                    idleStopped = true
+                    NavService.stop(applicationContext); engine.stopLocation(); anchor = null
+                }
+            }
         }
 
         // Full screen switched on or off in Settings: the bars hide or come back straight away
@@ -175,6 +195,7 @@ class MainActivity : ComponentActivity() {
         try {
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             WindowCompat.setDecorFitsSystemWindows(window, false)
+            cutoutMode(true)
             WindowInsetsControllerCompat(window, window.decorView).apply {
                 hide(WindowInsetsCompat.Type.systemBars())
                 systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -247,12 +268,27 @@ class MainActivity : ComponentActivity() {
         try {
             window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             WindowCompat.setDecorFitsSystemWindows(window, true)
+            cutoutMode(false)
             WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
             if (Build.VERSION.SDK_INT < 30) {
                 @Suppress("DEPRECATION")
                 window.decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
             }
         } catch (e: Exception) { }
+    }
+
+    /**
+     * Full screen reaches into the camera notch's strip. Android 15 does this by itself; from Android 9 to 14 a full-screen window
+     * stops short of it unless asked, so the map sat under a black band (Huawei P30 Pro, GitHub #271). SafeArea keeps the cards clear.
+     */
+    private fun cutoutMode(reach: Boolean) {
+        if (Build.VERSION.SDK_INT < 28) return
+        com.headunit.launcher.ui.NotchUi.reach = reach
+        val mode = if (reach) WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            else WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+        // (only when it changes: setting it lays the window out again, and this runs every time the bars are hidden)
+        if (window.attributes.layoutInDisplayCutoutMode == mode) return
+        window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = mode }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -301,6 +337,13 @@ class MainActivity : ComponentActivity() {
         engine.onOpened()
         // after the permission dialog closes, wait a beat so the UI is settled before starting GPS
         if (hasLocation()) window.decorView.postDelayed({ if (!isFinishing && !isDestroyed) engine.startLocation() }, 400)
+        if (idleStopped) {
+            idleStopped = false
+            if (hasLocation()) {
+                if (guiding()) NavService.start(applicationContext, "Guidage vers " + (engine.dest?.name ?: "votre destination"))
+                else if (engine.prefs.b(PreferenceKeys.BG_SPEED_ALERT, false)) NavService.start(applicationContext, "Alerte de vitesse active")
+            }
+        }
         // the daily automatic backup, if it's on and due (a minute in, once the start's heavy work is done; its own thread)
         window.decorView.postDelayed({ if (!isFinishing && !isDestroyed) try { Backup.maybeRun(applicationContext, engine.prefs) } catch (e: Throwable) { } }, 60_000L)
     }
@@ -318,7 +361,7 @@ class MainActivity : ComponentActivity() {
         if (!::engine.isInitialized) return
         engine.appVisible = false
         // with no route there is nothing to guide, so GPS is switched off while the app is in the background
-        if (!guiding()) engine.stopLocation()
+        if (!guiding() && !engine.prefs.b(PreferenceKeys.BG_SPEED_ALERT, false)) engine.stopLocation()
     }
 
     override fun onDestroy() {

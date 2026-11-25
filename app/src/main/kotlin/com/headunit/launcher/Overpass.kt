@@ -44,14 +44,35 @@ object Overpass {
     /** Runs a query for other parts of the app (route extras, zones). */
     fun query(q: String, connectMs: Int = 10000, readMs: Int = 30000, tries: Int = endpoints.size): JSONArray = run(q, connectMs, readMs, tries)
 
+    /** When each server last failed (elapsedRealtime ms, 0 = not lately). */
+    private val failedAt = java.util.concurrent.atomic.AtomicLongArray(endpoints.size)
+    /** A server that has just failed is tried after the others for this long. */
+    private const val COOL_MS = 3 * 60_000L
+
+    /** A short name for the settings page and reports (kumi and private.coffee both start "overpass.", which read as overpass-api.de). */
+    private fun label(host: String): String = when {
+        host.startsWith("overpass-api.") -> "overpass-api"
+        host.endsWith("kumi.systems") -> "kumi"
+        host.endsWith("private.coffee") -> "private.coffee"
+        host.endsWith("mail.ru") -> "mail.ru"
+        else -> host.removePrefix("www.").substringBefore('.')
+    }
+
+    /**
+     * The servers in the order to try: the one that answered last first, then the rest, with any that failed in the last few minutes
+     * at the back (longest ago first, so each search moves on to others). A search with two tries only ever asked the same two
+     * servers, so with those two down every search failed and the other two were never asked (GitHub #271).
+     */
+    internal fun order(preferred: Int, failedAt: LongArray, now: Long): List<Int> {
+        val all = failedAt.indices.map { (preferred + it) % failedAt.size }
+        val (cool, fresh) = all.partition { failedAt[it] != 0L && now - failedAt[it] < COOL_MS }
+        return fresh + cool.sortedBy { failedAt[it] }
+    }
+
     private fun run(query: String, connectMs: Int = 8000, readMs: Int = 18000, tries: Int = endpoints.size): JSONArray {
         val errors = ArrayList<String>()
-        // fork FR : les serveurs qui viennent d'échouer (502, délai dépassé) passent en dernier pendant 5 minutes,
-        // pour que les essais aillent d'abord aux serveurs qui répondent
-        val now = System.currentTimeMillis()
-        val order = (0 until endpoints.size).map { (preferred + it) % endpoints.size }.sortedBy { if (downUntil[it] > now) 1 else 0 }
-        for (n in 0 until minOf(tries, endpoints.size)) {
-            val idx = order[n]
+        val order = order(preferred, LongArray(endpoints.size) { failedAt.get(it) }, android.os.SystemClock.elapsedRealtime())
+        for (idx in order.take(minOf(tries, endpoints.size))) {
             val ep = endpoints[idx]
             val host = ep.removePrefix("https://").substringBefore('/')
             try {
@@ -72,10 +93,14 @@ object Overpass {
                 if (remark.contains("error", true) || remark.contains("timed out", true) || remark.contains("out of memory", true) || remark.contains("timeout", true))
                     throw IOException("busy (" + remark.take(50) + ")")
                 val els = j.optJSONArray("elements") ?: JSONArray()
-                preferred = idx; downUntil[idx] = 0L
-                lastNote = host.removePrefix("www.").substringBefore('.') + " ok"
+                preferred = idx
+                failedAt.set(idx, 0L)
+                lastNote = label(host) + " ok"
                 return els
-            } catch (e: Exception) { downUntil[idx] = System.currentTimeMillis() + 5 * 60_000L; errors += host.removePrefix("www.").substringBefore('.') + ": " + (e.message ?: e.javaClass.simpleName) }
+            } catch (e: Exception) {
+                failedAt.set(idx, android.os.SystemClock.elapsedRealtime())
+                errors += label(host) + ": " + (e.message ?: e.javaClass.simpleName)
+            }
         }
         lastNote = errors.joinToString("; ")
         throw IOException(errors.joinToString("; "))
@@ -301,7 +326,9 @@ object Overpass {
             val t = w.tags
             // a limit that differs by direction: forward is the way the road is drawn
             val dirKey = if (heading >= 0 && bDiff > 90.0) "maxspeed:backward" else "maxspeed:forward"
-            val posted = parseSpeed(t.optString(dirKey), country)
+            // heading not known: if the two directions differ, the lower is the safer one to show
+            val bothWays = if (heading < 0) listOfNotNull(parseSpeed(t.optString("maxspeed:forward"), country), parseSpeed(t.optString("maxspeed:backward"), country)).minOrNull() else null
+            val posted = bothWays ?: parseSpeed(t.optString(dirKey), country)
                 ?: parseSpeed(t.optString("maxspeed"), country)
                 ?: parseSpeed(t.optString("maxspeed:type"), country)
                 ?: parseSpeed(t.optString("source:maxspeed"), country)
@@ -608,15 +635,22 @@ object Overpass {
                 }
                 "charging" -> {
                     val sockets = ArrayList<String>()
+                    var maxKw = 0.0
                     val it2 = tags.keys()
                     while (it2.hasNext()) {
                         val k = it2.next()
+                        // the speed where it's mapped ("socket:type2_combo:output" = "150 kW"), for the charger speed filter
+                        if (k.startsWith("socket:") && k.endsWith(":output")) Regex("(\\d+(?:\\.\\d+)?)\\s*(kW|W)?", RegexOption.IGNORE_CASE).find(tags.optString(k))?.let { m ->
+                            val v = m.groupValues[1].toDoubleOrNull() ?: 0.0
+                            maxKw = kotlin.math.max(maxKw, if (m.groupValues[2].equals("W", true)) v / 1000.0 else v)
+                        }
                         if (k.startsWith("socket:") && k.count { ch -> ch == ':' } == 1) {
                             val nice = k.removePrefix("socket:").replace("_", " ")
                             val cnt = tags.optString(k)
                             sockets += if (cnt.toIntOrNull() != null) "$nice ×$cnt" else nice
                         }
                     }
+                    if (maxKw > 0) extra += "${Math.round(maxKw)} kW"
                     if (sockets.isNotEmpty()) extra += sockets.take(3).joinToString(", ")
                     tags.optString("capacity").takeIf { it.isNotBlank() }?.let { extra += "$it points de charge" }
                     tags.optString("operator").takeIf { it.isNotBlank() && it != name }?.let { extra += it }
