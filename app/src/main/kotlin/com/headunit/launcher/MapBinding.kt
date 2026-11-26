@@ -828,9 +828,13 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     }
 
     /** Adds a picture to the map at the size MapLibre gave it (its pixels at the bitmap's own density). */
+    /** How wide each picture shows on the map at size 1 (map units), whatever pixels it was drawn with. */
+    private val imgW = HashMap<String, Float>()
+
     private fun addImg(st: Style, id: String, b: Bitmap) {
         try {
             val scale = (if (b.density > 0) b.density else android.util.DisplayMetrics.DENSITY_DEFAULT) / android.util.DisplayMetrics.DENSITY_DEFAULT.toFloat()
+            imgW[id] = b.width / scale.coerceAtLeast(0.1f)
             st.addStyleImage(id, scale, b.toMapboxImage(), false, emptyList(), emptyList(), null)
         } catch (e: Throwable) { }
     }
@@ -1351,6 +1355,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     // ---- zebra crossings on the route ----
     /** Each crossing: where, the road's direction there, and whether it's a zebra (with Belisha beacons). */
     private var crossings: List<Triple<LL, Double, Boolean>> = emptyList()
+    /** Speed bumps and raised tables on the active route, from the same OpenStreetMap lookup as route warnings. */
+    private var speedBumps: List<LL> = emptyList()
+    private fun speedBumpFeats(): List<Feature> = speedBumps.map { Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat)) }
 
     private fun zebraFeats(): List<Feature> = crossings.map { (p, b, _) ->
         Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)).also { it.addNumberProperty("r", b) }
@@ -1430,6 +1437,14 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         }
     }
 
+    /** Speed-bump markers on the route. This reuses the route's existing hazard lookup; it makes no extra network request. */
+    fun setSpeedBumps(list: List<LL>) {
+        main0.post {
+            speedBumps = list
+            try { src("dl-bumps")?.featureCollection(FeatureCollection.fromFeatures(speedBumpFeats())) } catch (e: Throwable) { }
+        }
+    }
+
     /** White crossing stripes across the road (the picture's top is along the road; drawn wide, shown to scale by the zoom). */
     private fun zebraBitmap(): Bitmap {
         val w = 200; val h = 80
@@ -1454,6 +1469,33 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         c.drawCircle(cx, 20f, 18f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
             shader = android.graphics.RadialGradient(cx - 5f, 14f, 20f, intArrayOf(0xFFFFE08A.toInt(), 0xFFFFA000.toInt(), 0xFFE07B00.toInt()), floatArrayOf(0f, 0.6f, 1f), android.graphics.Shader.TileMode.CLAMP)
         })
+        return bmp
+    }
+
+    /** Yellow warning diamond with a black raised-hump symbol, kept small so it does not clutter the route. */
+    private fun speedBumpBitmap(): Bitmap {
+        val s = 72
+        val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        fun diamond(inset: Float) = Path().apply {
+            moveTo(s / 2f, 3f + inset)
+            lineTo(s - 3f - inset, s / 2f)
+            lineTo(s / 2f, s - 3f - inset)
+            lineTo(3f + inset, s / 2f)
+            close()
+        }
+        c.drawPath(diamond(0f), Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF202124.toInt() })
+        c.drawPath(diamond(5f), Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFC928.toInt() })
+        val hump = Path().apply {
+            moveTo(15f, 44f)
+            cubicTo(23f, 44f, 24f, 30f, 36f, 30f)
+            cubicTo(48f, 30f, 49f, 44f, 57f, 44f)
+        }
+        c.drawPath(hump, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF202124.toInt(); style = Paint.Style.STROKE; strokeWidth = 7f
+            strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+        })
+        c.drawLine(14f, 49f, 58f, 49f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF202124.toInt(); strokeWidth = 5f; strokeCap = Paint.Cap.ROUND })
         return bmp
     }
 
@@ -2700,9 +2742,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         addL(st, LineLayer("dl-traffic", "dl-traffic-src").sourceLayer("traffic").inSlot(MID)
             .filter(trafficFilter())
             .lineColor(Expression.fromRaw("[\"match\",[\"get\",\"congestion\"],\"low\",\"#1EA362\",\"moderate\",\"#F9AB00\",\"heavy\",\"#E8453C\",\"severe\",\"#A51D1D\",\"#F9AB00\"]"))
-            .lineWidth(zoomed(1.5, 8 to 1.0, 13 to 2.5, 16 to 4.5, 19 to 9.0))
-            .lineOffset(zoomed(1.5, 10 to 0.5, 16 to 2.5, 19 to 5.0))
-            .lineOpacity(0.85).lineEmissiveStrength(1.0)
+            .lineWidth(trafficWidth())
+            .lineOffset(trafficOffset())
+            .lineOpacity(trafficOpacity()).lineEmissiveStrength(1.0)
             .lineCap(LineCap.ROUND).lineJoin(LineJoin.ROUND)
             .minZoom(8.0)
             .visibility(vis(trafficOn && !(routing && hideTraffic))))
@@ -2758,16 +2800,22 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         addS(st, GeoJsonSource.Builder("dl-stops").featureCollection(FeatureCollection.fromFeatures(stopFeats())).build())
         addL(st, SymbolLayer("dl-stop", "dl-stops").inSlot(TOP).iconImage("dl-stop").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconAnchor(IconAnchor.BOTTOM).iconPitchAlignment(IconPitchAlignment.VIEWPORT)
-            .iconSize(zoomed(1.5, 14 to 0.35, 17 to 0.55, 20 to 0.8)).iconEmissiveStrength(1.0).minZoom(14.0))
+            .iconSize(sized("dl-stop") { signSize("dl-stop", SIGN_SMALL) }).iconEmissiveStrength(1.0).minZoom(14.0))
         // Give Way signs use the same compact, upright route-marker treatment as STOP signs.
         addImg(st, "dl-giveway", giveWayBitmap())
         addS(st, GeoJsonSource.Builder("dl-giveways").featureCollection(FeatureCollection.fromFeatures(giveWayFeats())).build())
         addL(st, SymbolLayer("dl-giveway", "dl-giveways").inSlot(TOP).iconImage("dl-giveway").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconAnchor(IconAnchor.BOTTOM).iconPitchAlignment(IconPitchAlignment.VIEWPORT)
-            .iconSize(zoomed(1.5, 14 to 0.35, 17 to 0.55, 20 to 0.8)).iconEmissiveStrength(1.0).minZoom(14.0))
+            .iconSize(sized("dl-giveway") { signSize("dl-giveway", SIGN_SMALL) }).iconEmissiveStrength(1.0).minZoom(14.0))
         addL(st, SymbolLayer("dl-beacon", "dl-beacons").inSlot(TOP).iconImage("dl-beacon").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconAnchor(IconAnchor.BOTTOM).iconPitchAlignment(IconPitchAlignment.VIEWPORT)
-            .iconSize(zoomed(1.6, 16 to 0.32, 20 to 0.9)).iconEmissiveStrength(1.0).minZoom(16.0))
+            .iconSize(zoomed(1.6, 15 to 0.26, 16 to 0.32, 20 to 0.9)).iconEmissiveStrength(1.0).minZoom(15.0))
+        // speed bumps and raised tables on the active route, from the same OpenStreetMap data as the warnings
+        addImg(st, "dl-bump", speedBumpBitmap())
+        addS(st, GeoJsonSource.Builder("dl-bumps").featureCollection(FeatureCollection.fromFeatures(speedBumpFeats())).build())
+        addL(st, SymbolLayer("dl-bump", "dl-bumps").inSlot(TOP).iconImage("dl-bump").iconAllowOverlap(true).iconIgnorePlacement(true)
+            .iconAnchor(IconAnchor.BOTTOM).iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
+            .iconSize(sized("dl-bump") { signSize("dl-bump", SIGN_SMALL) }).minZoom(14.0))
         // a GPX track you're looking at or driving (GitHub #153): pink, under the routes, with its start (green) and end (red)
         addS(st, GeoJsonSource.Builder("dl-track").featureCollection(trackFeatures()).build())
         addL(st, ln("dl-track-line", "dl-track").filter(Expression.eq(Expression.geometryType(), Expression.literal("LineString")))
@@ -2870,7 +2918,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         addL(st, SymbolLayer("dl-signals", "dl-signals").inSlot(TOP)
             .iconImage("dl-signal").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
-            .iconSize(zoomed(1.0, 8 to 0.28, 13 to 0.34, 15 to 0.38, 17 to 0.5, 19 to 0.64, 21 to 0.76))
+            // (a tall, narrow picture: a bit narrower than the round signs, so it isn't taller than them by much)
+            .iconSize(sized("dl-signals") { signSize("dl-signal", 16.0) })
             .iconAnchor(IconAnchor.BOTTOM))
         // speed cameras, roadworks and closures on the route
         for ((kind, nm) in hazardNames.withIndex()) addImg(st, nm, hazardBitmap(kind))
@@ -2881,7 +2930,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         addL(st, SymbolLayer("dl-alpr", "dl-alpr")
             .iconImage("dl-alpr").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
-            .iconSize(zoomed(1.0, 8 to 0.3, 12 to 0.4, 15 to 0.6, 18 to 0.8)))
+            .iconSize(sized("dl-alpr") { signSize("dl-alpr", SIGN_SMALL) }))
         pushAlpr()
         // a lorry's height, weight and width limits ahead: a road sign with the limit, red when the lorry doesn't fit
         limImgs.clear()
@@ -2893,12 +2942,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
             // (the zoom has to be the outermost part: Mapbox refuses a zoom curve inside a case, and then the whole layer was
             // never added, so neither the speed limit sign on the route nor the lorry signs ever showed)
-            .iconSize(run {
-                val isSpeed = Expression.eq(Expression.get("k"), lit(0))
-                fun both(speed: Double, lorry: Double) = Expression.switchCase(isSpeed, lit(speed), lit(lorry))
-                zoomedExpr(1.0, 8 to both(0.75, 0.3), 10 to both(0.75, 0.35), 12 to both(0.825, 0.4), 14 to both(0.9, 0.533),
-                    15 to both(0.933, 0.6), 17 to both(1.0, 0.733), 18 to both(1.0, 0.8))
-            }))
+            .iconSize(sized("dl-lim") { limSizeExpr() }))
         pushLimits()
         addS(st, GeoJsonSource.Builder("dl-cams").featureCollection(empty()).build())
         // fork FR : sous l'icône des radars à sens unique, une flèche dans le sens contrôlé
@@ -2911,10 +2955,10 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         addL(st, SymbolLayer("dl-cams", "dl-cams")
             .iconImage("dl-hz-cam").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
-            .iconSize(Expression.fromRaw(camsSize())))
+            .iconSize(sized("dl-cams") { camsSize() }))
         addL(st, SymbolLayer("dl-hazards", "dl-hazards")
             .iconImage(Expression.get("img")).iconAllowOverlap(true).iconIgnorePlacement(true).iconEmissiveStrength(1.0)
-            .iconSize(Expression.fromRaw(HAZ_SIZE)))
+            .iconSize(sized("dl-hazards") { signSize("dl-hz-work", SIGN_HAZ, perFeature = true) }))
         // where you parked (on the phone, after Android Auto disconnects)
         addImg(st, "dl-car-pin", parkedBitmap())
         addS(st, GeoJsonSource.Builder("dl-parked").featureCollection(FeatureCollection.fromFeatures(
@@ -2922,8 +2966,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         signBmp?.let { addImg(st, "dl-lanesign", it) }
         addS(st, GeoJsonSource.Builder("dl-lanesign").featureCollection(FeatureCollection.fromFeatures(
             signAt?.let { listOf(Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat))) } ?: emptyList())).build())
+        // (it keeps its space on the map, so road names step aside instead of running across it, karthikeyansr-lgtm #429)
         addL(st, SymbolLayer("dl-lanesign-l", "dl-lanesign").iconImage("dl-lanesign").iconAnchor(IconAnchor.BOTTOM)
-            .iconAllowOverlap(true).iconIgnorePlacement(true).iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
+            .iconAllowOverlap(true).iconIgnorePlacement(false).iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0)
             .iconSize(zoomed(1.0, 13 to 0.45, 16 to 0.7, 18 to 0.9)))
         addL(st, SymbolLayer("dl-parked-l", "dl-parked").iconImage("dl-car-pin").iconAllowOverlap(true).iconIgnorePlacement(true)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0).iconSize(zoomed(1.0, 10 to 0.4, 15 to 0.55, 18 to 0.7)))
@@ -2931,7 +2976,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         favImgs.clear()
         addS(st, GeoJsonSource.Builder("dl-favs").featureCollection(empty()).build())
         addL(st, SymbolLayer("dl-favs-l", "dl-favs").iconImage(Expression.get("img")).iconAllowOverlap(true).iconIgnorePlacement(true)
-            .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0).minZoom(10.0).iconSize(zoomed(1.0, 10 to 0.75, 14 to 0.9, 17 to 1.0)))
+            .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0).minZoom(10.0).iconSize(sized("dl-favs-l") { signSize("", SIGN_FAV, fallbackW = 27f) }))
         pushFavs()
         if (im) {
             addImg(st, "dl-pin", pinBitmap())
@@ -2976,11 +3021,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
                 .circlePitchAlignment(CirclePitchAlignment.MAP).circlePitchScale(CirclePitchScale.MAP))
         }
         // the "+4 min" / "−2 min" bubbles on the alternatives (on top of everything, so they're always readable)
+        // (about a quarter smaller than it was, and road names step aside for it: it was big and sat over them, #429, #430)
         addL(st, SymbolLayer("dl-live-bub", "dl-live-bub")
             .iconImage(Expression.get("img")).iconAnchor(IconAnchor.BOTTOM)
-            .iconAllowOverlap(true).iconIgnorePlacement(true).iconEmissiveStrength(1.0)
+            .iconAllowOverlap(true).iconIgnorePlacement(false).iconEmissiveStrength(1.0)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT)
-            .iconSize(zoomed(1.0, 9 to 0.6, 14 to 0.68, 18 to 0.76)))
+            .iconSize(zoomed(1.0, 9 to 0.45, 14 to 0.5, 18 to 0.56)))
         // "See all locations": a dotted line from you to the one picked, and every branch as its logo with the drive time
         addL(st, LineLayer("dl-chain-line", "dl-chain-line").lineColor("#4C8DFF").lineWidth(5.0).lineOpacity(0.9)
             .lineCap(LineCap.ROUND).lineDasharray(listOf(0.1, 2.2)).lineEmissiveStrength(1.0))
@@ -3091,7 +3137,15 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
 
     private fun applyTraffic() {
         try { layer("dl-traffic")?.visibility(vis(trafficOn && !(routing && hideTraffic))) } catch (e: Throwable) { }
+        try { (layer("dl-traffic") as? LineLayer)?.let { it.lineWidth(trafficWidth()); it.lineOffset(trafficOffset()); it.lineOpacity(trafficOpacity()) } } catch (e: Throwable) { }
     }
+    // Driving with no route, the traffic lines are all there is to show it: they're drawn about 1.6 times as wide and fully solid,
+    // where on a route the route line itself carries the traffic colours (they were thin and faint then, José Antonio Arriaga)
+    private fun trafficK() = if (routing) 1.0 else 1.6
+    private fun trafficWidth(): Expression { val k = trafficK(); return zoomed(1.5, 8 to 1.0 * k, 13 to 2.5 * k, 16 to 4.5 * k, 19 to 9.0 * k) }
+    // (moved out from the road's middle with the extra width, so the two directions still sit side by side)
+    private fun trafficOffset(): Expression { val k = trafficK(); return zoomed(1.5, 10 to 0.5 * k, 16 to 2.5 * k, 19 to 5.0 * k) }
+    private fun trafficOpacity() = if (routing) 0.85 else 1.0
 
     /** Light map: no points of interest and no route glow, so there is less to draw and place every frame. */
     private var poiMoving = false
@@ -3221,11 +3275,78 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     }
 
 
+    /** The route line's width (map units) at the zooms the map's sizes are given for, before any [routeW] scale. */
+    private val routeStops = listOf(10 to 3f, 13 to 6.5f, 15 to 10f, 17 to 16f, 19 to 24f)
+
     /** Line width that grows with zoom the way road widths do: clearly wider than the road under it, but always well under the locator arrow's width. */
     private fun routeW(scale: Float): Expression {
         // everything route-related (line, casing, glow, driven part, turn arrow) is sized from this, so they all stay in step
         val k = scale * ROUTE_K
-        return zoomed(1.7, 10 to 3f * k, 13 to 6.5f * k, 15 to 10f * k, 17 to 16f * k, 19 to 24f * k)
+        return zoomed(1.7, *routeStops.map { (z, w) -> z to w * k }.toTypedArray())
+    }
+    /** The route line's width at zoom [z] (as [routeW] draws it at scale 1). */
+    private fun routeAt(z: Double): Double {
+        val st = routeStops
+        if (z <= st.first().first) return st.first().second * ROUTE_K.toDouble()
+        for (i in 1 until st.size) {
+            val (z0, w0) = st[i - 1]; val (z1, w1) = st[i]
+            if (z <= z1) {
+                val t = (Math.pow(1.7, z - z0) - 1) / (Math.pow(1.7, (z1 - z0).toDouble()) - 1)
+                return (w0 + (w1 - w0) * t) * ROUTE_K
+            }
+        }
+        return st.last().second * ROUTE_K.toDouble()
+    }
+
+    /**
+     * Map units per unit of the app's own screen size (its buttons and text): set by the phone's screen and the car screen from
+     * the same scale they draw everything else at, so the signs on the map grow with the screen as the rest does. Until then,
+     * the phone's usual size.
+     */
+    private var uiK: Double = try { ctx.resources.displayMetrics.density / pixelRatioUsed.coerceAtLeast(0.5f) * 0.85 } catch (e: Throwable) { 1.0 }
+    /** The screen's pixels per unit of the app's own size (what its screens draw buttons and text with). */
+    fun setUiPx(pxPerUnit: Float) {
+        if (pxPerUnit <= 0f) return
+        val v = pxPerUnit / pixelRatioUsed.coerceAtLeast(0.5f).toDouble()
+        if (Math.abs(v - uiK) < 0.01) return
+        uiK = v
+        val st = style ?: return
+        for ((id, f) in signLayers) try { if (st.styleLayerExists(id)) (layer(id) as? SymbolLayer)?.iconSize(f()) } catch (e: Throwable) { }
+    }
+    // the signs' widths at full size, in the app's own screen units (a button's icon is about 24): before their size settings
+    private val SIGN_LIMIT = 56.0
+    private val SIGN_LORRY = 42.0
+    private val SIGN_CAM = 40.0
+    private val SIGN_HAZ = 34.0
+    private val SIGN_SMALL = 28.0
+    private val SIGN_FAV = 36.0
+    /** Each sign layer and how its size is worked out, so they can all be resized when the screen's scale changes. */
+    private val signLayers = LinkedHashMap<String, () -> Expression>()
+    private fun sized(layerId: String, f: () -> Expression): Expression { signLayers[layerId] = f; return f() }
+
+    /** How a sign's size changes with zoom: a little smaller zoomed out, full size close up (it used to vary eightfold). */
+    private val signZooms = listOf(10.0 to 0.7, 12.0 to 0.75, 13.0 to 0.8, 15.0 to 0.9, 17.0 to 1.0, 19.0 to 1.05)
+
+    /** How wide a sign is at full size, in the app's own screen units, and so how wide it shows on the map at [z]. */
+    private fun signWidth(baseUi: Double, z: Double, f: Double): Double = maxOf(baseUi * uiK * f, 1.5 * routeAt(z))
+
+    /**
+     * The size for a sign on the map drawn from picture [id] (or [fallbackW] map units wide when it isn't added yet): [baseUi]
+     * units of the app's own screen size wide, so it's as readable as the rest of the screen and grows with it, a little smaller
+     * zoomed out, and never narrower than one and a half route lines. They used to be fixed sizes of pictures drawn at a fixed
+     * number of pixels, so they came out a different size on every screen. With [perFeature], each feature's "sc" (its own size
+     * setting) multiplies it too.
+     */
+    private fun signSize(id: String, baseUi: Double, perFeature: Boolean = false, fallbackW: Float = 48f): Expression {
+        val w = (imgW[id] ?: fallbackW).coerceAtLeast(4f).toDouble()
+        val args = ArrayList<Expression>()
+        args += Expression.linear(); args += Expression.zoom()
+        for ((z, f) in signZooms) {
+            val size = signWidth(baseUi, z, f) / w
+            args += lit(z)
+            args += if (perFeature) Expression.product(lit(size), Expression.coalesce(Expression.get("sc"), lit(1.0))) else lit(size)
+        }
+        return Expression.interpolate(*args.toTypedArray())
     }
 
     /** How thick the route is drawn overall (1 = the standard width). */
@@ -3409,6 +3530,30 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     @Volatile private var limitBoard = "round"
 
 
+    // ---- the speed limit signs on the route: sized with the screen (see signSize), times Settings › On the map › Limit signs on the route ----
+    private var limScale = 1.0
+    fun setRouteLimitSize(pct: Int) {
+        val v = pct.coerceIn(50, 250) / 100.0
+        if (v == limScale) return
+        limScale = v
+        val st = style ?: return
+        try { if (st.styleLayerExists("dl-lim")) (layer("dl-lim") as? SymbolLayer)?.iconSize(limSizeExpr()) } catch (e: Throwable) { }
+    }
+    // (the zoom has to be the outermost part: Mapbox refuses a zoom curve inside a case, and then the whole layer was never added,
+    // so neither the speed limit sign on the route nor the lorry signs ever showed. Lorry signs keep their own size)
+    private fun limSizeExpr(): Expression {
+        val isSpeed = Expression.eq(Expression.get("k"), lit(0))
+        // (both pictures' real widths on the map: the round speed sign is 54 units, the lorry sign 104 pixels at the default density)
+        val lorryW = 104f / ((Bitmap.createBitmap(1, 1, Bitmap.Config.ALPHA_8).density.takeIf { it > 0 } ?: 160) / 160f)
+        val args = ArrayList<Expression>()
+        args += Expression.linear(); args += Expression.zoom()
+        for ((z, f) in signZooms) {
+            args += lit(z); args += Expression.switchCase(isSpeed, lit(signWidth(SIGN_LIMIT, z, f) / 54.0 * limScale),
+                lit(signWidth(SIGN_LORRY, z, f) / lorryW))
+        }
+        return Expression.interpolate(*args.toTypedArray())
+    }
+
     private fun pushLimits() {
         val st = style ?: return
         val s = src("dl-lim") ?: return
@@ -3436,14 +3581,16 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
      * tiny on a sharp screen).
      */
     private fun routeLimitBitmap(text: String, board: String): Bitmap {
-        val d = mapView.resources.displayMetrics.density
+        // (drawn at twice the detail and marked so, the same size on the map: it's shown half as big again or more now, and
+        // stayed sharp only when drawn bigger)
+        val d = mapView.resources.displayMetrics.density * 2f
         val tf = if (android.os.Build.VERSION.SDK_INT >= 28) android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, 900, false) else android.graphics.Typeface.DEFAULT_BOLD
         val n0 = text.toIntOrNull() ?: 0
         fun p(col: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = col }
         if (board == "us" || board == "ca") {
             val w = (44f * d).toInt(); val h = (54f * d).toInt(); val m = 3f * d
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            bmp.density = mapView.resources.displayMetrics.densityDpi
+            bmp.density = mapView.resources.displayMetrics.densityDpi * 2
             val c = Canvas(bmp)
             c.drawRoundRect(RectF(m, m + 1.5f * d, w - m, h - m + 1.5f * d), 7f * d, 7f * d, p(0x55000000))
             c.drawRoundRect(RectF(0f, 0f, w.toFloat(), h - 1.5f * d), 8f * d, 8f * d, p(0xFFFFFFFF.toInt()))
@@ -3460,7 +3607,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // marked with the map's own screen density, as it's drawn at it: left unmarked it took the phone's, so on the car screen (a
         // lower density) the sign came out a fraction of its size (as the "what's here" card did, #240)
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        bmp.density = mapView.resources.displayMetrics.densityDpi
+        bmp.density = mapView.resources.displayMetrics.densityDpi * 2
         val c = Canvas(bmp)
         val cx = size / 2f; val cy = size / 2f - 1f * d
         val halo = size / 2f - 1.5f * d
@@ -3603,9 +3750,6 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     }
 
     private var hazards: List<Pair<LL, Int>> = emptyList()
-    /** The route's badges' size by zoom, times each one's own scale ("sc": the camera size setting for speed cameras, 1 for the rest). */
-    private val HAZ_SIZE = "[\"interpolate\",[\"linear\"],[\"zoom\"]," +
-        listOf(11 to 0.45, 15 to 0.75, 18 to 1.0).joinToString(",") { (z, v) -> "$z,[\"*\",$v,[\"coalesce\",[\"get\",\"sc\"],1]]" } + "]"
     /** Map icons by kind: camera, roadworks, closure, police, accident, hazard, breakdown, mobile camera, traffic jam. */
     private val hazardNames = arrayOf("dl-hz-cam", "dl-hz-work", "dl-hz-closed", "dl-hz-police", "dl-hz-accident", "dl-hz-hazard", "dl-hz-breakdown", "dl-hz-mobilecam", "dl-hz-traffic")
 
@@ -3621,24 +3765,35 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         camScale = v
         val st = style ?: return
         if (camDetail() != before) addImg(st, "dl-hz-cam", cameraBitmap())
-        try { if (st.styleLayerExists("dl-cams")) Value.fromJson(camsSize()).value?.let { st.setStyleLayerProperty("dl-cams", "icon-size", it) } } catch (e: Throwable) { }
+        try { if (st.styleLayerExists("dl-cams")) (layer("dl-cams") as? SymbolLayer)?.iconSize(camsSize()) } catch (e: Throwable) { }
         pushHazards()
     }
     /** How many times over the camera badge is drawn: twice over (for sharpness) once it's set above 150%. */
     private fun camDetail() = if (camScale > 1.5) 2 else 1
     /** Every camera around you: the badge's size by zoom, times the setting. */
-    private fun camsSize(): String {
-        fun f(x: Double) = String.format(java.util.Locale.US, "%.3f", x * camScale)
-        return "[\"interpolate\",[\"linear\"],[\"zoom\"],8,${f(0.36)},12,${f(0.44)},15,${f(0.68)},18,${f(0.9)}]"
+    // (the camera badge a little bigger than the other signs, as it always was, times its size setting)
+    private fun camsSize(): Expression = signSize("dl-hz-cam", SIGN_CAM * camScale)
+
+    // ---- the other signs on the route (roadworks, closures, hazards and reports): Settings > On the map > Hazard sign size ----
+    // (sized with the screen at 100%, see signSize)
+    private var hazScale = 1.0
+    fun setHazardSize(pct: Int) {
+        val v = pct.coerceIn(50, 300) / 100.0
+        if (v == hazScale) return
+        hazScale = v
+        pushHazards()
     }
 
     private fun pushHazards() {
         val s = src("dl-hazards") ?: return
         val fs = hazards.map { (p, k) ->
             Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)).also {
-                it.addStringProperty("img", hazardNames[k.coerceIn(0, hazardNames.size - 1)])
-                // the speed camera badge follows the size setting; roadworks, closures and reports stay as they are
-                it.addNumberProperty("sc", if (k == 0) camScale else 1.0)
+                val img = hazardNames[k.coerceIn(0, hazardNames.size - 1)]
+                it.addStringProperty("img", img)
+                // the speed camera badge follows its size setting; roadworks, closures and reports follow theirs (and each picture
+                // is evened out against the roadworks one the layer's size is worked out from, as they're drawn at different sizes)
+                val even = (imgW["dl-hz-work"] ?: 1f) / (imgW[img] ?: imgW["dl-hz-work"] ?: 1f).coerceAtLeast(1f)
+                it.addNumberProperty("sc", (if (k == 0) SIGN_CAM / SIGN_HAZ * camScale else hazScale) * even)
             }
         }
         s.featureCollection(FeatureCollection.fromFeatures(fs))
@@ -3849,7 +4004,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     // ---- data from the engine ----
     fun setRoute(mainPts: List<LL>, altPts: List<List<LL>>, sev: IntArray? = null) {
         main = mainPts; alts = altPts; mainSev = sev; mainOff = 0; pushRoute(); pushSignals()
-        if (mainPts.isEmpty()) { setAvgZones(emptyList(), emptyList()); setTunnels(emptyList()); setCrossings(emptyList()); setStopSigns(emptyList()) }
+        if (mainPts.isEmpty()) { setAvgZones(emptyList(), emptyList()); setTunnels(emptyList()); setCrossings(emptyList()); setSpeedBumps(emptyList()); setStopSigns(emptyList()) }
         if (mainPts.size >= 2) loadSignalsAlong(mainPts) else { sigRoute = null; signalToken++; signalBusy = false; signalStage = "no route" }
         val on = mainPts.isNotEmpty()
         if (on != routing) { routing = on; applyTraffic(); applyNearLook() }
@@ -4204,6 +4359,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private var spriteDrawing: String? = null
     private var spriteYaw = 0.0
     private var spriteRot = 0.0
+    /** The car picture's heading relative to the map's bearing (degrees), for turning it about its rear wheels. */
+    private var spriteRel = 0.0
     private var spriteWanted: String? = null
 
     fun setLocator(styleName: String, color: String) {
@@ -4700,6 +4857,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             // (while a picture is being drawn, the current one stays up, turned to the right angle)
         }
         spriteRot = if (upright) 0.0 else ((rel - spriteYaw + 540.0) % 360.0) - 180.0
+        spriteRel = if (upright) 0.0 else rel
         placeLocator()
     }
 
@@ -4832,7 +4990,8 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             val discHalf = if (theme == "immersive") 0f else 15f * 0.625f * arrowScale * dens * Math.cos(Math.toRadians(tilt)).toFloat()
             // the picture has empty space round the arrow / car: measure where its drawing really ends at the bottom
             val below = if (modelOn) (modelPxPerCarUnit() * (if (carLike) 2.3 else 0.85) * Math.cos(Math.toRadians(tilt))).toFloat()
-                        else if (locatorStyle != "flat" && bmp != null) drawnBelowCentre(bmp) * spriteSize()
+                        // (the car picture sits ahead of your position now, turning about its rear wheels: its back is nearer)
+                        else if (locatorStyle != "flat" && bmp != null) drawnBelowCentre(bmp) * spriteSize() * (if (locatorStyle == "car") 0.4f else 1f)
                         else flatArrow?.let { drawnBelowCentre(it) * (if (theme == "immersive") 0.25f else 0.625f) * arrowScale * Math.cos(Math.toRadians(tilt)).toFloat() } ?: 0f
             roadView.translationY = pt.y + maxOf(discHalf, below) + 3f * dens
             if (roadView.visibility != android.view.View.VISIBLE) roadView.visibility = android.view.View.VISIBLE
@@ -4844,8 +5003,20 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         val w = Math.round(bmp.width * k); val h = Math.round(bmp.height * k)
         val lp = v.layoutParams
         if (lp == null || lp.width != w || lp.height != h) v.layoutParams = android.widget.FrameLayout.LayoutParams(w, h)
-        v.translationX = pt.x - w / 2f
-        v.translationY = pt.y - h / 2f
+        // the car picture turns about its rear wheels, like a real car, not its middle: your position is where the rear axle is and
+        // the car sits ahead of it, so in a turn the front swings round and the back follows (it swung the back out, karthikeyansr-lgtm #424)
+        var ox = 0f; var oy = 0f
+        if (locatorStyle == "car") {
+            val tilt = try { mbMap.cameraState.pitch } catch (e: Throwable) { tiltNow }
+            val cosT = Math.cos(Math.toRadians(tilt)).coerceAtLeast(0.3)
+            // (the rear axle is about 60% of the way from the middle to the back; the measured drawing below the middle is foreshortened by the tilt)
+            val half = drawnBelowCentre(bmp) * k / cosT
+            val d = (0.6 * half).toFloat()
+            val r = Math.toRadians(spriteRel)
+            ox = (d * Math.sin(r)).toFloat(); oy = (-d * Math.cos(r) * cosT).toFloat()
+        }
+        v.translationX = pt.x - w / 2f + ox
+        v.translationY = pt.y - h / 2f + oy
         v.rotation = spriteRot.toFloat()
         if (v.visibility != android.view.View.VISIBLE) v.visibility = android.view.View.VISIBLE
     }

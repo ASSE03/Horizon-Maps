@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -222,25 +224,25 @@ fun AlertSign(a: AlertInfo, size: Dp) {
 
 /** Large alert banner with a road-sign badge and a countdown bar. */
 @Composable
-fun AlertBanner(a: AlertInfo, modifier: Modifier = Modifier) {
+fun AlertBanner(a: AlertInfo, modifier: Modifier = Modifier, compact: Boolean = false) {
     val col = alertColor(a.kind)
     val prog = remember(a) { Animatable(1f) }
     LaunchedEffect(a) { prog.animateTo(0f, tween(a.ms.toInt().coerceAtLeast(500), easing = LinearEasing)) }
-    // compact, so it fits between the turn card and the buttons on the right without covering either
-    val shape = RoundedCornerShape(24.dp)
+    val shape = RoundedCornerShape(if (compact) 18.dp else 24.dp)
     Column(
-        modifier.widthIn(max = 420.dp).shadow(14.dp, shape).clip(shape)
-            .background(Color(0xF2121922)).border(1.5.dp, col.copy(alpha = 0.7f), shape),
+        modifier.widthIn(max = if (compact) 330.dp else 420.dp).width(IntrinsicSize.Max).shadow(if (compact) 8.dp else 14.dp, shape).clip(shape)
+            .background(Color(0xF2121922)).border(if (compact) 1.dp else 1.5.dp, col.copy(alpha = 0.7f), shape),
     ) {
-        Row(Modifier.padding(start = 12.dp, end = 18.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            AlertSign(a, 54.dp)
-            Column(Modifier.padding(start = 12.dp)) {
-                Text(alertLabel(a.kind), color = col, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, maxLines = 1)
-                // (up to three lines: in the narrow gap on a wide, short screen the rain warning was cut off after two, "Rain expected in about 11 min on y…")
-                Text(a.text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 3, overflow = TextOverflow.Ellipsis, lineHeight = 22.sp)
+        Row(Modifier.padding(start = if (compact) 8.dp else 12.dp, end = if (compact) 12.dp else 18.dp,
+            top = if (compact) 6.dp else 10.dp, bottom = if (compact) 6.dp else 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            AlertSign(a, if (compact) 36.dp else 54.dp)
+            Column(Modifier.padding(start = if (compact) 8.dp else 12.dp)) {
+                Text(alertLabel(a.kind), color = col, fontSize = if (compact) 9.sp else 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, maxLines = 1)
+                Text(a.text, color = Color.White, fontSize = if (compact) 14.sp else 18.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = if (compact) 2 else 3, overflow = TextOverflow.Ellipsis, lineHeight = if (compact) 17.sp else 22.sp)
             }
         }
-        Box(Modifier.fillMaxWidth().height(4.dp).background(Color.White.copy(alpha = 0.08f))) {
+        Box(Modifier.fillMaxWidth().height(if (compact) 3.dp else 4.dp).background(Color.White.copy(alpha = 0.08f))) {
             Box(Modifier.fillMaxWidth(prog.value).fillMaxHeight().background(col))
         }
     }

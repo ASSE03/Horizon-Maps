@@ -323,8 +323,6 @@ object MapboxRest {
     @Volatile var curbSide = true
     /** Ask for Mapbox's junction pictures (banner instructions). */
     @Volatile var junctionPics = false
-    /** Ask for banner components when road shields are enabled, independently of junction-picture display. */
-    @Volatile var roadShields = true
 
     fun routes(token: String, from: LL, to: LL, alternatives: Boolean, departAtMs: Long = 0L, via: List<LL> = emptyList(),
                headingDeg: Double = -1.0, quick: Boolean = false, leftHand: Boolean = false): List<Route> {
@@ -357,7 +355,7 @@ object MapboxRest {
         // arrive on your side of the road (the destination on the kerb side), the other points as Mapbox likes
         if (curbSide) base += "&approaches=" + enc((List(pts.size - 1) { "" } + listOf("curb")).joinToString(";"))
         // pictures of motorway junctions, when Mapbox has them for this account
-        if (junctionPics || roadShields) base += "&banner_instructions=true"
+        if (junctionPics) base += "&banner_instructions=true"
         val dep = if (departAtMs > 0) "&depart_at=" + enc(java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm", java.util.Locale.US).format(java.util.Date(departAtMs))) else ""
         val attempts = ArrayList<String>()
         if (!walk && dep.isNotEmpty() && !quick) { if (ex.isNotEmpty()) attempts += "$base&exclude=$ex$dep"; attempts += "$base$dep" }
@@ -558,6 +556,8 @@ object MapboxRest {
         val rbOthers = ArrayList<Double>()
         // tunnels: each junction marked "tunnel" starts one, running to the next junction (or the end of its step)
         val tunnelSpots = ArrayList<Pair<LL, LL?>>()
+        // metres on small roads, from the class of road at each junction (each junction's share of its step), for Prefer main roads
+        var minorM = 0.0; var classSeen = false
         for (li in 0 until legs.length()) {
             val leg = legs.getJSONObject(li)
             var off = legStart
@@ -606,6 +606,19 @@ object MapboxRest {
                         tunnelSpots += a to nx?.let { LL(it.getDouble(1), it.getDouble(0)) }
                     }
                 } catch (e: Exception) { }
+                try {
+                    val ints = s.optJSONArray("intersections")
+                    val sd = s.optDouble("distance", 0.0)
+                    if (ints != null && ints.length() > 0 && sd > 0.0) {
+                        val share = sd / ints.length()
+                        for (ii in 0 until ints.length()) {
+                            val cls = ints.optJSONObject(ii)?.optJSONObject("mapbox_streets_v8")?.optString("class") ?: continue
+                            if (cls.isEmpty()) continue
+                            classSeen = true
+                            if (MainRoadPolicy.isMinor(cls)) minorM += share
+                        }
+                    }
+                } catch (e: Exception) { }
                 // the lights along this step after its turn: passed on the way to the next one
                 val sigHere = try {
                     val ints = s.optJSONArray("intersections")
@@ -623,26 +636,17 @@ object MapboxRest {
                     val exit = if (man.startsWith("ROUNDABOUT")) m.optInt("exit", 0) else 0
                     // Mapbox's picture of the junction (from its banner instructions, when asked for and it has one)
                     var pic = ""
-                    val shields = ArrayList<RoadShield>()
                     s.optJSONArray("bannerInstructions")?.let { bi ->
                         for (k in 0 until bi.length()) {
                             val comps = bi.optJSONObject(k)?.optJSONObject("view")?.optJSONArray("components") ?: continue
-                            for (q in 0 until comps.length()) {
-                                val component = comps.optJSONObject(q) ?: continue
-                                val u = component.optString("imageURL").orEmpty()
-                                if (u.startsWith("https://")) pic = u
-                                // Mapbox banner components may expose a shield image base plus its label.
-                                val imageBase = component.optString("imageBaseURL")
-                                val text = component.optString("text").ifBlank { ref }
-                                if (imageBase.isNotBlank() && text.isNotBlank()) shields += RoadShield(imageBase, text)
-                            }
+                            for (q in 0 until comps.length()) { val u = comps.optJSONObject(q)?.optString("imageURL").orEmpty(); if (u.startsWith("https://")) { pic = u; break } }
+                            if (pic.isNotEmpty()) break
                         }
                     }
                     // traffic lights or a stop sign at the turn itself (the step's first junction), for "At the traffic lights, turn right"
                     val j0 = s.optJSONArray("intersections")?.optJSONObject(0)
                     steps += Step(at, man, street, m.optString("instruction"), exit, if (type == "off ramp") s.optString("exits").substringBefore(';') else "", s.optString("destinations"), junctionPic = pic,
                         rbIn = if (type == "roundabout" || type == "rotary") m.optDouble("bearing_before", -1.0) else -1.0,
-                        shields = shields.distinctBy { it.content },
                         lights = j0?.optBoolean("traffic_signal", false) == true, stopSign = j0?.optBoolean("stop_sign", false) == true, lightsBefore = sigOnWay,
                         sides = sideRoads(j0), ref = if (name.isNotBlank() && type != "off ramp") ref else "")
                     sigOnWay = sigHere
@@ -792,6 +796,7 @@ object MapboxRest {
             // Only use segment timings when they map one-for-one to the returned route geometry.
             if (segEtaComplete && segEta.size == max(0, cum.size - 1)) it.segmentTimes = segEta.toDoubleArray()
             it.limits = limits; it.incidents = incidents; it.tunnels = tun
+            if (classSeen) it.minorM = minorM
         }
     }
 
@@ -812,7 +817,7 @@ object MapboxRest {
         // the middle of the plot, nearer a road behind the house than the one it's on)
         if (pr.optString("feature_type") == "address") co?.optJSONArray("routable_points")?.optJSONObject(0)?.let { rp ->
             val la = rp.optDouble("latitude"); val lo = rp.optDouble("longitude")
-            if (!la.isNaN() && !lo.isNaN() && Geo.dist(LL(la, lo), LL(lat, lon)) < 200.0) return Place(name, sub, LL(la, lo), web)
+            if (!la.isNaN() && !lo.isNaN() && Geo.dist(LL(la, lo), LL(lat, lon)) < 200.0) return Place(name, sub, LL(la, lo), web, onStreet = true)
         }
         return Place(name, sub, LL(lat, lon), web)
     }
@@ -947,7 +952,7 @@ object MapboxRest {
         if (stale()) return emptyList()
         lastError = (box.error ?: geo.error)?.message?.takeIf { boxArr == null && geoArr == null }
         val out = ArrayList<Place>()
-        fun addOne(p: Place) { if (out.none { (it.name.equals(p.name, true) && Geo.dist(it.pos, p.pos) < 80) || Geo.dist(it.pos, p.pos) < 15 }) out += p }
+        fun addOne(p: Place) { if (out.none { (it.name.equals(p.name, true) && Geo.dist(it.pos, p.pos) < 80) || Geo.dist(it.pos, p.pos) < 15 || it.sameAddress(p) }) out += p }
         fun add(arr: JSONArray?) {
             if (arr == null) return
             for (i in 0 until arr.length()) addOne(feature(arr.optJSONObject(i) ?: continue, q) ?: continue)

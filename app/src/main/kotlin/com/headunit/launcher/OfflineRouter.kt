@@ -692,7 +692,7 @@ object OfflineRouter {
                         val la = p.getOrNull(2)?.toDoubleOrNull(); val lo = p.getOrNull(3)?.toDoubleOrNull()
                         if (la != null && lo != null) {
                             val pos = LL(la, lo)
-                            hits += (if (near != null) Geo.dist(near, pos) else 0.0) to Place(p[1], "Postcode · offline", pos)
+                            hits += (if (near != null) Geo.dist(near, pos) else 0.0) to Place(p[1], "Code postal · hors ligne", pos)
                         }
                     }
                 }

@@ -47,6 +47,8 @@ internal object PreferenceKeys {
     const val MAP_FPS = "mapfps"
     const val UI_SCALE = "uiscale"
     const val UI_AUTO_SCALE = "uiauto"
+    /** One-time migration marker for the 85%-based UI scale baseline. */
+    const val UI_SCALE_BASELINE_V2 = "uiscalebaselinev2"
     const val SOUND_MODE = "soundmode"
     const val FUEL_TYPE = "fueltype"
     const val PACK_REGION = "packregion"
@@ -147,6 +149,8 @@ internal object PreferenceKeys {
     const val RIBBON = "ribbon"
     const val LANE_VIEW = "laneview"
     const val JUNCTION_VIEW = "junctionview"
+    /** How close the lane view and junction close-up come in: "-1" further, "0" usual, "1" closer, "2" closest (#415). */
+    const val JUNCTION_ZOOM = "junctionzoom"
     const val PERFORMANCE_METER = "perfmeter"
     const val UPDATE_LAST_CHECK = "updlast"
     const val WHATS_NEW_SEEN_VERSION = "whatsnew_seen_version"
@@ -171,6 +175,9 @@ internal object PreferenceKeys {
     const val AUTO_BACKUP_KEEP = "autobackupkeep"
     const val AUTO_BACKUP_AT = "autobackupat"
     const val AVOID_MOTORWAY = "avoid_motorway"
+    /** Avoid motorways only on short trips (with [AVOID_MOTORWAY] off), and how short, in metres in a straight line (#413). */
+    const val AVOID_MOTORWAY_SHORT = "avoid_motorway_short"
+    const val AVOID_MOTORWAY_UNDER = "avoid_motorway_under"
     const val AVOID_TOLL = "avoid_toll"
     const val AVOID_UNPAVED = "avoid_unpaved"
     /** Soft preference for higher-class roads in offline Valhalla car routes only. */
@@ -200,7 +207,7 @@ internal object PreferenceKeys {
     const val DRIVELOCK = "drivelock"
     /** The media bar on the driving screen (Reddit, mrEnmi). */
     const val MEDIA_BAR = "media_bar"
-    /** The Clean view button on the map: 0 everything, 1 minimal (turn card, speed, trip), 2 the map only (#358). */
+    /** The Clean view button on the map: 0 full view, 2 map only. Value 1 is the retired Minimal view (#358). */
     const val CLEAN_VIEW = "cleanview"
     /** Map buttons switched off in Settings > Map buttons, comma separated (compass, report, sound, routes, clean, overview). Overview starts off. */
     const val RAIL_HIDDEN = "rail_hidden"
@@ -325,6 +332,14 @@ internal object PreferenceKeys {
     const val CLUSTER_ZOOM = "clusterzoom"
     /** The speed camera badge's size on the map, in percent (50 to 350, 100 as it always was). */
     const val CAM_SIZE = "camsize"
+    /** Roadworks, closures and hazard signs on the map (50 to 300%; Strong_Force1302, Reddit). */
+    const val HAZ_SIZE = "hazsize"
+    /** The speed limit signs drawn on the route (50 to 250%, of a size half as big again as they used to be). */
+    const val ROUTE_LIMIT_SIZE = "routelimsize"
+    /** Update downloaded data by itself (offline maps, town names): "wifi" (the default), "always" (mobile data too) or "off" (#428). */
+    const val DATA_AUTO = "dataauto"
+    /** The phone's battery level beside the speedometer on the car screen (off unless chosen; joel941703-hash #430). */
+    const val CAR_PHONE_BATTERY = "carphonebattery"
     /** Moonlight at night: a low blue light with long shadows in place of Mapbox's flat night light. */
     const val MOONLIT = "moonlit"
     /** Light and weather (Settings > Map look): night brightness and moon strength in percent (100 as Mapbox / as first made). */
@@ -393,6 +408,11 @@ internal object PreferenceKeys {
     const val NORTH_UP_CAR = "northupcar"
     /** Stopped for 30 s: the map pulls back to a top-down view of the traffic round you. */
     const val STOPPED_OVERVIEW = "stopview"
+    /** Circle the car when stopped (ZarulOfficial #376): on, after how many seconds, how fast ("slow" / "medium"), which way ("cw" / "ccw"). */
+    const val ORBIT = "orbitstopped"
+    const val ORBIT_AFTER = "orbitafter"
+    const val ORBIT_SPEED = "orbitspeed"
+    const val ORBIT_DIR = "orbitdir"
     /** Where you left the car, "lat,lon,time" (saved on the phone when Android Auto disconnects). */
     const val PARKED_SPOT = "parkedspot"
     /** Phone-to-car link: the pairing code, this device's part ("car" receives, "phone" sends), and the last message taken. */

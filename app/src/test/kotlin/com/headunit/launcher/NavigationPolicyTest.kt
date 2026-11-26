@@ -6,6 +6,29 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NavigationPolicyTest {
+    @Test fun demoDriveRestoresLatestRealGpsFix() {
+        val before = Fix(LL(50.0, -1.0), 90.0, 0.0, 0.0, 5.0)
+        val during = Fix(LL(50.001, -1.001), 95.0, 4.0, 0.0, 4.0)
+        val state = DemoGpsFixState()
+
+        state.begin(before)
+        state.update(during)
+        val restored = state.finish()
+        assertEquals(during.pos.lat, restored?.pos?.lat ?: Double.NaN, 0.000001)
+        assertEquals(during.pos.lon, restored?.pos?.lon ?: Double.NaN, 0.000001)
+        assertEquals(95.0, restored?.heading ?: Double.NaN, 0.000001)
+    }
+
+    @Test fun demoDriveWithoutNewGpsRestoresPositionCapturedAtStart() {
+        val before = Fix(LL(50.0, -1.0), 90.0, 0.0, 0.0, 5.0)
+        val state = DemoGpsFixState()
+        state.begin(before)
+
+        val restored = state.finish()
+        assertEquals(before.pos.lat, restored?.pos?.lat ?: Double.NaN, 0.000001)
+        assertEquals(before.pos.lon, restored?.pos?.lon ?: Double.NaN, 0.000001)
+    }
+
     @Test fun speedZoomIsCloserWhenSlowAndWiderAtSpeed() {
         assertEquals(18.4, NavigationPolicy.speedZoom(0.0), 0.0001)
         assertEquals(15.7, NavigationPolicy.speedZoom(40.0), 0.0001)
@@ -27,6 +50,15 @@ class NavigationPolicyTest {
         assertTrue(town > motorway)
         assertEquals(18.7, NavigationPolicy.routeSpeedZoom(0.0, null), 0.0001)
         assertEquals(15.6, NavigationPolicy.routeSpeedZoom(36.0, null), 0.0001)
+    }
+
+    @Test fun initialRouteSnapWindowStaysUntilMovingAndCloseToOpeningSection() {
+        assertFalse(NavigationPolicy.shouldReleaseInitialRouteSnap(0.0, 5.0))
+        assertFalse(NavigationPolicy.shouldReleaseInitialRouteSnap(2.5, 5.0))
+        assertFalse(NavigationPolicy.shouldReleaseInitialRouteSnap(3.0, 60.1))
+        assertTrue(NavigationPolicy.shouldReleaseInitialRouteSnap(2.6, 60.0))
+        assertFalse(NavigationPolicy.shouldReleaseInitialRouteSnap(Double.NaN, 10.0))
+        assertFalse(NavigationPolicy.shouldReleaseInitialRouteSnap(5.0, Double.NaN))
     }
 
     @Test fun poorGpsAccuracyCannotTriggerReroute() {
@@ -108,7 +140,7 @@ class NavigationPolicyTest {
         val cumulative = doubleArrayOf(0.0, 100.0, 300.0, 400.0)
         val seconds = doubleArrayOf(60.0, 300.0, 30.0)
         assertEquals(390.0, NavigationPolicy.remainingSegmentTime(cumulative, seconds, 0.0)!!, 0.001)
-        assertEquals(285.0, NavigationPolicy.remainingSegmentTime(cumulative, seconds, 150.0)!!, 0.001)
+        assertEquals(255.0, NavigationPolicy.remainingSegmentTime(cumulative, seconds, 150.0)!!, 0.001)
         assertEquals(15.0, NavigationPolicy.remainingSegmentTime(cumulative, seconds, 350.0)!!, 0.001)
         assertEquals(0.0, NavigationPolicy.remainingSegmentTime(cumulative, seconds, 450.0)!!, 0.001)
     }
@@ -152,5 +184,19 @@ class NavigationPolicyTest {
         assertTrue(compact in -0.90..-0.15)
         assertTrue(wide in -0.90..-0.15)
         assertTrue(compact < wide)
+    }
+
+    @Test fun phoneDoesNotDeclareArrivalWhileCarScreenIsConnected() {
+        assertFalse(NavigationPolicy.mayDeclareArrival(isCar = false, carConnected = true, simulating = false, navStartMs = 1_000L, liveFixAtMs = 2_000L))
+        assertTrue(NavigationPolicy.mayDeclareArrival(isCar = true, carConnected = true, simulating = false, navStartMs = 1_000L, liveFixAtMs = 2_000L))
+        assertTrue(NavigationPolicy.mayDeclareArrival(isCar = false, carConnected = false, simulating = false, navStartMs = 1_000L, liveFixAtMs = 2_000L))
+    }
+
+    @Test fun arrivalNeedsARealFixSinceTheRouteStarted() {
+        // the last fix came before the route was started (a stale position): not arrived yet
+        assertFalse(NavigationPolicy.mayDeclareArrival(isCar = true, carConnected = true, simulating = false, navStartMs = 5_000L, liveFixAtMs = 4_000L))
+        assertFalse(NavigationPolicy.mayDeclareArrival(isCar = false, carConnected = false, simulating = false, navStartMs = 5_000L, liveFixAtMs = 0L))
+        // a demo drive arrives on its simulated position
+        assertTrue(NavigationPolicy.mayDeclareArrival(isCar = false, carConnected = true, simulating = true, navStartMs = 5_000L, liveFixAtMs = 0L))
     }
 }

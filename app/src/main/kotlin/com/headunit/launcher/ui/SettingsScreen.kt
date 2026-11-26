@@ -424,11 +424,20 @@ private fun LightSection(prefs: Prefs) {
         STilt("Inclinaison sur Android Auto", "L'écran de la voiture", prefs, PreferenceKeys.TILT_CAR)
         SToggle(prefs, "Aplatir la carte en 2D aux virages", "turn2d", true)
         SToggle(prefs, "Inclinaison selon la vitesse", "speedtilt", true, "Plus plat à basse vitesse, vue plus longue à vitesse élevée")
-        SToggle(prefs, "Aperçu du trafic à l'arrêt", PreferenceKeys.STOPPED_OVERVIEW, true, "Après 30 secondes à l'arrêt (feu, bouchon), la carte recule en vue du dessus du trafic autour de vous, puis revient quand vous repartez")
+        SToggle(prefs, "Tourner autour de la voiture à l'arrêt", PreferenceKeys.ORBIT, false,
+            "Après un moment à l'arrêt, la caméra tourne lentement autour de la voiture, et revient dès que vous repartez. Elle remplace la vue du trafic. Plus de travail pour un autoradio lent")
+        if (prefs.b(PreferenceKeys.ORBIT, false)) {
+            SChoice("Commencer après", listOf("15" to "15 s", "30" to "30 s", "60" to "1 min"), prefs.s(PreferenceKeys.ORBIT_AFTER, "30")) { prefs.put(PreferenceKeys.ORBIT_AFTER, it) }
+            SChoice("Vitesse de rotation", listOf("slow" to "Lente", "medium" to "Moyenne"), prefs.s(PreferenceKeys.ORBIT_SPEED, "slow")) { prefs.put(PreferenceKeys.ORBIT_SPEED, it) }
+            SChoice("Sens", listOf("cw" to "Horaire", "ccw" to "Antihoraire"), prefs.s(PreferenceKeys.ORBIT_DIR, "cw")) { prefs.put(PreferenceKeys.ORBIT_DIR, it) }
+        }
+        if (!prefs.b(PreferenceKeys.ORBIT, false)) SToggle(prefs, "Aperçu du trafic à l'arrêt", PreferenceKeys.STOPPED_OVERVIEW, true, "Après 30 secondes à l'arrêt (feu, bouchon), la carte recule en vue du dessus du trafic autour de vous, puis revient quand vous repartez")
     }
     SGroup("Carte de direction") {
-        SChoice("Couleur de la carte de direction", listOf("green" to "Vert", "black" to "Noir", "grey" to "Gris foncé", "navy" to "Bleu marine", "purple" to "Violet"),
-            prefs.s(PreferenceKeys.TURN_CARD_COLOUR, "green"), "La couleur derrière la prochaine direction. Le texte reste blanc") { prefs.put(PreferenceKeys.TURN_CARD_COLOUR, it) }
+        SChoice("Couleur de la carte de direction", listOf("green" to "Vert", "black" to "Noir", "grey" to "Gris foncé", "navy" to "Bleu marine", "purple" to "Violet", "signs" to "Comme les panneaux"),
+            prefs.s(PreferenceKeys.TURN_CARD_COLOUR, "green"),
+            if (prefs.s(PreferenceKeys.TURN_CARD_COLOUR, "green") == "signs") "La carte prend la couleur des panneaux là où vous roulez : bleu sur autoroute en France, la couleur habituelle ailleurs"
+            else "La couleur derrière la prochaine direction. Le texte reste blanc", wrap = true) { prefs.put(PreferenceKeys.TURN_CARD_COLOUR, it) }
     }
     SGroup("3D") {
         SToggle(prefs, "Ombrage du relief", PreferenceKeys.HILLSHADE, false, "Un ombrage doux sur les pentes, pour voir vallées et crêtes même sur une carte à plat. Plus léger que le relief 3D")
@@ -513,6 +522,8 @@ private fun OnTheMapSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Passages piétons", "zebras", true, "Passages piétons de votre itinéraire peints sur la route, avec balises lumineuses (de près)")
         SToggle(prefs, "Panneaux stop", PreferenceKeys.STOP_SIGNS, true, "Stops et cédez-le-passage de votre itinéraire affichés sur la carte, avec un petit signal sonore avant chaque stop (là où OpenStreetMap les connaît)")
         SToggle(prefs, "Caméras de lecture de plaques", PreferenceKeys.ALPR_CAMS, true, "Caméras Flock et autres lecteurs automatiques de plaques recensés sur OpenStreetMap. Affichées sur la carte seulement, sans alerte")
+        if (prefs.b("hazardicons", true)) SPercent("Taille des panneaux de danger", "Travaux, fermetures et dangers sur la carte", prefs, PreferenceKeys.HAZ_SIZE, 50, 300)
+        if (prefs.b(PreferenceKeys.NEXT_LIMIT, true)) SPercent("Taille des limitations sur l'itinéraire", "Les panneaux de limitation dessinés sur votre itinéraire là où elle change", prefs, PreferenceKeys.ROUTE_LIMIT_SIZE, 50, 250)
     }
     SGroup("Mobilier urbain 3D") {
         SToggle(prefs, "Lampadaires, feux et radars en 3D", "furniture3d", true, "Modèles 3D grandeur nature avec lampes et feux allumés (3D complète). Désactivé : badges et blocs simplifiés")
@@ -643,7 +654,21 @@ private fun RoutesSection(prefs: Prefs, engine: NavEngine) {
                 }
             }
         }
-        SToggle(prefs, "Éviter les autoroutes", "avoid_motorway", false)
+        // Never / Always / Short trips (kr-nn #413): "Always" is the old switch, so the car's settings and "avoid motorways" by voice
+        // still work as before
+        val mwMode = if (prefs.b(PreferenceKeys.AVOID_MOTORWAY, false)) "always" else if (prefs.b(PreferenceKeys.AVOID_MOTORWAY_SHORT, false)) "short" else "never"
+        SChoice("Éviter les autoroutes", listOf("never" to "Jamais", "always" to "Toujours", "short" to "Petits trajets"), mwMode,
+            if (mwMode == "short") "Les autoroutes sont évitées quand la destination est à moins de cette distance" else null) {
+            prefs.put(PreferenceKeys.AVOID_MOTORWAY, it == "always"); prefs.put(PreferenceKeys.AVOID_MOTORWAY_SHORT, it == "short")
+        }
+        if (mwMode == "short") {
+            val steps = if (engine.imperial) listOf(10, 20, 30, 50).map { Math.round(it * 1609.344).toInt() to "$it miles" }
+                else listOf(15, 30, 50, 80).map { it * 1000 to "$it km" }
+            val now = prefs.i(PreferenceKeys.AVOID_MOTORWAY_UNDER, 32187)
+            // (the nearest step, so switching between miles and km still shows one picked)
+            val shown = steps.minByOrNull { kotlin.math.abs(it.first - now) }!!.first
+            SChoice("Petits trajets : moins de", steps.map { it.first.toString() to it.second }, shown.toString()) { prefs.put(PreferenceKeys.AVOID_MOTORWAY_UNDER, it.toInt()) }
+        }
         SToggle(prefs, "Éviter les ferries", "avoid_ferry", false)
         SToggle(prefs, "Éviter les trains autos", PreferenceKeys.AVOID_TRAIN, false, "Les trains qui transportent votre voiture, comme la navette du tunnel sous la Manche ou les trains des tunnels alpins")
         SToggle(prefs, "Éviter les routes non goudronnées", "avoid_unpaved", true)
@@ -653,8 +678,8 @@ private fun RoutesSection(prefs: Prefs, engine: NavEngine) {
     SGroup("Choix de l'itinéraire") {
         SToggle(prefs, "Itinéraires éco", "route_eco", false, "Économes en carburant plutôt que les plus rapides")
         SToggle(prefs, "Préférer les itinéraires plus simples", "prefer_simple", true, "Quand un itinéraire n'est qu'environ une minute plus lent mais a bien moins de virages, il est choisi en premier (indiqué La plus simple). Désactivé choisit toujours le plus rapide")
-        SToggle(prefs, "Préférer les grands axes (hors ligne)", PreferenceKeys.PREFER_MAIN_ROADS, false,
-            "Hors ligne, les itinéraires voiture préfèrent un peu les grands axes quand c'est possible. En ligne et en poids lourd, rien ne change.")
+        SToggle(prefs, "Préférer les grands axes", PreferenceKeys.PREFER_MAIN_ROADS, false,
+            "Reste sur les grands axes plutôt que les rues résidentielles et les petites routes, même si c'est quelques minutes plus long (« Grands axes »). En ligne, il choisit parmi les itinéraires proposés par Mapbox ; hors ligne, les itinéraires voiture préfèrent les grandes routes")
         SToggle(prefs, "Proposer des itinéraires plus rapides", "fasterroute", true)
         if (prefs.b(PreferenceKeys.FASTER_ROUTE, true)) SToggle(prefs, "Garder les autres itinéraires sur la carte", "livealts", true, "Lignes grises avec +/− minutes à toucher à tout moment. Désactivé affiche plutôt une carte « Itinéraire plus rapide trouvé »")
         SToggle(prefs, "Suggérer votre destination", "predict", true, "Avec le temps de trajet en direct, y compris domicile et travail à vos heures habituelles")
@@ -789,6 +814,9 @@ private fun GuidanceSection(prefs: Prefs, engine: NavEngine) {
         ) { prefs.put(PreferenceKeys.LANE_MAP_STYLE, it) }
         SToggle(prefs, "Zoomer sur les voies avant une intersection", "laneview", true)
         SToggle(prefs, "Intersection en gros plan", "junctionview", true, "Aux bretelles, sorties d'autoroute, bifurcations et séparations de voies, la vue se rapproche et s'aplatit un peu sur les 200 derniers mètres")
+        if (prefs.b(PreferenceKeys.LANE_VIEW, true) || prefs.b(PreferenceKeys.JUNCTION_VIEW, true))
+            SChoice("Zoom aux carrefours", listOf("-1" to "Plus loin", "0" to "Habituel", "1" to "Plus proche", "2" to "Au plus près"), prefs.s(PreferenceKeys.JUNCTION_ZOOM, "0"),
+                "Le zoom de la carte sur les virages, les voies et les carrefours. Plus loin montre plus de routes autour ; plus proche aide sur un petit écran") { prefs.put(PreferenceKeys.JUNCTION_ZOOM, it) }
     }
     SGroup("Carte de trajet") {
         SToggle(prefs, "Barre d'itinéraire sur la carte de trajet", "routebar", true, "Trafic, radars, aires et étapes, avec votre progression")
@@ -1355,13 +1383,13 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
             if (autoScale) "Selon la taille et la forme de l'écran (actuellement $autoPercent %)" else "Taille manuelle du texte et des boutons activée"
         ) {
             Switch(checked = autoScale, onCheckedChange = { enabled ->
-                if (!enabled) prefs.put(PreferenceKeys.UI_SCALE, autoPercent)
+                if (!enabled) prefs.put(PreferenceKeys.UI_SCALE, 100)
                 prefs.put(PreferenceKeys.UI_AUTO_SCALE, enabled)
             })
         }
         SSlider(
             "Taille du texte et des boutons",
-            (if (autoScale) autoPercent else prefs.i(PreferenceKeys.UI_SCALE, autoPercent)).toFloat(),
+            (if (autoScale) autoPercent else prefs.i(PreferenceKeys.UI_SCALE, 100)).toFloat(),
             60f..140f, "%", sub = if (autoScale) "Déplacez le curseur pour passer en taille manuelle" else "Réglez à la main, ou réactivez la mise à l'échelle automatique", steps = 15, reset = 100f
         ) {
             prefs.put(PreferenceKeys.UI_AUTO_SCALE, false)
@@ -1463,7 +1491,7 @@ private fun AndroidAutoSection(prefs: Prefs) {
     CarTripButtonsGroup(prefs)
     SGroup {
         SChoice("Fonctionnement au frais", listOf("off" to "Désactivé", "auto" to "Automatique", "always" to "Toujours"), prefs.s(PreferenceKeys.CAR_COOL, "off"),
-            "Pour les téléphones qui chauffent : 30 images par seconde, carte à plat, sans pluie ni lumières. Automatique l'active quand le téléphone signale qu'il chauffe") { prefs.put(PreferenceKeys.CAR_COOL, it) }
+            "Pour les téléphones qui chauffent : 30 images par seconde, vue 3D adoucie, sans pluie ni lumières. Automatique l'active quand le téléphone signale qu'il chauffe") { prefs.put(PreferenceKeys.CAR_COOL, it) }
         SToggle(prefs, "Barre de recherche et lieux sur la carte", PreferenceKeys.CAR_MAPUI, true, "Désactivé pour une voiture à molette : toute la carte, avec Rechercher, Domicile et Travail dans Lieux (★)")
         if (prefs.b(PreferenceKeys.CAR_MAPUI, true)) SChoice("Les masquer après", listOf("30" to "30 s", "60" to "1 min", "120" to "2 min", "300" to "5 min", "0" to "Jamais"),
             prefs.s(PreferenceKeys.CAR_MAPUI_HIDE, "0"), "Reviennent quand vous touchez l'écran") { prefs.put(PreferenceKeys.CAR_MAPUI_HIDE, it) }
@@ -1474,9 +1502,27 @@ private fun AndroidAutoSection(prefs: Prefs) {
     run {
         var micOk by remember { mutableStateOf(ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
         val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> micOk = granted }
+        SGroup("Batterie du téléphone") {
+            SToggle(prefs, "Batterie du téléphone sur l'écran de la voiture", PreferenceKeys.CAR_PHONE_BATTERY, false, "Le niveau de batterie du téléphone à côté du compteur")
+        }
         SGroup("Recherche vocale sur l'écran de la voiture", footer = "Avec le micro autorisé, le bouton micro de l'écran de la voiture écoute tout de suite. Sinon, il ouvre l'écran de recherche d'Android Auto, qui a son propre micro.") {
             SItem("Microphone", if (micOk) "Autorisée" else "Non autorisé") {
                 if (!micOk) SButton("Autoriser", primary = true) { askMic.launch(android.Manifest.permission.RECORD_AUDIO) }
+            }
+        }
+    }
+    // The car's own speed, battery level and position, read through Android Auto (Car App API 3): runtime permissions, asked
+    // here for the same reason as the microphone
+    run {
+        val carPerms = arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, com.headunit.launcher.CarData.CAR_SPEED, com.headunit.launcher.CarData.CAR_FUEL)
+        fun carOk() = carPerms.all { ctx.checkSelfPermission(it) == android.content.pm.PackageManager.PERMISSION_GRANTED }
+        var ok by remember { mutableStateOf(carOk()) }
+        val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { ok = carOk() }
+        SGroup("Données de la voiture", footer = "Permet à Android Auto de transmettre la vitesse, la batterie et la position de la voiture. Sans cela, l'appli utilise le GPS et le % de batterie que vous réglez.") {
+            SItem("Vitesse, batterie et position", if (ok) "Autorisée" else "Non autorisé") {
+                if (!ok) SButton("Autoriser", primary = true) { ask.launch(carPerms.filter { ctx.checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+                    // Android 12+ ignores a request for fine location without coarse location in the same request
+                    .let { if (android.Manifest.permission.ACCESS_FINE_LOCATION in it) it + android.Manifest.permission.ACCESS_COARSE_LOCATION else it }.toTypedArray()) }
             }
         }
     }
@@ -1499,7 +1545,7 @@ private fun AndroidAutoSection(prefs: Prefs) {
     SGroup("Tailles sur l'écran de la voiture") {
         SSlider("Taille générale sur l'écran de la voiture", prefs.i(PreferenceKeys.CARSCALE, 100).toFloat(), 40f..300f, "%", sub = "Échelle de base pour tout l'affichage" + (prefs.i(PreferenceKeys.CARSCALE_MAX, 0).takeIf { it in 100..299 }?.let { " · " + "Jusqu'à $it% tient sur l'écran de cette voiture" } ?: ""), steps = 25, reset = 100f) { prefs.put(PreferenceKeys.CARSCALE, it) }
         SSlider("Taille du compteur et du panneau de limitation", prefs.i(PreferenceKeys.CAR_SPEED_SIZE, 100).toFloat(), 40f..180f, "%", sub = "Rétrécit automatiquement si la zone d'écran disponible est trop petite", reset = 100f) { prefs.put(PreferenceKeys.CAR_SPEED_SIZE, it) }
-        SSlider("Taille du panneau de limitation", prefs.i(PreferenceKeys.CAR_LIMIT_SIZE, 100).toFloat(), 80f..170f, "%", sub = "Agrandit ou réduit le panneau de limitation à côté du compteur", reset = 100f) { prefs.put(PreferenceKeys.CAR_LIMIT_SIZE, it) }
+        SSlider("Taille du panneau de limitation", prefs.i(PreferenceKeys.CAR_LIMIT_SIZE, 100).toFloat(), 80f..170f, "%", sub = "Le panneau à côté du compteur, la limitation suivante et le bandeau de limitation", reset = 100f) { prefs.put(PreferenceKeys.CAR_LIMIT_SIZE, it) }
         var carAdvanced by rememberSaveable { mutableStateOf(false) }
         SItem("Tailles avancées pour l'écran de la voiture", "Réglez finement chaque élément") {
             SButton(if (carAdvanced) "Masquer" else "Afficher") { carAdvanced = !carAdvanced }

@@ -176,6 +176,46 @@ object RouteExtras {
         return true
     }
 
+    /**
+     * Marked crossings within [radiusM] of [p], for driving with no route (karthikeyansr-lgtm #427): where each is, which way the road
+     * runs there (so the stripes go across it), and whether it's a zebra (with Belisha beacons). Blocking.
+     */
+    fun crossingsNear(p: LL, radiusM: Int = 800): List<Triple<LL, Double, Boolean>> {
+        val at = String.format(java.util.Locale.US, "%d,%.6f,%.6f", radiusM, p.lat, p.lon)
+        val q = "[out:json][timeout:20];" +
+            "(node(around:$at)[\"highway\"=\"crossing\"][\"crossing\"~\"^(zebra|marked|uncontrolled)$\"];node(around:$at)[\"highway\"=\"crossing\"][\"crossing:markings\"=\"zebra\"];)->.c;.c out body 300;" +
+            // (the roads they cross, for their direction: not the footpath that crosses them)
+            "way(bn.c)[\"highway\"~\"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service)(_link)?$\"]->.w;.w out body geom 600;"
+        val els = Overpass.query(q, 10000, 25000, 2)
+        val zebra = HashMap<Long, Boolean>()
+        val pos = HashMap<Long, LL>()
+        val ways = ArrayList<JSONObject>()
+        for (i in 0 until els.length()) {
+            val e = els.getJSONObject(i)
+            if (e.optString("type") == "way") { ways += e; continue }
+            if (e.optString("type") != "node" || !e.has("lat")) continue
+            val t = e.optJSONObject("tags") ?: continue
+            val id = e.optLong("id")
+            pos[id] = LL(e.getDouble("lat"), e.getDouble("lon"))
+            zebra[id] = t.optString("crossing:markings").equals("zebra", true) || t.optString("crossing") == "zebra"
+        }
+        val out = LinkedHashMap<Long, Triple<LL, Double, Boolean>>()
+        for (w in ways) {
+            val ids = w.optJSONArray("nodes") ?: continue
+            val g = w.optJSONArray("geometry") ?: continue
+            if (g.length() != ids.length() || g.length() < 2) continue
+            fun ptAt(k: Int) = g.getJSONObject(k).let { LL(it.getDouble("lat"), it.getDouble("lon")) }
+            for (k in 0 until ids.length()) {
+                val id = ids.optLong(k)
+                val here = pos[id] ?: continue
+                if (id in out) continue
+                val a = ptAt(maxOf(0, k - 1)); val b = ptAt(minOf(g.length() - 1, k + 1))
+                out[id] = Triple(here, Geo.bearing(a, b), zebra[id] == true)
+            }
+        }
+        return out.values.toList()
+    }
+
     /** Speed bumps and schools right next to the route, and average speed checks around it (blocking). */
     fun hazards(line: List<LL>): Pair<List<RoutePoi>, List<AvgDef>> {
         if (line.size < 2) return emptyList<RoutePoi>() to emptyList()
@@ -186,7 +226,7 @@ object RouteExtras {
         val q = "[out:json][timeout:30];" +
             "(node(around:14,$pl)[\"traffic_calming\"~\"^(bump|hump|table|cushion)$\"];" +
             "node(around:90,$pl)[\"amenity\"=\"school\"];way(around:90,$pl)[\"amenity\"=\"school\"];)->.a;.a out center tags 300;" +
-            "node(around:10,$pl)[\"highway\"=\"crossing\"][\"crossing\"~\"^(zebra|marked|traffic_signals|uncontrolled|pelican|toucan|puffin|pegasus)$\"]->.c;.c out body 400;" +
+            "(node(around:10,$pl)[\"highway\"=\"crossing\"][\"crossing\"~\"^(zebra|marked|traffic_signals|uncontrolled|pelican|toucan|puffin|pegasus)$\"];node(around:10,$pl)[\"highway\"=\"crossing\"][\"crossing:markings\"=\"zebra\"];)->.c;.c out body 400;" +
             "node(around:12,$pl)[\"highway\"~\"^(stop|give_way)$\"]->.s;.s out body 300;way(bn.s)[\"highway\"]->.sw;.sw out body geom 600;" +
             "(node(around:12,$pl)[\"railway\"=\"level_crossing\"];node(around:12,$pl)[\"ford\"=\"yes\"];way(around:12,$pl)[\"ford\"=\"yes\"];)->.f;.f out center tags 200;"
         // (average speed checks are no longer part of this big request: they have their own, see avgZones, so a slow or failed
@@ -211,7 +251,11 @@ object RouteExtras {
                     if (t.optString("highway") == "stop" || t.optString("highway") == "give_way") signs += Triple(e.optLong("id"), pos, t)
                     else if (t.optString("railway") == "level_crossing") pois += RoutePoi("rail", "Level crossing", pos)
                     else if (t.optString("ford") == "yes") pois += RoutePoi("ford", "Ford", pos)
-                    else if (t.optString("highway") == "crossing") pois += RoutePoi("crossing", t.optString("crossing"), pos)
+                    else if (t.optString("highway") == "crossing") {
+                        val markings = t.optString("crossing:markings")
+                        val crossing = if (markings.equals("zebra", true)) "zebra" else t.optString("crossing").ifBlank { markings }
+                        pois += RoutePoi("crossing", crossing, pos)
+                    }
                     else if (t.has("traffic_calming")) pois += RoutePoi("bump", t.optString("traffic_calming"), pos)
                     else if (t.optString("amenity") == "school") pois += RoutePoi("school", t.optString("name").ifBlank { "École" }, pos)
                 }

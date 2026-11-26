@@ -64,20 +64,19 @@ internal fun findActivity(c: android.content.Context): android.app.Activity? {
 }
 
 /**
- * Conservative automatic UI scale for the main app. Keep Android's normal dp sizing (100%) on
- * ordinary screens, like Google Maps, and only shrink slightly when the available short edge is
- * genuinely compact. Large/high-resolution displays must not make controls larger just because
- * they have more pixels or dp available.
+ * The automatic UI size, as the user-facing percent (the app's established 85% physical scale sits underneath it, so 100% here
+ * is the size that suits an ordinary phone, #416). It only ever steps down, never up (a big screen doesn't need bigger buttons):
+ * - a narrow screen (short side under about 390 dp: small phones, a portrait head unit) gets a little smaller, so the cards across
+ *   it leave room for the map;
+ * - a cramped long side (under about 820 dp: a small landscape head unit, a squarish screen) likewise, as the cards sit side by
+ *   side along it.
+ * In 5% steps, down to 85% at most. It used to be a fixed 100% whatever the screen, though Settings said it went by the screen.
  */
 internal fun recommendedMainUiScale(widthDp: Int, heightDp: Int): Int {
     if (widthDp <= 0 || heightDp <= 0) return 100
-    val shortEdge = minOf(widthDp, heightDp)
-    return when {
-        shortEdge < 320 -> 92
-        shortEdge < 380 -> 96
-        shortEdge < 460 -> 98
-        else -> 100
-    }
+    val short = minOf(widthDp, heightDp).toFloat(); val long = maxOf(widthDp, heightDp).toFloat()
+    val fit = minOf(short / 390f, long / 820f).coerceIn(0.85f, 1f)
+    return (Math.round(fit * 100f / 5f) * 5).coerceIn(85, 100)
 }
 
 /** The whole app: the map full screen with its overlays, and the settings screen on top when it is open. */
@@ -173,12 +172,12 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
     LaunchedEffect(bright, dimNight, dark, keepOn) {
         val win = findActivity(hostCtx)?.window ?: return@LaunchedEffect
         val dim = dimNight && dark
-        // dimmed at night: half of what the screen is at now. It used to be half of full brightness, a fixed 50%, which is brighter
-        // than most screens are set at night, so "dim" made it brighter (testers). With Brightness at 100% (the system's own
-        // level), that's half the system's level; never brighter than it
-        val sys = try { (android.provider.Settings.System.getInt(hostCtx.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS, 128) / 255f).coerceIn(0.02f, 1f) } catch (e: Exception) { 0.5f }
-        val base = if (bright >= 100) sys else bright / 100f
-        val v = if (bright >= 100 && !dim) -1f else (base * (if (dim) 0.5f else 1f)).coerceIn(0.02f, 1f)
+        // the slider is read like Android's own (how bright it looks), and dimmed at night is half as bright as it looks; with
+        // Brightness at 100% it's half the system's level, never brighter, and left to auto-brightness when that's on (#417)
+        val cr = hostCtx.contentResolver
+        val sys = try { (android.provider.Settings.System.getInt(cr, android.provider.Settings.System.SCREEN_BRIGHTNESS, 128) / 255f).coerceIn(0f, 1f) } catch (e: Exception) { 0.5f }
+        val auto = try { android.provider.Settings.System.getInt(cr, android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE, 0) == android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC } catch (e: Exception) { false }
+        val v = com.headunit.launcher.BrightnessPolicy.windowBrightness(bright, dim, sys, auto)
         val lp = win.attributes
         lp.screenBrightness = v
         win.attributes = lp
@@ -217,6 +216,10 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
     LaunchedEffect(customOn, customDay, customNight, customW) { map.setCustom(customOn, customDay, customNight, customW) }
     val camSize = prefs.i(PreferenceKeys.CAM_SIZE, 100)
     LaunchedEffect(camSize) { map.setCameraSize(camSize) }
+    val hazSize = prefs.i(PreferenceKeys.HAZ_SIZE, 100)
+    LaunchedEffect(hazSize) { map.setHazardSize(hazSize) }
+    val routeLimSize = prefs.i(PreferenceKeys.ROUTE_LIMIT_SIZE, 100)
+    LaunchedEffect(routeLimSize) { map.setRouteLimitSize(routeLimSize) }
     val flags3d = prefs.b(PreferenceKeys.FLAGS_3D, true)
     val hills = prefs.b(PreferenceKeys.HILLSHADE, false)
     LaunchedEffect(flags3d, hills) { map.setFlags(flags3d); map.setHillShading(hills) }
@@ -335,18 +338,27 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
     val radarOn = prefs.b(PreferenceKeys.RAIN_RADAR, false)
     LaunchedEffect(radarOn) { engine.setRadarOn(radarOn) }
 
-    // Automatically choose a comfortable UI scale for the main app based on the current
-    // window's dp dimensions. A saved legacy uiscale is treated as a deliberate manual choice;
-    // fresh installs default to automatic scaling.
+    // Migrate saved manual values from the old absolute-percent scale to the new 85%-based
+    // baseline once. For example, an old 85% setting becomes the new 100% setting.
+    remember {
+        if (!prefs.b(PreferenceKeys.UI_SCALE_BASELINE_V2, false)) {
+            val oldValue = prefs.s(PreferenceKeys.UI_SCALE, "").toIntOrNull()
+            if (oldValue != null) prefs.put(PreferenceKeys.UI_SCALE, ((oldValue * 100f / 85f).toInt()).coerceIn(60, 140))
+            prefs.put(PreferenceKeys.UI_SCALE_BASELINE_V2, true)
+        }
+    }
     val configuration = LocalConfiguration.current
     val hasManualScale = prefs.s(PreferenceKeys.UI_SCALE, "").isNotBlank()
     val autoScaleEnabled = prefs.b(PreferenceKeys.UI_AUTO_SCALE, !hasManualScale)
     val autoScalePercent = remember(configuration.screenWidthDp, configuration.screenHeightDp) {
         recommendedMainUiScale(configuration.screenWidthDp, configuration.screenHeightDp)
     }
-    val scale = (if (autoScaleEnabled) autoScalePercent else prefs.i(PreferenceKeys.UI_SCALE, autoScalePercent))
-        .coerceIn(60, 140) / 100f
+    val selectedScale = if (autoScaleEnabled) autoScalePercent else prefs.i(PreferenceKeys.UI_SCALE, autoScalePercent)
+    val scale = 0.85f * selectedScale.coerceIn(60, 140) / 100f
     val baseDensity = androidx.compose.ui.platform.LocalDensity.current
+    // the signs on the map grow with the screen as the buttons and text do
+    val uiPx = baseDensity.density * scale
+    LaunchedEffect(uiPx) { map.setUiPx(uiPx) }
     val mainTextScale = prefs.i(PreferenceKeys.MAIN_TEXT_SIZE, 100).coerceIn(70, 150) / 100f
     androidx.compose.runtime.CompositionLocalProvider(
         androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(baseDensity.density * scale, baseDensity.fontScale * mainTextScale),
@@ -424,7 +436,9 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
                     val mediaUp = prefs.b(PreferenceKeys.MEDIA_BAR, false) && com.headunit.launcher.MediaNow.showing()
                     androidx.compose.runtime.SideEffect { val w = !engine.deadReckoning && cruiseShows; if (engine.cruisePillWanted != w) engine.cruisePillWanted = w }
                     // (with the portrait sheet up, the pill is the top line of the sheet instead)
-                    if (!engine.deadReckoning && cruiseShows && !engine.portraitSheetOn && !PipUi.on) CruisePill(engine, Modifier.align(Alignment.BottomCenter).padding(bottom = if (mediaUp) maxOf(84f, engine.mediaLiftDp + 10f).dp else 18.dp))
+                    if (!engine.deadReckoning && cruiseShows && !engine.portraitSheetOn && !PipUi.on) CruisePill(engine, Modifier.align(Alignment.BottomCenter).padding(bottom = if (mediaUp) maxOf(84f, engine.mediaLiftDp + 10f).dp else 18.dp)
+                        // (clear of the speedometer in its bottom corner, on both sides so it stays centred; a long name is cut short, #421)
+                        .padding(horizontal = if (mediaUp || engine.speedCornerDp == 0) 16.dp else (engine.speedCornerDp + 24).dp))
                     // that pill has the road name, so the one under your arrow steps aside while it's up (they overlapped)
                     val cruisePillUp = !engine.deadReckoning && cruiseShows
                     LaunchedEffect(cruisePillUp) { map.setRoadNameHidden(cruisePillUp) }
@@ -488,30 +502,6 @@ fun App(prefs: Prefs, engine: NavEngine, map: MapBinding) { SafeArea(prefs) { Te
                             Modifier.weight(1f).clip(RoundedCornerShape(50)).background(navVw(c).line).clickable { engine.reportCard = null }.padding(vertical = 9.dp),
                             contentAlignment = Alignment.Center,
                         ) { Text("Garder", color = navVw(c).text, fontSize = 15.sp) }
-                    }
-                }
-                // alerts (camera, speed limit, incident, rain, break) get a large banner that is hard to miss
-                if (!settings) {
-                    val curAlert = engine.alert
-                    val lastAlert = remember { mutableStateOf(curAlert) }
-                    if (curAlert != null) lastAlert.value = curAlert
-                    // landscape: centred in the gap between the turn card (left) and the round buttons (right), so it never covers them.
-                    // Portrait: just above the trip card at the bottom.
-                    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-                        val narrow = maxWidth < 720.dp
-                        Box(
-                            // (fork FR : en guidage, au-dessus du compteur, qu'elle recouvrait avec la carte de trajet plus haute)
-                            if (narrow) Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = if (engine.route != null && !engine.previewing) 340.dp else 250.dp)
-                            else Modifier.align(Alignment.TopStart).fillMaxWidth().padding(start = if (engine.mirrored) 290.dp else 412.dp, end = if (engine.mirrored) 412.dp else 290.dp, top = 16.dp),
-                            contentAlignment = if (narrow) Alignment.BottomCenter else Alignment.TopCenter,
-                        ) {
-                            // (the portrait route layout draws them under its turn card instead)
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = curAlert != null && !engine.alertsUnderTurn,
-                                enter = androidx.compose.animation.slideInVertically(initialOffsetY = { if (narrow) it else -it }) + androidx.compose.animation.fadeIn(),
-                                exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { if (narrow) it else -it }) + androidx.compose.animation.fadeOut(),
-                            ) { lastAlert.value?.let { AlertBanner(it) } }
-                        }
                     }
                 }
             }

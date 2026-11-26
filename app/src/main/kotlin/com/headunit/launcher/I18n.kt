@@ -15,7 +15,7 @@ object L {
         "ro" to "Română", "eu" to "Euskara", "zh" to "繁體中文", "zhhk" to "繁體中文（香港・粵語）",
         "el" to "Ελληνικά", "cs" to "Čeština", "fi" to "Suomi",
         "zhs" to "简体中文", "sk" to "Slovenčina", "da" to "Dansk", "hr" to "Hrvatski", "ms" to "Bahasa Melayu", "hu" to "Magyar",
-        "tr" to "Türkçe", "sr" to "Srpski", "ar" to "العربية", "he" to "עברית", "ur" to "اردو", "sv" to "Svenska", "bs" to "Bosanski", "kn" to "ಕನ್ನಡ", "mr" to "मराठी", "nb" to "Norsk bokmål", "ru" to "Русский", "uk" to "Українська", "vi" to "Tiếng Việt", "ml" to "മലയാളം", "ta" to "தமிழ்", "ko" to "한국어", "ca" to "Català", "te" to "తెలుగు", "esar" to "Español (Argentina)", "esmx" to "Español (México)", "ptbr" to "Português (Brasil)")
+        "tr" to "Türkçe", "sr" to "Srpski", "mk" to "Македонски", "ar" to "العربية", "he" to "עברית", "ur" to "اردو", "sv" to "Svenska", "bs" to "Bosanski", "kn" to "ಕನ್ನಡ", "mr" to "मराठी", "nb" to "Norsk bokmål", "ru" to "Русский", "uk" to "Українська", "vi" to "Tiếng Việt", "ml" to "മലയാളം", "ta" to "தமிழ்", "ko" to "한국어", "ca" to "Català", "te" to "తెలుగు", "esar" to "Español (Argentina)", "esmx" to "Español (México)", "ptbr" to "Português (Brasil)")
 
     /** Arabic, Hebrew and Urdu read right to left: the cards and settings are laid out that way round. */
     val rtl: Boolean get() = lang == "ar" || lang == "he" || lang == "ur"
@@ -32,7 +32,7 @@ object L {
         "bg" -> Locale("bg", "BG"); "sl" -> Locale("sl", "SI"); "ro" -> Locale("ro", "RO"); "eu" -> Locale("eu", "ES")
         "el" -> Locale("el", "GR"); "cs" -> Locale("cs", "CZ"); "fi" -> Locale("fi", "FI")
         "zhs" -> Locale("zh", "CN"); "sk" -> Locale("sk", "SK"); "da" -> Locale("da", "DK"); "hr" -> Locale("hr", "HR"); "ms" -> Locale("ms", "MY"); "hu" -> Locale("hu", "HU")
-        "tr" -> Locale("tr", "TR"); "sr" -> Locale("sr", "RS"); "sv" -> Locale("sv", "SE"); "bs" -> Locale("bs", "BA"); "kn" -> Locale("kn", "IN"); "mr" -> Locale("mr", "IN"); "nb" -> Locale("nb", "NO"); "ru" -> Locale("ru", "RU"); "uk" -> Locale("uk", "UA"); "vi" -> Locale("vi", "VN"); "ml" -> Locale("ml", "IN"); "ta" -> Locale("ta", "IN"); "ko" -> Locale("ko", "KR"); "ca" -> Locale("ca", "ES"); "te" -> Locale("te", "IN"); "esar" -> Locale("es", "AR"); "esmx" -> Locale("es", "MX")
+        "tr" -> Locale("tr", "TR"); "sr" -> Locale("sr", "RS"); "mk" -> Locale("mk", "MK"); "sv" -> Locale("sv", "SE"); "bs" -> Locale("bs", "BA"); "kn" -> Locale("kn", "IN"); "mr" -> Locale("mr", "IN"); "nb" -> Locale("nb", "NO"); "ru" -> Locale("ru", "RU"); "uk" -> Locale("uk", "UA"); "vi" -> Locale("vi", "VN"); "ml" -> Locale("ml", "IN"); "ta" -> Locale("ta", "IN"); "ko" -> Locale("ko", "KR"); "ca" -> Locale("ca", "ES"); "te" -> Locale("te", "IN"); "esar" -> Locale("es", "AR"); "esmx" -> Locale("es", "MX")
         "he" -> Locale("he", "IL"); "ur" -> Locale("ur", "PK")
         // (Arabic: the phone's own country when it's set to Arabic, Saudi Arabia otherwise)
         "ar" -> Locale.getDefault().takeIf { it.language == "ar" } ?: Locale("ar", "SA")
@@ -66,9 +66,11 @@ object L {
      * The voices to try for the spoken directions, best first. Cantonese is kept by Google's speech engine under its own language
      * code (yue): asking for Chinese (Hong Kong) gets Mandarin, so for Hong Kong Cantonese is asked for first (GitHub #83).
      */
-    val voiceLocales: List<Locale> get() = if (lang == "zhhk") listOf(Locale("yue", "HK"), Locale.forLanguageTag("yue-Hant-HK"), Locale("zh", "HK")) else listOf(locale)
+    // (Macedonian: few phones have a Macedonian voice, so the Bulgarian or Serbian one reads it then, both close and in Cyrillic, #432)
+    val voiceLocales: List<Locale> get() = if (lang == "zhhk") listOf(Locale("yue", "HK"), Locale.forLanguageTag("yue-Hant-HK"), Locale("zh", "HK"))
+        else if (lang == "mk") listOf(Locale("mk", "MK"), Locale("bg", "BG"), Locale("sr", "RS")) else listOf(locale)
 
-    val mapboxLang: String get() = when (lang) { "zh", "zhhk" -> "zh-Hant"; "zhs" -> "zh-Hans"; "ur", "kn", "mr", "ml", "ta", "te" -> "en"; "esar", "esmx" -> "es"; "ptbr" -> "pt"; else -> lang }
+    val mapboxLang: String get() = when (lang) { "zh", "zhhk" -> "zh-Hant"; "zhs" -> "zh-Hans"; "ur", "kn", "mr", "ml", "ta", "te", "mk" -> "en"; "esar", "esmx" -> "es"; "ptbr" -> "pt"; else -> lang }
 
     /** The Google Play edition is called Horizon Maps, so it can be told apart from the GitHub one (Horizon Nav). */
     private val playName = BuildConfig.STORE == "play"
@@ -613,7 +615,7 @@ object L {
         "id", "ms" -> "ke-$n"
         // (with "the": "az" before a vowel sound, "a" otherwise: az 1., a 2., az 5.)
         "hu" -> if (n == 1 || n == 5 || n in 50..59) "az $n." else "a $n."
-        "eu", "cs", "fi", "sk", "da", "nb", "hr", "tr", "sr", "bs" -> "$n."
+        "eu", "cs", "fi", "sk", "da", "nb", "hr", "tr", "sr", "bs", "mk" -> "$n."
         // (1:a, 2:a, 3:e … but 11:e and 12:e)
         "sv" -> if (n % 10 in 1..2 && n % 100 !in 11..12) "$n:a" else "$n:e"
         "ar", "he", "ur" -> "$n"
@@ -682,6 +684,8 @@ object L {
         "hu" -> "az első|a második|a harmadik|a negyedik|az ötödik|a hatodik|a hetedik|a nyolcadik|a kilencedik|a tizedik"
         "ms" -> "pertama|kedua|ketiga|keempat|kelima|keenam|ketujuh|kelapan|kesembilan|kesepuluh"
         "hr", "sr", "bs" -> "prvi|drugi|treći|četvrti|peti|šesti|sedmi|osmi|deveti|deseti"
+        // (with "the", as the roundabout phrase needs: "излезете на вториот излез")
+        "mk" -> "првиот|вториот|третиот|четвртиот|петтиот|шестиот|седмиот|осмиот|деветтиот|десеттиот"
         "ar" -> "الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر"
         // (with "the" joined on, as the roundabout phrase needs: "ביציאה השנייה")
         "he" -> "ראשונה|שנייה|שלישית|רביעית|חמישית|שישית|שביעית|שמינית|תשיעית|עשירית"
@@ -724,7 +728,7 @@ object L {
         val keys3 = listOf("th", "ja", "id")
         val keys4 = listOf("bg")
         val keys5 = listOf("sl")
-        val m = (keys + keys2 + keys3 + keys4 + keys5 + listOf("ro", "eu", "zh", "el", "cs", "fi", "zhs", "sk", "da", "hr", "ms", "hu", "tr", "sr", "ar", "he", "ur", "sv", "bs", "kn", "mr", "nb", "ru", "uk", "vi", "ml", "ta", "ko", "te", "ca", "esar", "esmx", "zhhk", "ptbr")).associateWith { HashMap<String, String>() }
+        val m = (keys + keys2 + keys3 + keys4 + keys5 + listOf("ro", "eu", "zh", "el", "cs", "fi", "zhs", "sk", "da", "hr", "ms", "hu", "tr", "sr", "ar", "he", "ur", "sv", "bs", "kn", "mr", "nb", "ru", "uk", "vi", "ml", "ta", "ko", "te", "ca", "esar", "esmx", "zhhk", "ptbr", "mk")).associateWith { HashMap<String, String>() }
         for ((en, tr) in rows) for ((i, k) in keys.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows2) for ((i, k) in keys2.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
         for ((en, tr) in rows3) for ((i, k) in keys3.withIndex()) tr.getOrNull(i)?.let { if (it.isNotEmpty()) m[k]!![en] = it }
@@ -746,6 +750,7 @@ object L {
         addOwn(m, "hu", I18nHu.rows())
         addOwn(m, "tr", I18nTr.rows())
         addOwn(m, "sr", I18nSr.rows())
+        addOwn(m, "mk", I18nMk.rows())
         addOwn(m, "ar", I18nAr.rows())
         addOwn(m, "he", I18nHe.rows())
         addOwn(m, "ur", I18nUr.rows())
@@ -764,6 +769,11 @@ object L {
         addOwn(m, "te", I18nTe.rows())
         addOwn(m, "esar", I18nEsAr.rows())
         addOwn(m, "esmx", I18nEsMx.rows())
+        // Stage 3 audit: targeted corrections for English labels found in the first five established packs.
+        for (code in m.keys) addOwn(m, code, I18nAuditBatch1.rows(code))
+        // Stage 3 audit: targeted corrections for Portuguese, Polish, Romanian, Basque and Slovenian.
+        for (code in m.keys) addOwn(m, code, I18nAuditBatch2.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nAuditBatch3.rows(code))
         for (code in m.keys) addOwn(m, code, I18nMapDiagnostics.rows(code))
         for (code in m.keys) addOwn(m, code, I18nFavouriteSort.rows(code))
         for (code in m.keys) addOwn(m, code, I18nPhoneParking.rows(code))
@@ -773,13 +783,34 @@ object L {
         for (code in m.keys) addOwn(m, code, I18nSpeedBg.rows(code))
         for (code in m.keys) addOwn(m, code, I18nMapButtons.rows(code))
         for (code in m.keys) addOwn(m, code, I18nKeepOn.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nCoolRunning.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nRoutePrefs.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nTomTomMap.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nSizes.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nOrbit.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nZebras.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nRouteLimit.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nDataAuto.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nPhoneBattery.rows(code))
+        for (code in m.keys) addOwn(m, code, I18nSignColours.rows(code))
+        // (Macedonian's share of the per-feature files above, kept together, #432)
+        addOwn(m, "mk", I18nMkExtra.rows())
         for (code in m.keys) addOwn(m, code, I18nChargerDetour.rows(code))
         for (code in m.keys) addOwn(m, code, I18nSearchCard.rows(code))
+        // Fill navigation phrases missing from individual language packs without replacing existing translations.
+        for (code in m.keys) for ((en, translated) in I18nNavigationPrompts.rows(code)) {
+            m[code]?.putIfAbsent(en, translated)
+        }
+        for (code in m.keys) addOwn(m, code, I18nCarData.rows(code))
         // Brazilian Portuguese: everything Portuguese has, in Brazil's words, then the whole-phrase fixes
         m["ptbr"]?.let { br -> for ((en, eu) in m["pt"].orEmpty()) br[en] = try { I18nPtBr.convert(eu) } catch (e: Throwable) { eu } }
         addOwn(m, "ptbr", I18nPtBr.fixes())
         m
     }
+
+    /** Read-only snapshot used by localisation regression tests. */
+    internal fun auditSnapshot(): Map<String, Map<String, String>> =
+        table.mapValues { (_, translations) -> translations.toMap() }
 
     // English, then Dutch, German, French, Spanish. (German directions use the infinitive, as German sat navs do:
     // "In 200 Metern links abbiegen"; distances after "In" take the dative, "Metern".) Split into parts of 200, as one

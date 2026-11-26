@@ -102,9 +102,9 @@ object GpxStore {
 
     /** Imports the picked file. Null when it worked, or why it didn't. (Call off the main thread.) */
     fun import(c: Context, uri: Uri): String? {
-        val (name, raw) = try { c.contentResolver.openInputStream(uri)?.use { parse(it) } ?: return "Couldn't open that file" }
-            catch (e: Exception) { return "That isn't a GPX file" }
-        if (raw.size < 2) return "That file has no track in it"
+        val (name, raw) = try { c.contentResolver.openInputStream(uri)?.use { parse(it) } ?: return "Impossible d'ouvrir ce fichier" }
+            catch (e: Exception) { return "Ce n'est pas un fichier GPX" }
+        if (raw.size < 2) return "Ce fichier ne contient aucune trace"
         // merge points closer than 15 m, then cap the count
         val thin = ArrayList<LL>()
         for (p in raw) { val last = thin.lastOrNull(); if (last == null || Geo.dist(last, p) >= 15.0) thin += p }

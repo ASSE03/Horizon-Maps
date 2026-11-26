@@ -32,10 +32,6 @@ class TurnInfo(
     val sides: List<Double>? = null,
     /** Road numbers beside the street names (this turn's road, and the one after it); "" when there is none. */
     val ref: String = "", val thenRef: String = "",
-    /** Provider-supplied country-specific road shield metadata for the upcoming sign. */
-    val shields: List<RoadShield> = emptyList(),
-    /** TomTom's sprite atlas URL; downloaded and cached only when a shield is actually shown. */
-    val shieldAtlasUrl: String = "",
 )
 /** Countries that use miles for road distances and speeds. */
 val MILES_COUNTRIES = setOf("GB", "US", "PR", "LR", "MM", "IM", "GG", "JE", "VG", "VI", "AG", "DM", "GD", "KN", "LC", "VC", "BS", "KY", "FK", "SH", "WS", "GU", "AS", "MP")
@@ -67,3 +63,27 @@ class IncidentAhead(val label: String, val dist: Double, val delaySec: Int)
 class EtaInfo(val arrive: String, val dist: Double, val secs: Double, val delayMin: Int)
 /** A stop on the way: when you get there, how far it is along the route (m) and how long that takes (s). */
 class StopEta(val place: Place, val arrive: String, val dist: Double, val secs: Double)
+
+/** Tracks real GPS independently while demo drive temporarily supplies synthetic positions. */
+internal class DemoGpsFixState {
+    var latest: Fix? = null
+        private set
+    private var atDemoStart: Fix? = null
+
+    fun update(fix: Fix) {
+        latest = fix
+    }
+
+    /** Capture a safe fallback before demo positions begin replacing the engine's displayed fix. */
+    fun begin(currentFix: Fix?): Fix? {
+        atDemoStart = latest ?: currentFix
+        return atDemoStart
+    }
+
+    /** Prefer a real fix received during the demo; otherwise restore the pre-demo position. */
+    fun finish(): Fix? {
+        val result = latest ?: atDemoStart
+        atDemoStart = null
+        return result
+    }
+}

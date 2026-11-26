@@ -43,6 +43,9 @@ class MainActivity : ComponentActivity() {
         val prev = Thread.getDefaultUncaughtExceptionHandler()
         val crashFile = java.io.File(applicationContext.filesDir, "lastcrash.txt")
         val boot = getSharedPreferences(CrashGuardPrefs.FILE, android.content.Context.MODE_PRIVATE)
+        val prefs = Prefs(applicationContext)
+        // Set the chosen language before any recovery or compatibility screen is shown.
+        try { L.set(prefs.s(PreferenceKeys.APP_LANG, "auto")) } catch (e: Exception) { }
         val startedAt = System.currentTimeMillis()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
             // (with the version and time, so a report left over from an older version can be told apart)
@@ -76,7 +79,6 @@ class MainActivity : ComponentActivity() {
             if (vis and android.view.View.SYSTEM_UI_FLAG_FULLSCREEN == 0) window.decorView.postDelayed({ if (!isFinishing) hideBars() }, 2500)
         }
 
-        val prefs = Prefs(applicationContext)
         // the Mapbox map needs OpenGL ES 3.0: on an older unit, say so plainly instead of showing a black map (or closing)
         val gl = try { (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).deviceConfigurationInfo.reqGlEsVersion } catch (e: Throwable) { 0x30000 }
         if (gl in 1 until 0x30000) {
@@ -113,7 +115,7 @@ class MainActivity : ComponentActivity() {
         SessionWatch.speed = { try { engine.fix?.speed ?: 0.0 } catch (e: Throwable) { 0.0 } }
         SessionWatch.perf = { try { engine.perfLine } catch (e: Throwable) { "" } }
         SessionWatch.resumed(applicationContext)
-        if (sessionStep > 0) window.decorView.postDelayed({ try { engine.toast(SessionWatch.message(sessionStep), 12_000) } catch (e: Throwable) { } }, 5000L)
+        if (sessionStep > 0) window.decorView.postDelayed({ try { engine.toast(L.t(SessionWatch.message(sessionStep)), 12_000) } catch (e: Throwable) { } }, 5000L)
         if (safeLevel > 0) window.decorView.postDelayed({
             try { engine.toast(if (safeLevel >= 2) "Horizon Nav a eu du mal à démarrer, la carte est donc en mode Minimale. Modifiable dans Réglages › Style de la carte" else "Horizon Nav a eu du mal à démarrer, les fonctions 3D les plus lourdes sont donc désactivées. Réactivables dans Réglages › Lumière et 3D et Sur la carte", 10_000) } catch (e: Throwable) { }
         }, 4000L)

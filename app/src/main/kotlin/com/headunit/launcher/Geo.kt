@@ -11,8 +11,6 @@ import java.net.URLEncoder
 import kotlin.math.*
 
 data class LL(val lat: Double, val lon: Double)
-/** Provider-supplied road-shield identity and text for a route instruction. */
-data class RoadShield(val reference: String, val content: String, val affixes: List<String> = emptyList())
 data class Step(val off: Double, val maneuver: String, val street: String, val msg: String, val roundExit: Int = 0, val exitNo: String = "", val sign: String = "",
     /** Mapbox's picture of this junction (a motorway junction with the lanes marked), when there is one; "" otherwise. */
     val junctionPic: String = "",
@@ -25,11 +23,22 @@ data class Step(val off: Double, val maneuver: String, val street: String, val m
      *  turn arrow; null when the route data doesn't say. */
     val sides: List<Double>? = null,
     /** The road number (169, E39) when the road has a name too, shown beside the name; never spoken (desko1973, #297). */
-    val ref: String = "",
-    /** Country/provider-specific shield metadata returned with the instruction, when available. */
-    val shields: List<RoadShield> = emptyList())
-/** A place found or saved. [web]: its website when the search gave one (for its logo; not saved with favourites). */
-data class Place(val name: String, val sub: String, val pos: LL, val web: String = "")
+    val ref: String = "")
+/**
+ * A place found or saved. [web]: its website when the search gave one (for its logo; not saved with favourites). [onStreet]: the
+ * search service gave the point on the street in front of it (an address's entrance), so it needn't be looked for again.
+ */
+data class Place(val name: String, val sub: String, val pos: LL, val web: String = "", val onStreet: Boolean = false) {
+    /** "28 wrengardens" for "28 Wren Gardens, Alder Holt": the house number and street, to tell one address from two. Blank when not an address. */
+    val addressKey: String get() {
+        // (only a number then a street: "Flat 2" or "Unit 4" could be in a different building next door)
+        val first = name.substringBefore(',').trim().lowercase()
+        if (!Regex("^\\d+[a-z]?(?:[-/]\\d+[a-z]?)?\\s+\\p{L}").containsMatchIn(first)) return ""
+        return first.filter { it.isLetterOrDigit() }
+    }
+    /** The same house as [o]: the same number and street, close together (two search services, spelt a little differently). */
+    fun sameAddress(o: Place): Boolean = addressKey.isNotEmpty() && addressKey == o.addressKey && Geo.dist(pos, o.pos) < 300.0
+}
 
 /** A live incident. [mag]: how much it holds traffic up, 0 unknown, 1 minor, 2 moderate, 3 major (TomTom's magnitude / Mapbox's impact). */
 class Incident(val id: String, val cat: String, val text: String, val delaySec: Int, val pts: List<LL>, val mag: Int = 0)
@@ -71,17 +80,20 @@ class Route(
     @Volatile var mineVia: List<LL> = emptyList()
     /** Picked first for having far fewer turns than the quickest (Prefer simpler routes): labelled "Simplest" on the route choice. */
     @Volatile var simpler: Boolean = false
+    /** Metres of it on small roads (residential streets, lanes, service roads), from Mapbox's junction data; -1 when not known
+     *  (TomTom and offline routes). For Prefer main roads (#402). */
+    @Volatile var minorM: Double = -1.0
+    /** Picked first for keeping to main roads (Prefer main roads): labelled "Main roads" on the route choice. */
+    @Volatile var mainRoads: Boolean = false
     /** An offline route's own time before the usual-traffic estimate ([JourneyTimes]) was added; 0 for other routes. */
     @Volatile var baseTime: Double = 0.0
-    /** TomTom road-shield sprite atlas base URL for this route, if supplied. */
-    @Volatile var shieldAtlasUrl: String = ""
 
     /** The same route taking [secs] (no live traffic), with everything else kept. */
     fun withTime(secs: Double): Route {
         val n = Route(pts, cum, steps, len, secs, 0.0, lanes, sev)
         n.delays = delays; n.segmentTimes = segmentTimes.copyOf(); n.tunnels = tunnels; n.limits = limits; n.incidents = incidents; n.lorry = lorry; n.from = from; n.simpler = simpler
+        n.minorM = minorM; n.mainRoads = mainRoads
         n.baseTime = if (baseTime > 0) baseTime else time
-        n.shieldAtlasUrl = shieldAtlasUrl
         return n
     }
 }
@@ -282,9 +294,30 @@ object TomTomRest {
             val addr = x.optJSONObject("address")
             val poi = x.optJSONObject("poi")
             val free = addr?.optString("freeformAddress").orEmpty()
-            val name = poi?.optString("name")?.takeIf { it.isNotBlank() } ?: free.ifBlank { q }
-            val sub = if (poi != null) free else addr?.optString("country").orEmpty()
-            val p = Place(name, sub, LL(pos.getDouble("lat"), pos.getDouble("lon")), poi?.optString("url").orEmpty())
+            // a house address: "28 Wren Gardens" with the town, postcode and country under it, as the other search services give it
+            // (it was "28 Wren Gardens, Alder Holt" with just the country, so the same house could be listed twice, looking different)
+            val num = addr?.optString("streetNumber").orEmpty(); val street = addr?.optString("streetName").orEmpty()
+            val house = poi == null && num.isNotBlank() && street.isNotBlank()
+            val name = poi?.optString("name")?.takeIf { it.isNotBlank() } ?: (if (house) "$num $street" else free.ifBlank { q })
+            val sub = when {
+                poi != null -> free
+                house -> listOf(addr?.optString("municipality").orEmpty(), addr?.optString("postalCode").orEmpty(), addr?.optString("country").orEmpty())
+                    .filter { it.isNotBlank() }.distinct().joinToString(", ")
+                else -> addr?.optString("country").orEmpty()
+            }
+            // the address's entrance on its street, when TomTom gives one: the address point itself can be in the middle of the
+            // plot, nearer a road behind the house than the one it's on
+            var at = LL(pos.getDouble("lat"), pos.getDouble("lon")); var onStreet = false
+            val eps = x.optJSONArray("entryPoints")
+            if (eps != null) for (e in 0 until eps.length()) {
+                val ep = eps.optJSONObject(e) ?: continue
+                val ppos = ep.optJSONObject("position") ?: continue
+                val la = ppos.optDouble("lat"); val lo = ppos.optDouble("lon")
+                if (la.isNaN() || lo.isNaN() || Geo.dist(at, LL(la, lo)) > 200.0) continue
+                if (!onStreet || ep.optString("type") == "main") { at = LL(la, lo); onStreet = true }
+                if (ep.optString("type") == "main") break
+            }
+            val p = Place(name, sub, at, poi?.optString("url").orEmpty(), onStreet)
             if (out.none { it.name == p.name && Geo.dist(it.pos, p.pos) < 60 }) out += p
         }
     }
@@ -330,7 +363,24 @@ object TomTomRest {
     /** Why TomTom's search failed on the last try (both its searches refused), or null when it worked. */
     @Volatile var lastSearchError: String? = null
 
+    /**
+     * The language for TomTom's search results: the app's own where TomTom has it, else "NGT" (each place's own local name).
+     * It was always British English, so a search in Taiwan came back with English names wherever TomTom had one (nonoclub #433).
+     */
+    private fun searchLang(): String = when (com.headunit.launcher.L.lang) {
+        "en" -> "en-GB"; "zh", "zhhk" -> "zh-TW"; "zhs" -> "zh-CN"; "esar", "esmx" -> "es-MX"; "bs" -> "hr-HR"; "nb" -> "no-NO"
+        "ja", "ur", "kn", "mr", "uk", "vi", "ml", "ta", "te", "ko", "ca", "th", "he", "ar", "eu", "ms", "id", "sr", "bg", "el", "mk" -> "NGT"
+        else -> com.headunit.launcher.L.locale.toLanguageTag()
+    }
+
     fun geocode(key: String, country: String, q: String, near: LL?): List<Place> {
+        val lang = searchLang()
+        val first = geocodeIn(key, country, q, near, lang)
+        // (a language TomTom turned down, or nothing found: once more in English, as it always was)
+        return if (lang != "en-GB" && first.isEmpty()) geocodeIn(key, country, q, near, "en-GB") else first
+    }
+
+    private fun geocodeIn(key: String, country: String, q: String, near: LL?, lang: String): List<Place> {
         val k = URLEncoder.encode(key, "UTF-8")
         val enc = URLEncoder.encode(q, "UTF-8").replace("+", "%20")
         val cc = country.trim().uppercase()
@@ -342,12 +392,14 @@ object TomTomRest {
             var url = "$SEARCH/$enc.json?key=$k&limit=15&language=fr-FR&typeahead=true&minFuzzyLevel=1&maxFuzzyLevel=2&idxSet=POI,Addr,Str,Xstr,Geo,PAD"
             if (cc.isNotEmpty()) url += "&countrySet=$cc"
             if (near != null) url += "&lat=${near.lat}&lon=${near.lon}"
-            parsePlaces(JSONObject(get(url)).optJSONArray("results") ?: JSONArray(), q, out)
+            // (a language this search turns down: the same search in English)
+            val res = try { JSONObject(get(url)) } catch (e: Exception) { if (lang == "en-GB") throw e; JSONObject(get(url.replace("&language=$lang", "&language=en-GB"))) }
+            parsePlaces(res.optJSONArray("results") ?: JSONArray(), q, out)
         } catch (e: Exception) { classicErr = e }
         // 1b. the same fuzzy search on TomTom's newer Orbis service: some newer keys are only given the Orbis APIs, and with the
         // classic search refused, names and businesses were never found, only addresses and postcodes (Reddit)
         if (classicErr != null || out.size < 3) try {
-            var url = "$API/places/search/$enc.json?key=$k&apiVersion=1&limit=15&language=en-GB&typeahead=true&idxSet=POI,Addr,Str,Xstr,Geo,PAD"
+            var url = "$API/places/search/$enc.json?key=$k&apiVersion=1&limit=15&language=$lang&typeahead=true&idxSet=POI,Addr,Str,Xstr,Geo,PAD"
             if (cc.isNotEmpty()) url += "&countrySet=$cc"
             if (near != null) url += "&lat=${near.lat}&lon=${near.lon}"
             parsePlaces(JSONObject(get(url)).optJSONArray("results") ?: JSONArray(), q, out)
@@ -476,8 +528,7 @@ object TomTomRest {
         val prefs = avoid.joinToString("") { "&avoid=$it" } + (if (routeType != "fastest") "&routeType=$routeType" else "")
         // the direction you are travelling stops the route sending you the wrong way down the road you are on (used when rerouting)
         val hd = if (headingDeg >= 0) "&vehicleHeading=${headingDeg.toInt() % 360}" else ""
-        // Ask TomTom for country-specific road-shield references as well as text instructions.
-        val classic = "$CLASSIC/$loc/json?key=$k&maxAlternatives=$n&traffic=true&routeRepresentation=polyline&instructionsType=text&instructionRoadShieldReferences=all$prefs$hd${Vehicle.tomtom()}"
+        val classic = "$CLASSIC/$loc/json?key=$k&maxAlternatives=$n&traffic=true&routeRepresentation=polyline&instructionsType=text$prefs$hd${Vehicle.tomtom()}"
         val attempts = ArrayList<String>()
         if (quick) {
             // rerouting: only two quick tries, so a weak signal does not leave you waiting through ten slow requests
@@ -535,10 +586,8 @@ object TomTomRest {
             val explained = m.startsWith("TomTom didn't accept") || m.startsWith("This TomTom key")
             throw IOException(if (explained) m else if (!m.startsWith("HTTP")) "no signal" else if (m.startsWith("HTTP 429")) "too many requests, try again in a moment" else m.ifBlank { "Routing failed" })
         }
-        val response = JSONObject(body)
-        val arr = response.optJSONArray("routes") ?: JSONArray()
-        val atlas = response.optString("roadShieldAtlasReference")
-        return (0 until arr.length()).map { parse(arr.getJSONObject(it), atlas) }
+        val arr = JSONObject(body).optJSONArray("routes") ?: JSONArray()
+        return (0 until arr.length()).map { parse(arr.getJSONObject(it)) }
     }
 
     /** What to ask TomTom's search for each kind of place. */
@@ -720,7 +769,7 @@ object TomTomRest {
         if (o.has("longitude")) o.getDouble("longitude") else if (o.has("lon")) o.getDouble("lon") else o.getDouble("lng"),
     )
 
-    private fun parse(r: JSONObject, shieldAtlasUrl: String = ""): Route {
+    private fun parse(r: JSONObject): Route {
         val pts = ArrayList<LL>()
         val legs = r.optJSONArray("legs") ?: JSONArray()
         for (i in 0 until legs.length()) {
@@ -732,19 +781,6 @@ object TomTomRest {
         val insArr = r.optJSONObject("guidance")?.optJSONArray("instructions") ?: r.optJSONArray("instructions") ?: JSONArray()
         val steps = (0 until insArr.length()).map {
             val i = insArr.getJSONObject(it)
-            // Road shield references are optional in TomTom responses; older regions continue to use plain road-number text.
-            val shields = ArrayList<RoadShield>()
-            for (key in listOf("roadShieldReferences", "signpostRoadShieldReferences")) {
-                val refs = i.optJSONArray(key) ?: continue
-                for (ri in 0 until refs.length()) {
-                    val shield = refs.optJSONObject(ri) ?: continue
-                    val reference = shield.optString("reference")
-                    val content = shield.optString("shieldContent")
-                    val affixArray = shield.optJSONArray("affixes")
-                    val affixes = if (affixArray == null) emptyList() else (0 until affixArray.length()).map { affixArray.optString(it) }.filter { it.isNotBlank() }
-                    if (reference.isNotBlank() || content.isNotBlank()) shields += RoadShield(reference, content, affixes)
-                }
-            }
             val street = i.optString("street").ifBlank {
                 i.optJSONObject("nextRoadInformation")?.optJSONObject("streetName")?.optString("text").orEmpty()
             }.ifBlank { i.optJSONArray("roadNumbers")?.optString(0).orEmpty() }
@@ -762,7 +798,6 @@ object TomTomRest {
                 rx, i.optString("exitNumber"), i.optString("signpostText"),
                 // the road number (E39, 169) beside the name, as on Mapbox's routes (desko1973, #371)
                 ref = i.optJSONArray("roadNumbers")?.optString(0).orEmpty().trim().let { n -> if (street.isNotBlank() && !n.equals(street, true) && n.length <= 8) n else "" },
-                shields = shields.distinctBy { it.reference + "|" + it.content },
             )
         }
         val laneSecs = ArrayList<LaneSec>()
@@ -827,7 +862,7 @@ object TomTomRest {
         } catch (e: Exception) { /* speed limits are optional */ }
         val s = r.optJSONObject("summary")
         val len = s?.optDouble("lengthInMeters", 0.0)?.takeIf { it > 0 } ?: cum.lastOrNull() ?: 0.0
-        return Route(pts, cum, steps, len, s?.optDouble("travelTimeInSeconds", 0.0) ?: 0.0, s?.optDouble("trafficDelayInSeconds", 0.0) ?: 0.0, laneSecs, sev).also { it.delays = delays; it.limits = limits; it.shieldAtlasUrl = shieldAtlasUrl }
+        return Route(pts, cum, steps, len, s?.optDouble("travelTimeInSeconds", 0.0) ?: 0.0, s?.optDouble("trafficDelayInSeconds", 0.0) ?: 0.0, laneSecs, sev).also { it.delays = delays; it.limits = limits }
     }
 }
 

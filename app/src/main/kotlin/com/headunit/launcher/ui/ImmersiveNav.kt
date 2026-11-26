@@ -53,6 +53,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.BatteryStd
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.AddLocationAlt
@@ -222,6 +224,36 @@ private fun SheetHeading(text: String) {
 
 // ------------------------------------------------------------------ the screen
 
+/**
+ * The alert popup (a camera, a limit, rain...) above the trip card, on the side away from the speed-limit sign. While it shows, its
+ * height counts as covered screen, so the locator rises above it, and drops back when it goes.
+ */
+@Composable
+private fun AlertPopup(engine: NavEngine, modifier: Modifier, narrow: Boolean, tripH: androidx.compose.ui.unit.Dp, screenH: androidx.compose.ui.unit.Dp) {
+    val currentAlert = engine.alert
+    val lastAlert = remember { mutableStateOf(currentAlert) }
+    if (currentAlert != null) lastAlert.value = currentAlert
+    var alertPx by remember { mutableStateOf(0) }
+    val dens = LocalDensity.current
+    LaunchedEffect(narrow, tripH, alertPx, screenH, currentAlert?.kind, currentAlert?.text) {
+        if (currentAlert == null) { alertPx = 0; engine.popupCover = 0.0; return@LaunchedEffect }
+        val popupHeight = with(dens) { (alertPx + 12.dp.roundToPx()).toDp() }
+        val tripHeight = if (narrow) 0.dp else tripH
+        engine.popupCover = if (screenH > 0.dp) ((popupHeight + tripHeight) / screenH).coerceIn(0f, 0.8f).toDouble() else 0.0
+    }
+    // (gone from the screen, say for the route choice: nothing is covered any more)
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { engine.popupCover = 0.0 } }
+    Box(modifier, contentAlignment = Alignment.Center) {
+        AnimatedVisibility(
+            visible = currentAlert != null,
+            enter = fadeIn(tween(160)) + androidx.compose.animation.slideInVertically(tween(180)) { it / 3 },
+            exit = fadeOut(tween(160)) + androidx.compose.animation.slideOutVertically(tween(180)) { it / 3 },
+        ) {
+            lastAlert.value?.let { a -> AlertBanner(a, modifier = Modifier.onSizeChanged { alertPx = it.height }) }
+        }
+    }
+}
+
 @Composable
 private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
     val c = LocalVw.current
@@ -250,9 +282,11 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
     val routing = engine.route != null && !engine.previewing
     val previewing = engine.previewing
     val simple by remember { derivedStateOf { engine.driving && engine.prefs.b(PreferenceKeys.DRIVESIMPLE, true) } }
-    // the Clean view button (#358): while on a route, 1 hides the extra cards and the media bar, 2 leaves just the map and the buttons
-    var cleanView by remember { mutableStateOf(engine.prefs.i(PreferenceKeys.CLEAN_VIEW, 0).coerceIn(0, 2)) }
-    val hudMin = routing && !previewing && cleanView >= 1
+    // Clean view has two states: Full (0) and Map only (2). Older saved Minimal (1) is migrated to Full.
+    val savedCleanView = engine.prefs.i(PreferenceKeys.CLEAN_VIEW, 0)
+    var cleanView by remember { mutableStateOf(if (savedCleanView == 2) 2 else 0) }
+    LaunchedEffect(Unit) { if (savedCleanView != 0 && savedCleanView != 2) engine.prefs.put(PreferenceKeys.CLEAN_VIEW, 0) }
+    val hudMin = routing && !previewing && cleanView == 2
     val hudOff = routing && !previewing && cleanView == 2
 
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -261,6 +295,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         val narrow = maxWidth < 720.dp
         val dens = androidx.compose.ui.platform.LocalDensity.current
         var tripPx by remember { mutableStateOf(0) }
+        androidx.compose.runtime.SideEffect { engine.portraitLayout = narrow }
         // the trip card's and speedometer's widths, and the media bar's height (for fitting the media bar between them)
         var tripWPx by remember { mutableStateOf(0) }
         var speedWPx by remember { mutableStateOf(0) }
@@ -310,7 +345,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         val mir = engine.layoutMirrored
         // where the trip card and speedometer go (Card positions): "left", "right" (or "centre" for the trip card), on a wide screen
         val tripAt = if (narrow) "" else engine.prefs.s(PreferenceKeys.TRIP_POS, "auto").let { if (it == "auto") (if (mir) "right" else "left") else it }
-        val speedAt = engine.prefs.s(PreferenceKeys.SPEED_SIDE, "auto").let { if (narrow || it == "auto") (if (mir) "left" else "right") else it }
+        val speedAt = engine.prefs.s(PreferenceKeys.SPEED_SIDE, "auto").let { if (it == "auto") (if (mir) "left" else "right") else it }
         // the speed on the cards' side can only be at the bottom (the turn card has the top)
         val speedOnCardSide = (speedAt == "left") != mir
         // Settings > sizes > map buttons: scales the button column on the right
@@ -367,7 +402,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         Box(Modifier.matchParentSize().onGloballyPositioned { boxTopPx = it.positionInRoot().y })
         // Settings › sizes › Turn card width (ZarulOfficial #317): the card size slider scales what's in the cards, this how wide they are
         val turnWK = engine.prefs.i(PreferenceKeys.TURN_WIDTH, 100).coerceIn(60, 130) / 100f
-        if (engine.chain == null && !engine.chainBusy) Column(Modifier.align(side(Alignment.TopStart)).padding(16.dp).then(if (compact) Modifier else if (narrow) Modifier.fillMaxWidth(turnWK.coerceAtMost(1f)).sides(end = if (railBelow) 0.dp else 52.dp * mainButtonScale + 10.dp) else Modifier.width(380.dp * turnWK))
+        if (engine.chain == null && !engine.chainBusy) Column(Modifier.align(if (routeSheet) Alignment.TopCenter else side(Alignment.TopStart)).padding(16.dp).then(if (compact) Modifier else if (narrow) Modifier.fillMaxWidth(if (routeSheet) 1f else turnWK.coerceAtMost(1f)).sides(end = if (railBelow) 0.dp else 52.dp * mainButtonScale + 10.dp) else Modifier.width(380.dp * turnWK))
             .onGloballyPositioned { report(0, it.boundsInParent()) }
             // the turn list opens over the trip card below it
             .zIndex(if (engine.itineraryOpen) 2f else 0f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -443,25 +478,23 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
                                     // "under" the turn card covered its top, the turn and the distance)
                                     Column {
                                     Column(Modifier.onGloballyPositioned { turnBottomPx = it.boundsInRoot().bottom }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        ImmTurnCard(engine, t, slim = altFocus || (routeSheet && slimHold[0]), footer = {
-                                            if (routeSheet && !altFocus) RouteHazardLines(engine)
-                                            // (portrait: the advice line lives in the trip sheet, and the services only appear here once they are close)
-                                            if (!altFocus && !hudMin) TurnCardExtras(engine, turnExtraMax, advice = !routeSheet, parking = false)
-                                        })
-                                        // the next services: a card of its own under the turn card again, not joined to it
-                                        if (!altFocus && !hudMin) { if (routeSheet) NearServicesPill(engine) else ServicesCard(engine) }
-                                        // car parks near the end: their own card again (the portrait sheet has them in the sheet)
-                                        if (!altFocus && !routeSheet && !hudMin) ParkingCard(engine)
-                                    }
-                                    // warnings (a camera, a limit, rain...) pop up just under the turn card, joined to it
-                                    if (routeSheet) {
-                                        val curA = engine.alert
-                                        val lastA = remember { mutableStateOf(curA) }
-                                        if (curA != null) lastA.value = curA
-                                        AnimatedVisibility(curA != null, enter = fadeIn(tween(160)) + androidx.compose.animation.expandVertically(tween(200)),
-                                            exit = fadeOut(tween(160)) + androidx.compose.animation.shrinkVertically(tween(200))) {
-                                            lastA.value?.let { Box(Modifier.padding(top = 6.dp)) { AlertBanner(it) } }
+                                        if (routeSheet && !altFocus) {
+                                            val baseDensity = LocalDensity.current
+                                            CompositionLocalProvider(LocalDensity provides Density(baseDensity.density * 0.92f, baseDensity.fontScale)) {
+                                                ImmTurnCard(engine, t, slim = false, footer = {
+                                                    RouteHazardLines(engine)
+                                                    if (!hudMin) TurnCardExtras(engine, turnExtraMax, advice = false, parking = false)
+                                                })
+                                            }
+                                        } else {
+                                            ImmTurnCard(engine, t, slim = altFocus || slimHold[0], footer = {
+                                                if (!altFocus && !hudMin) TurnCardExtras(engine, turnExtraMax, advice = true, parking = false)
+                                            })
                                         }
+                                        // In portrait, services and live alerts live in the bottom trip sheet, not over the map.
+                                        if (!altFocus && !routeSheet && !hudMin) ServicesCard(engine)
+                                        // car parks remain in the portrait trip sheet; landscape keeps its existing card.
+                                        if (!altFocus && !routeSheet && !hudMin) ParkingCard(engine)
                                     }
                                     }
                                 }
@@ -486,11 +519,12 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
             // just two buttons on the map: the compass and map options. 3D / 2D and sound are at the top of map options, voice and sound
             // are on the trip card while navigating, Settings is beside these when you're not (and in map options' header when you are)
             val railItems = ArrayList<@Composable () -> Unit>()
-            // (the portrait route layout: compass, report and map options are in the trip sheet, only sound and other routes stay here)
+            // (the portrait route layout: report is in the trip sheet; the compass and map options stay here. The compass had gone with
+            // report but was never put in the sheet, so it, and its tap for North up, vanished on a route, ILDEMONICO #421)
             // Settings > Map buttons: which of these show (Map options always does, it's the way to everything else) (#335)
             val railHidden = engine.prefs.s(PreferenceKeys.RAIL_HIDDEN, "overview").split(",")
-            if (!routeSheet) {
             if ("compass" !in railHidden) railItems.add(@Composable { ImmCompass(engine) })
+            if (!routeSheet) {
             // #275: keep one-tap reports on the map itself, rather than making drivers open Map options first.
             if ("report" !in railHidden) railItems.add(@Composable { ImmIcon(Icons.Rounded.Campaign, { sheet = false; quickReportOpen = !quickReportOpen }, active = quickReportOpen, desc = "Signaler") })
             railItems.add(@Composable { ImmIcon(Icons.Rounded.Layers, { quickReportOpen = false; sheet = !sheet }, active = sheet, desc = "Options de carte") })
@@ -506,11 +540,11 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
             })
             // navigating: other ways to go, any time (as in Google Maps): shown in grey on the map with how they compare, tap one to switch
             if (routing && "routes" !in railHidden) railItems.add(@Composable { ImmIcon(Icons.Rounded.AltRoute, { engine.findAlternatives() }, desc = "Autres itinéraires") })
-            // Clean view (#358): full, then minimal, then the map only; remembered for the next trip
+            // Clean view (#358): one press switches directly between Full view and Map only.
             if (routing && !previewing && "clean" !in railHidden) railItems.add(@Composable {
                 val label = when (cleanView) { 0 -> "Vue complète"; 1 -> "Vue minimale"; else -> "Carte seule" }
                 ImmIcon(if (cleanView == 0) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, {
-                    cleanView = (cleanView + 1) % 3
+                    cleanView = if (cleanView == 0) 2 else 0
                     engine.prefs.put(PreferenceKeys.CLEAN_VIEW, cleanView)
                     engine.toast(when (cleanView) { 0 -> "Vue complète"; 1 -> "Vue minimale"; else -> "Carte seule" }, 1500)
                 }, active = cleanView != 0, desc = label)
@@ -600,11 +634,15 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
                     (mid - railHPx / 2f).coerceAtMost(gapBottom - railHPx).coerceAtLeast(gapTop).coerceAtLeast(16.dp.toPx()).toDp()
                 }
                 if (!railFits) Unit
-                else if (settingsAbove) Column(Modifier.align(side(Alignment.TopEnd)).padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = railTop).onGloballyPositioned { report(2, it.boundsInParent()); buttonsWPx = it.size.width; railHPx = it.size.height }, verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = if (mir) Alignment.Start else Alignment.End) {
+                else if (settingsAbove) Column(Modifier.align(side(Alignment.TopEnd)).padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = railTop).onGloballyPositioned { report(2, it.boundsInParent()); buttonsWPx = it.size.width; railHPx = it.size.height }.graphicsLayer {
+                     if (routeSheet || sheetMode) { scaleX = 0.90f; scaleY = 0.90f; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f) }
+                 }, verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = if (mir) Alignment.Start else Alignment.End) {
                     settings(); panelAndZoom()
                 }
                 // (the same with no Settings button above the panel: the panel itself goes under the turn card, Duddon Close)
-                else Row(Modifier.align(side(Alignment.TopEnd)).padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = railTop).onGloballyPositioned { report(2, it.boundsInParent()); buttonsWPx = it.size.width; railHPx = it.size.height }, horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                else Row(Modifier.align(side(Alignment.TopEnd)).padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = railTop).onGloballyPositioned { report(2, it.boundsInParent()); buttonsWPx = it.size.width; railHPx = it.size.height }.graphicsLayer {
+                     if (routeSheet || sheetMode) { scaleX = 0.90f; scaleY = 0.90f; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f) }
+                 }, horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
                     if (mir) { panelAndZoom(); settings() } else { settings(); panelAndZoom() }
                 }
                 // the portrait sheet: Settings on its own at the end of the search bar, level with it
@@ -668,8 +706,9 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         val speedShareTrip = !narrow && tripPx > 0 && tripAt == speedAt
         if (!previewing && !altFocus && !hudOff && !(sheetMode && sheetRoom < 150.dp)) Box(
             when {
-                // (the portrait route layout: bottom left, above the trip sheet)
-                routeSheet -> Modifier.align(side(Alignment.BottomStart)).sides(start = 16.dp, bottom = if (tripPx > 0) tripH + 8.dp else 16.dp)
+                // Right by default for right-hand drive; left by default for left-hand drive.
+                routeSheet -> Modifier.align(if (speedAt == "left") Alignment.BottomStart else Alignment.BottomEnd)
+                    .padding(start = 16.dp, end = 16.dp, bottom = if (tripPx > 0) tripH + 8.dp else 16.dp)
                 speedOnCardSide -> Modifier.align(if (speedAt == "left") Alignment.BottomStart else Alignment.BottomEnd)
                     .padding(start = 16.dp, end = 16.dp, bottom = if (speedShareTrip) tripH + 8.dp else 16.dp)
                 speedPos == "top" -> Modifier.align(side(Alignment.TopEnd)).sides(end = besideButtons, top = 16.dp)
@@ -683,6 +722,10 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
             val speedSize = 1f
             CompositionLocalProvider(LocalDensity provides Density(baseSpeedDensity.density * speedSize, baseSpeedDensity.fontScale)) { ImmSpeed(engine) }
         }
+        // (for the road name pill along the bottom: how much room the speedometer takes in its corner, #421)
+        val speedCorner = if (!previewing && !altFocus && !hudOff && (routeSheet || speedOnCardSide || (speedPos != "top" && speedPos != "middle")))
+            with(dens) { speedWPx.toDp() }.value.toInt() else 0
+        androidx.compose.runtime.SideEffect { if (engine.speedCornerDp != speedCorner) engine.speedCornerDp = speedCorner }
 
         // ---- bottom left: hazards and the trip card (not while the "all locations" / add-a-stop panel is open: it's in the same
         // corner and the panel lets the map show through, so the trip card's figures showed through it)
@@ -708,6 +751,16 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
             }
         }
         else androidx.compose.runtime.SideEffect { if (tripPx != 0) tripPx = 0; if (tripWPx != 0) tripWPx = 0; engine.setPanel(1, 0f, 0f, 0f, 0f) }
+
+        // Alerts sit on the opposite side of the screen from the speed-limit sign.
+        // speedAt follows the mirrored layout and any manual speedometer-side choice.
+        // (the popup reads the alert itself, so an alert coming or going redraws only the popup, not this whole screen)
+        // (and it stops short of the speed limit sign's corner, rather than running over the sign on a narrow screen)
+        val keepClear = if (speedCorner > 0) speedCorner.dp + 28.dp else 0.dp
+        if (!previewing && !altFocus && !hudOff) AlertPopup(engine,
+            Modifier.align(if (speedAt == "left") Alignment.BottomEnd else Alignment.BottomStart).zIndex(9f)
+                .padding(start = if (speedAt == "right") 16.dp else keepClear, end = if (speedAt == "left") 16.dp else keepClear, bottom = tripH + 12.dp),
+            narrow, tripH, screenH)
 
         // ---- the media bar (Reddit, mrEnmi): back, play / pause and next for whatever is playing on the head unit, with the song
         // when notification access is given. Only while something plays (or for a few minutes after a pause). It goes in the free
@@ -1072,11 +1125,15 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
     val eta = engine.eta
     val radarOn = engine.prefs.b(PreferenceKeys.HAZARDRADAR, false)
     if (inc == null && cam == null && eta == null && (!radarOn || engine.radar.isEmpty())) return
+    // (the trip card's width, for the hazard radar above it)
+    var tripCardWPx by remember { mutableStateOf(0) }
     val mir = alignEnd
     Column(Modifier.padding(start = if (mir || centred) 0.dp else 16.dp, end = if (mir && !centred) 16.dp else 0.dp, bottom = 16.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = if (centred) Alignment.CenterHorizontally else if (mir) Alignment.End else Alignment.Start) {
-        // hazard radar: the next two miles at a glance (replaces the separate camera and incident badges)
-        if (radarOn) HazardRadar(engine)
+        // hazard radar: the next two miles at a glance (replaces the separate camera and incident badges). Landscape: as wide as the
+        // trip card under it (it reached well past it, bijindas #425)
+        val radarDens = androidx.compose.ui.platform.LocalDensity.current
+        if (radarOn) HazardRadar(engine, if (!narrow && eta != null && tripCardWPx > 0) Modifier.width(with(radarDens) { tripCardWPx.toDp() }) else Modifier)
         else if ((inc != null && engine.alert?.kind != "incident") || (cam != null && engine.alert?.kind != "camera")) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (inc != null && engine.alert?.kind != "incident") HazardBadge("incident", L.t(inc.label), Geo.fmtDist(inc.dist, engine.imperial))
             if (cam != null && engine.alert?.kind != "camera") HazardBadge("camera", "Radar", Geo.fmtDist(cam.toDouble(), engine.imperial))
@@ -1089,7 +1146,7 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
             val dens = androidx.compose.ui.platform.LocalDensity.current
             var rowPx by remember { mutableStateOf(0) }
             val rowW = with(dens) { rowPx.toDp() }
-            TextSides { Column(Modifier.then(if (narrow) Modifier.fillMaxWidth() else Modifier).panel(10.dp, shape, c.surface).animateContentSize()) {
+            TextSides { Column(Modifier.then(if (narrow) Modifier.fillMaxWidth() else Modifier).onSizeChanged { if (it.width != tripCardWPx) tripCardWPx = it.width }.panel(10.dp, shape, c.surface).animateContentSize()) {
                 val barMod = if (narrow) Modifier.fillMaxWidth() else Modifier.width(rowW)
                 // "Faster route found" across the top of the card (it was a box of its own floating above it)
                 if (narrow || rowPx > 0) FasterStrip(engine, barMod)
@@ -1233,7 +1290,48 @@ internal fun ImmSpeed(engine: NavEngine) {
         }
         return
     }
+    // the phone's battery level with the speedometer on the car screen (Settings › Android Auto › Phone battery), the same way
+    // (joel941703-hash #430)
+    if (engine.isCar && engine.prefs.b(PreferenceKeys.CAR_PHONE_BATTERY, false)) {
+        val atTop = LocalSpeedAtTop.current
+        val ringSign = engine.prefs.b(PreferenceKeys.SPEEDRING, true) && engine.speedLimit != null && engine.prefs.b(PreferenceKeys.MAPSPEED, true)
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(if (ringSign && !atTop) 26.dp else 6.dp)) {
+            if (!atTop) PhoneBattery()
+            ImmSpeedOnly(engine)
+            if (atTop) PhoneBattery()
+        }
+        return
+    }
     ImmSpeedOnly(engine)
+}
+
+/** The phone's battery level in a small pill, with a bolt while it's charging. Read once a minute (a sticky system broadcast, no receiver kept). */
+@Composable
+private fun PhoneBattery() {
+    val c = LocalVw.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    var level by remember { mutableStateOf(-1) }
+    var charging by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            try {
+                val i = ctx.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+                if (i != null) {
+                    val lv = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1); val sc = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100)
+                    level = if (lv >= 0 && sc > 0) Math.round(lv * 100f / sc) else -1
+                    val st = i.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+                    charging = st == android.os.BatteryManager.BATTERY_STATUS_CHARGING || st == android.os.BatteryManager.BATTERY_STATUS_FULL
+                }
+            } catch (e: Exception) { }
+            kotlinx.coroutines.delay(60_000L)
+        }
+    }
+    if (level < 0) return
+    val col = if (level <= 15 && !charging) Bad else c.text
+    Row(Modifier.panel(6.dp, RoundedCornerShape(50), c.surface).padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(if (charging) Icons.Rounded.BatteryChargingFull else Icons.Rounded.BatteryStd, null, tint = col, modifier = Modifier.size(18.dp))
+        Text("$level%", color = col, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+    }
 }
 
 /** The time now, in a small pill (12 or 24-hour as Settings › Units › Clock). Ticks over on the minute. */
@@ -1283,9 +1381,12 @@ private fun SpeedWithNext(engine: NavEngine) {
     // with the speedometer ring, the limit sign pokes up above the ring's top corner: the gap leaves room for it, so the two
     // don't overlap (on the car screen they did)
     val ringSign = engine.prefs.b(PreferenceKeys.SPEEDRING, true) && engine.speedLimit != null && engine.prefs.b(PreferenceKeys.MAPSPEED, true) && !carCompactSpeed(engine)
+    // (on the car screen the upcoming limit follows Speed-limit sign size, like the main sign: it was small on an 8-inch screen)
+    val ls = if (engine.isCar) engine.prefs.i(PreferenceKeys.CAR_LIMIT_SIZE, 100).coerceIn(80, 170) / 100f else 1f
+    val dNext = LocalDensity.current
     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(if (ringSign) 26.dp else 6.dp)) {
         if (atTop) SpeedBlock(engine)
-        Row(
+        CompositionLocalProvider(LocalDensity provides Density(dNext.density * ls, dNext.fontScale)) { Row(
             Modifier.panel(6.dp, RoundedCornerShape(20.dp), c.surface).padding(start = 6.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -1294,7 +1395,7 @@ private fun SpeedWithNext(engine: NavEngine) {
             // (drawn exactly like the main sign, just smaller)
             LimitSignFace(num.toInt(), engine.limitSignStyle, if (engine.limitSignStyle != "round") 40.dp else 36.dp)
             Text("dans ${Geo.fmtDist(nx.second, engine.imperial)}", color = c.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        }
+        } }
         if (!atTop) SpeedBlock(engine)
     }
 }
@@ -1504,15 +1605,23 @@ internal fun ImmTurnCard(
     // is above and below the writing (70% is a tight card, 130% a roomy one)
     val arrowK = engine.prefs.i(if (car) PreferenceKeys.CAR_TURN_ARROW else PreferenceKeys.TURN_ARROW, 100).coerceIn(80, 200) / 100f
     val padK = (1f + (engine.prefs.i(if (car) PreferenceKeys.CAR_TURN_HEIGHT else PreferenceKeys.TURN_HEIGHT, 100).coerceIn(70, 130) / 100f - 1f) * 2.5f).coerceIn(0.25f, 1.75f)
-    // Settings › Map look › Turn card colour: all with white writing
-    val (Teal, TealDeep) = when (engine.prefs.s(PreferenceKeys.TURN_CARD_COLOUR, "green")) {
+    // Settings › Map look › Turn card colour: all with white writing. "Match road signs": the colours of the country's signs for
+    // the road you're on (motorway or not), fading across when that changes (desko1973 #431)
+    val signs = if (engine.prefs.s(PreferenceKeys.TURN_CARD_COLOUR, "green") == "signs")
+        com.headunit.launcher.SignColours.card(engine.detectedCountry, engine.onMotorway == true) else null
+    val (teal0, deep0) = when (engine.prefs.s(PreferenceKeys.TURN_CARD_COLOUR, "green")) {
         "black" -> Color(0xFF0A0A0A) to Color(0xFF000000)
         "grey" -> Color(0xFF373A40) to Color(0xFF26282C)
         "navy" -> Color(0xFF142864) to Color(0xFF0C1A44)
         "purple" -> Color(0xFF462870) to Color(0xFF2E1A4C)
-        else -> GmGreen to GmGreenDeep
+        else -> if (signs != null) Color(signs.first) to Color(signs.second) else GmGreen to GmGreenDeep
     }
+    val Teal by androidx.compose.animation.animateColorAsState(teal0, androidx.compose.animation.core.tween(900), label = "cardTop")
+    val TealDeep by androidx.compose.animation.animateColorAsState(deep0, androidx.compose.animation.core.tween(900), label = "cardDeep")
     val ukSign = engine.prefs.b(PreferenceKeys.UKSIGNS, true) && (t.sign.isNotBlank() && t.sign != t.street || t.tag.startsWith("Sortie") || t.shields.isNotEmpty() || t.exitNo.isNotBlank())
+    // (worked out once per sign, not on every distance update)
+    val signPlaces = remember(t.sign, t.street, ukSign) { if (ukSign) junctionSignPlaces(t.sign, t.street) else "" }
+    var placesBelow by remember(signPlaces) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth()
             // (grows from its top middle, evenly both ways: grown from its left edge, a card the full width of an upright phone went off
@@ -1555,8 +1664,25 @@ internal fun ImmTurnCard(
                         modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.18f)).padding(horizontal = 7.dp, vertical = 2.dp))
                     if (!ukSign && t.sign.isNotBlank() && t.sign != t.street) Text(t.sign, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.widthIn(max = 130.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF1E8E55)).padding(horizontal = 7.dp, vertical = 2.dp))
+                    // Keep the exit number visually separate from the green/yellow A-road number badge.
+                    val exitLabel = t.exitNo.takeIf { it.isNotBlank() }?.let { "Sortie $it" }
+                        ?: t.tag.takeIf { ukSign && it.startsWith("Exit", true) }
+                    exitLabel?.let { label ->
+                        val exitShape = RoundedCornerShape(5.dp)
+                        Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false,
+                            modifier = Modifier.clip(exitShape).background(Color(0xFF202124))
+                                .border(1.dp, Color.White.copy(alpha = 0.9f), exitShape).padding(horizontal = 7.dp, vertical = 3.dp))
+                    }
                     RoadLine(if (lmk) Geo.fmtDist(t.dist, engine.imperial) + (if (t.street.isNotBlank()) " · " + t.street else "") else t.street, engine.ukRoadBadges, if (compact) 16.sp else 19.sp, ref = if (!lmk) t.ref else "")
+                    // the places on the junction's sign (Southampton, Portsmouth) beside the small road sign, on the same line while they
+                    // fit; on a narrow card they move to one short line underneath instead of being cut off
+                    if (signPlaces.isNotEmpty() && !placesBelow) Text(signPlaces, color = Color.White, fontSize = if (compact) 14.sp else 16.sp,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                        onTextLayout = { if (it.hasVisualOverflow) placesBelow = true })
                 }
+                if (signPlaces.isNotEmpty() && placesBelow) Text(signPlaces, color = Color.White.copy(alpha = 0.9f), fontSize = if (compact) 13.sp else 15.sp,
+                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             // the turn straight after, as a small arrow (the "Puis" line below is used instead when that style is chosen)
             if (thenIcon && t.thenManeuver != null) Column(Modifier.padding(start = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1657,7 +1783,8 @@ private fun TripSheet(engine: NavEngine, media: Boolean, screenH: Dp, onOptions:
                 ImmStat(Geo.fmtDist(e.dist, engine.imperial), "à parcourir", c.text, compact = true)
             }
             // add a stop, then End: both big enough to hit while driving
-            Box(Modifier.size(50.dp).shadow(6.dp, CircleShape).clip(CircleShape).background(c.tile).pressClick { engine.stopsEditor = true; open = false },
+            // (panel: no shadow under a see-through tile, where Android drew it as a ragged octagon round the button)
+            Box(Modifier.size(50.dp).panel(6.dp, CircleShape, c.tile).pressClick { engine.stopsEditor = true; open = false },
                 contentAlignment = Alignment.Center) {
                 Icon(Icons.Rounded.AddLocationAlt, if (engine.via.isEmpty()) "Ajouter un arrêt" else "Arrêts", tint = c.accent, modifier = Modifier.size(25.dp))
             }
@@ -1762,8 +1889,9 @@ private fun NearServicesPill(engine: NavEngine) {
 @Composable
 private fun SheetChips(engine: NavEngine) {
     val c = LocalVw.current
-    val svc = engine.servicesAhead.firstOrNull()?.takeIf { servicesShown(engine) && it.dist > SERVICES_NEAR_M }
+    val svc = engine.servicesAhead.firstOrNull()?.takeIf { servicesShown(engine) }
     val advice = engine.advice
+
     if (svc == null && advice == null) return
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 22.dp, end = 22.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         svc?.let { s ->
@@ -2207,8 +2335,11 @@ private fun ParkedCard(engine: NavEngine) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val here = engine.fix?.pos
     if (spot == null || at == null || ageMin > 48 * 60) {
-        // nothing saved (or too old): a button to save where you are now (joel941703-hash, #359)
-        if (here == null) return
+        // nothing saved (or too old): a button to save where you are now (joel941703-hash, #359). Only once you've driven and
+        // stopped (it showed all the time, even at home), and not on the phone while Android Auto is connected: the car screen is
+        // in use then, and the spot is saved by itself when you unplug with the car stopped
+        if (here == null || !engine.justParked()) return
+        if (!engine.isCar && com.headunit.launcher.RouteSync.carConnected()) return
         Row(Modifier.fillMaxWidth().panel(10.dp, RoundedCornerShape(22.dp), c.surface).padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(Modifier.size(38.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
@@ -2576,6 +2707,17 @@ internal fun TextSides(content: @Composable () -> Unit) {
 internal fun FixedSides(content: @Composable () -> Unit) {
     if (!L.rtl) { content(); return }
     CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) { content() }
+}
+
+/** The place names on a junction's sign ("M27: Southampton, Portsmouth" gives "Southampton, Portsmouth"), without road numbers,
+ *  junction numbers or the road you're turning onto; "" when there are none. */
+internal fun junctionSignPlaces(sign: String, street: String): String {
+    if (sign.isBlank()) return ""
+    val refRx = Regex("\\b[A-Z]{1,3}[0-9]{1,4}\\b(?:\\(M\\))?")
+    return refRx.replace(sign, " ").split(',', ';', ':', '/')
+        .map { it.trim().trim('-', '–').trim() }
+        .filter { it.length > 1 && !it.equals("J", true) && !Regex("^J?[0-9]+[A-Z]?$").matches(it) && !it.equals(street, true) }
+        .distinct().take(3).joinToString(", ")
 }
 
 /**

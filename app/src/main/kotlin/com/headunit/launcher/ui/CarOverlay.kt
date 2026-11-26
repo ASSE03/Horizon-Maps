@@ -111,6 +111,9 @@ fun CarOverlay(engine: NavEngine, area: State<android.graphics.Rect?>, dark: Sta
     // [scale] is worked out from the car screen's size (see CarSurface); the Android Auto size setting adjusts it either way
     val user = engine.prefs.i(PreferenceKeys.CARSCALE, 100).coerceIn(40, 300) / 100f
     val textScale = engine.prefs.i(PreferenceKeys.CAR_TEXT_SIZE, 100).coerceIn(75, 150) / 100f
+    // the signs on the car's map grow with the car screen as its cards and text do
+    val uiPx = base.density * scale.value * user
+    LaunchedEffect(uiPx) { engine.map.setUiPx(uiPx) }
     CompositionLocalProvider(LocalDensity provides Density(base.density * scale.value * user, base.fontScale * textScale)) {
         // dark cards when the car says it's night, or when the map's light has gone dim (dusk) before the car switches
         // (not with "Always day" picked in the car's settings)
@@ -177,6 +180,10 @@ private fun CarLiveSettings(engine: NavEngine, dark: State<Boolean>) {
     OnChange(customOn, customDay, customNight, customW) { map.setCustom(customOn, customDay, customNight, customW) }
     val camSize = prefs.i(PreferenceKeys.CAM_SIZE, 100)
     OnChange(camSize) { map.setCameraSize(camSize) }
+    val hazSize = prefs.i(PreferenceKeys.HAZ_SIZE, 100)
+    OnChange(hazSize) { map.setHazardSize(hazSize) }
+    val routeLimSize = prefs.i(PreferenceKeys.ROUTE_LIMIT_SIZE, 100)
+    OnChange(routeLimSize) { map.setRouteLimitSize(routeLimSize) }
     val flags3d = prefs.b(PreferenceKeys.FLAGS_3D, true)
     val hills = prefs.b(PreferenceKeys.HILLSHADE, false)
     OnChange(flags3d, hills) { map.setFlags(flags3d); map.setHillShading(hills) }
@@ -284,9 +291,10 @@ private fun CarScreen(engine: NavEngine, a: android.graphics.Rect?, actions: Car
         val most = scale.maximumPercent
         androidx.compose.runtime.SideEffect { if (engine.prefs.i(PreferenceKeys.CARSCALE_MAX, 0) != most) engine.prefs.put(PreferenceKeys.CARSCALE_MAX, most) }
         val d = LocalDensity.current
-        // Overall size is a physical UI scale. Dividing by the requested value cancelled the scale whenever it fit,
-        // leaving the saved slider value with no visible effect (#397).
-        CompositionLocalProvider(LocalDensity provides Density(d.density * eff, d.fontScale)) {
+        // CarOverlay has already drawn everything at the requested size: here it's brought to the size the screen fits (the same
+        // when there's room). Multiplying by it again, as for a day after #397, applied Overall size twice (130% came out as 169%,
+        // 70% as 49%), and made the cards far too big on cars where it had been raised (#418)
+        CompositionLocalProvider(LocalDensity provides Density(d.density * eff / user, d.fontScale)) {
             CarScreenBody(engine, a, actions, onCover, eff)
         }
     }
@@ -648,7 +656,11 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
             else Modifier.align(Alignment.TopCenter).padding(top = top,
                 start = maxOf(if (showTurn && turnW > 0) left + with(dens) { turnW.toDp() } + 10.dp else if (guiding) maxWidth * 0.42f + left else left, if (tempOn && engine.route == null && !arriving) left + topW + 12.dp + tempGap else 0.dp), end = maxOf(rightTop, maxWidth * 0.30f))
         val worksPopup = worksOnCard && alert?.kind == "incident" && alert?.text?.startsWith("Travaux") == true
-        AnimatedVisibility(alert != null && !altsOpen && !worksPopup, modifier = alertMod, enter = fadeIn(), exit = fadeOut()) { alert?.let { AlertBanner(it) } }
+        AnimatedVisibility(alert != null && !altsOpen && !worksPopup, modifier = alertMod, enter = fadeIn(), exit = fadeOut()) { alert?.let { a ->
+            // (the speed limit pop-up follows Speed-limit sign size, like the sign itself: it was small on an 8-inch screen, José Antonio Arriaga)
+            val ls = if (a.kind == "limit") engine.prefs.i(PreferenceKeys.CAR_LIMIT_SIZE, 100).coerceIn(80, 170) / 100f else 1f
+            if (ls == 1f) AlertBanner(a) else CompositionLocalProvider(LocalDensity provides Density(dens.density * ls, dens.fontScale)) { AlertBanner(a) }
+        } }
 
         // the search card: over the map from the left edge to Android Auto's zoom buttons (its other buttons give way to one
         // Close button while it's open, see MapScreen)
@@ -1135,7 +1147,7 @@ private fun CarRoutePreview(engine: NavEngine, side: Boolean = false) {
     val cards: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
         rs.forEachIndexed { i, r ->
             val sel = i == engine.active
-            val label = if (r.mine.isNotBlank()) "Votre itinéraire" else if (i == fastest) "Le plus rapide" else if (rs[i].simpler) "Le plus simple" else if (i == shortest) "Le plus court" else "Alternatif"
+            val label = if (r.mine.isNotBlank()) "Votre itinéraire" else if (i == fastest) "Le plus rapide" else if (rs[i].mainRoads) "Grands axes" else if (rs[i].simpler) "Le plus simple" else if (i == shortest) "Le plus court" else "Alternatif"
             Column(Modifier.weight(1f).inset(18.dp, if (sel) c.accent else null).carTap("route-$i") { engine.selectRoute(i) }.padding(horizontal = 12.dp, vertical = 9.dp)) {
                 Text(label.uppercase(), color = if (sel) c.accent else c.sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1)
                 Text(Geo.fmtDur(r.time), color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -1218,7 +1230,7 @@ private fun CarRoutePreview(engine: NavEngine, side: Boolean = false) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             rs.forEachIndexed { i, r ->
                 val sel = i == engine.active
-                val label = L.t(if (r.mine.isNotBlank()) "Your route" else if (i == fastest) "Fastest" else if (rs[i].simpler) "Simplest" else if (i == shortest) "Shortest" else "Alternative")
+                val label = L.t(if (r.mine.isNotBlank()) "Your route" else if (i == fastest) "Fastest" else if (rs[i].mainRoads) "Main roads" else if (rs[i].simpler) "Simplest" else if (i == shortest) "Shortest" else "Alternative")
                 val via = viaOf(r)
                 val delayMin = Math.round(r.delay / 60.0).toInt()
                 Column(Modifier.fillMaxWidth().inset(14.dp, if (sel) c.accent else null).carTap("route-$i") { engine.selectRoute(i) }.padding(horizontal = 10.dp, vertical = 5.dp)) {

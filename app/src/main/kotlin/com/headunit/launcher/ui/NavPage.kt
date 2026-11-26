@@ -291,9 +291,14 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         Text("Batterie actuelle", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 10.dp))
         // (1% a tap, and held down it runs on: it went in tens, so 32% or 35% couldn't be set, Dry-Secretary2456)
         val setPct = { d: Int -> engine.prefs.put(PreferenceKeys.EV_CHARGE_PCT, (engine.prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80).coerceIn(5, 100) + d).coerceIn(5, 100)) }
-        StepPill("−", { setPct(-1) }, { engine.refreshEvPlan() })
-        Text("$pct%" + (if (com.headunit.launcher.HaBattery.lastPct == pct && System.currentTimeMillis() - com.headunit.launcher.HaBattery.lastAt < 3_600_000L) " · voiture" else ""), color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
-        StepPill("+", { setPct(1) }, { engine.refreshEvPlan() })
+        // (the car's own level over Android Auto when it gives one: nothing to set then)
+        val carPct = com.headunit.launcher.CarData.soc
+        if (carPct != null) Text("$carPct % · voiture", color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+        else {
+            StepPill("−", { setPct(-1) }, { engine.refreshEvPlan() })
+            Text("$pct%" + (if (com.headunit.launcher.HaBattery.lastPct == pct && System.currentTimeMillis() - com.headunit.launcher.HaBattery.lastAt < 3_600_000L) " · voiture" else ""), color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+            StepPill("+", { setPct(1) }, { engine.refreshEvPlan() })
+        }
         Text("Arriver avec au moins", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 14.dp, end = 4.dp))
         for (m in listOf(10, 20, 30)) Pill("$m%", minArr == m, { engine.prefs.put(PreferenceKeys.EV_MIN_ARRIVE, m); engine.refreshEvPlan() })
         val eco = engine.prefs.b(PreferenceKeys.ROUTE_ECO, false)
@@ -329,7 +334,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         rs.forEachIndexed { i, r ->
             val sel = i == engine.active
             val shape = RoundedCornerShape(18.dp)
-            val label = if (r.mine.isNotBlank()) "Votre itinéraire" else if (i == fastest) "La plus rapide" else if (rs[i].simpler) "La plus simple" else if (i == shortest) "La plus courte" else "Alternative"
+            val label = if (r.mine.isNotBlank()) "Votre itinéraire" else if (i == fastest) "La plus rapide" else if (rs[i].mainRoads) "Grands axes" else if (rs[i].simpler) "La plus simple" else if (i == shortest) "La plus courte" else "Alternative"
             Column(
                 Modifier.weight(1f).inset(18.dp, if (sel) c.accent else null)
                                         .clickable { engine.selectRoute(i) }.padding(horizontal = 14.dp, vertical = 9.dp),

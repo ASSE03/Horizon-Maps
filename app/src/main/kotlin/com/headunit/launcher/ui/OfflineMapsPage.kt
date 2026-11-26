@@ -109,7 +109,7 @@ internal fun OfflineMapsContent(prefs: Prefs, engine: NavEngine) {
             val r = PackRegions.byId(id)
             val d = OfflineRouter.packDir(ctx, id)
             val tiles = File(d, "tiles.tar")
-            val built = if (tiles.exists()) java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK).format(java.util.Date(tiles.lastModified())) else ""
+            val built = if (tiles.exists()) java.text.SimpleDateFormat("d MMM yyyy", L.locale).format(java.util.Date(tiles.lastModified())) else ""
             val inUse = id == activeId
             val hasLimits = File(d, "limits.bin").exists()
             SItem(r.name + if (inUse) " · utilisée" else "", (sizes[id]?.let { fmtSize(it) } ?: "…") + (if (built.isNotEmpty()) " · créée le $built" else "") +
@@ -128,6 +128,10 @@ internal fun OfflineMapsContent(prefs: Prefs, engine: NavEngine) {
             SNote("Limitations et radars hors ligne disponibles pour ${PackRegions.byId(id).name} : touchez sa mise à jour (seuls les nouveaux fichiers sont téléchargés, en général moins de 100 Mo).")
         val age = engine.packAgeDays()
         if (age != null && age >= 120 && !engine.packBusy) SNote("La zone utilisée date d'environ ${age / 30} mois. Mettez-la à jour en Wi-Fi pour les nouvelles routes et carrefours.")
+        SChoice("Mise à jour automatique", listOf("wifi" to "En Wi-Fi uniquement", "always" to "Toujours (utilise les données mobiles)", "off" to "Désactivé"),
+            prefs.s(PreferenceKeys.DATA_AUTO, "wifi"), "Les nouvelles données de carte, limitations, radars et noms de villes se téléchargent seuls quand vous ne roulez pas. Désactivé : demande d'abord") {
+            prefs.put(PreferenceKeys.DATA_AUTO, it)
+        }
     }
     SGroup("Ajouter une zone") {
         SItem("Zone", region.name + " · " + region.group) { SButton("Changer") { picking = true } }

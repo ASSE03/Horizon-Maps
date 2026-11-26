@@ -37,7 +37,7 @@ object PlusBilling {
         c.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) { loadOffers(); refresh() }
-                else main.post { Plus.problem = "Google Play billing isn't available (${result.debugMessage})" }
+                else main.post { Plus.problem = "Google Play billing isn't available: ${result.debugMessage}" }
             }
             override fun onBillingServiceDisconnected() {}
         })

@@ -62,12 +62,11 @@ object MetOffice {
             val mo = best.optInt("significantWeatherCode", -99)
             if (mo == -99) throw IOException("no significantWeatherCode at ${best.optString("time")}")
             val r = Result(best.getDouble("screenTemperature"), mo, toWmo(mo), best.optString("time"), best.optDouble("precipitationRate", 0.0), site)
-            status = "OK ${clock()}: ${describe(mo)} (Met Office code $mo), %.1f°C, rain %.1f mm/h, for ${r.slot}%s".format(
-                java.util.Locale.US, r.tempC, r.rateMmH, if (site.isNotBlank()) " near $site" else "")
+            status = "OK ${clock()}: ${L.t(describe(mo))} (Met Office code $mo), ${"%.1f".format(java.util.Locale.US, r.tempC)}°C, rain ${"%.1f".format(java.util.Locale.US, r.rateMmH)} mm/h, for ${r.slot}${if (site.isNotBlank()) L.t("near {0}", site) else ""}"
             Log.i(TAG, "MetOffice ${System.currentTimeMillis() - t0} ms: $status")
             return r
         } catch (e: Exception) {
-            status = "Failed ${clock()}: ${e.message ?: e.javaClass.simpleName}. Using Open-Meteo instead."
+            status = "Échec de la météo : ${"${clock()}: ${e.message ?: e.javaClass.simpleName}"}. Using Open-Meteo instead."
             Log.w(TAG, "MetOffice: $status")
             throw e
         }
@@ -99,11 +98,11 @@ object MetOffice {
         else -> 3
     }
 
-    fun describe(mo: Int): String = when (mo) {
+    fun describe(mo: Int): String = L.t(when (mo) {
         -1 -> "Trace rain"; 0 -> "Clear night"; 1 -> "Sunny"; 2, 3 -> "Partly cloudy"; 5 -> "Mist"; 6 -> "Fog"
         7 -> "Cloudy"; 8 -> "Overcast"; 9, 10 -> "Light rain shower"; 11 -> "Drizzle"; 12 -> "Light rain"
         13, 14 -> "Heavy rain shower"; 15 -> "Heavy rain"; 16, 17 -> "Sleet shower"; 18 -> "Sleet"; 19, 20 -> "Hail shower"
         21 -> "Hail"; 22, 23 -> "Light snow shower"; 24 -> "Light snow"; 25, 26 -> "Heavy snow shower"; 27 -> "Heavy snow"
         28, 29 -> "Thunder shower"; 30 -> "Thunder"; else -> "Unknown"
-    }
+    })
 }

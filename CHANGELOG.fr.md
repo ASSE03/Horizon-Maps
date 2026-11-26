@@ -5,6 +5,16 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Données de la voiture par Android Auto : vitesse, batterie et position de la voiture quand elle les donne (Réglages › Android Auto › Données de la voiture).
+- Préférer les grands axes, aussi en ligne (Mapbox) : l'itinéraire « Grands axes » dans les choix.
+- Éviter les autoroutes sur les petits trajets seulement (jamais, toujours ou petits trajets, avec la distance).
+- Zoom aux carrefours : plus loin, habituel, plus proche ou au plus près.
+- Tourner autour de la voiture à l'arrêt : la caméra fait lentement le tour de la voiture (désactivé par défaut).
+- Couleur de la carte de direction « Comme les panneaux » : bleu sur autoroute en France.
+- Données hors ligne mises à jour toutes seules en Wi-Fi (ou aussi en données mobiles, ou désactivé).
+- Passages piétons autour de vous en ville sans itinéraire.
+- Batterie du téléphone à côté du compteur sur Android Auto (désactivé par défaut).
+- Tailles des panneaux de danger et des limitations dessinées sur l'itinéraire.
 - Cartouches de route (D, N, A, E…) dans le panneau de direction, avec les images de Mapbox ou de TomTom ; au Royaume-Uni et en Irlande, le panneau britannique de l'original.
 - Cédez-le-passage de l'itinéraire dessinés sur la route.
 - Changement de pays : une notification avec les limitations habituelles et le numéro d'urgence.
@@ -168,6 +178,15 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Bandeaux d'alerte placés à l'opposé du panneau de limitation, ajustés à leur texte.
+- Disposition portrait plus compacte (carte de direction, compteur, boussole en guidage).
+- Démo : retour fiable à la vraie position et au bon endroit de l'itinéraire à l'arrêt de la démo.
+- Départ d'itinéraire à l'arrêt : la flèche ne se cale plus sur le mauvais morceau d'une route en boucle.
+- Recherche : une même maison listée une fois et guidée jusqu'à sa rue, plus vite.
+- Android Auto : les itinéraires ne s'annulent plus d'eux-mêmes après quelques secondes ; plus silencieux derrière une autre appli sans itinéraire ; mode au frais avec une vue 3D adoucie.
+- Luminosité qui suit la courbe d'Android ; image de la voiture qui tourne autour de ses roues arrière.
+- « Garé ici » proposé seulement après avoir roulé.
+- Appli plus légère (R8).
 - Limitations : celle de la route vraiment suivie (plus de route voisine), plus stables.
 - Feux tricolores mieux placés le long de l'itinéraire ; flèche gardée sur sa chaussée d'autoroute ; tracé conservé dans les virages.
 - Itinéraires alternatifs : bascule et progression corrigées ; fermetures toujours évitées, même longues.
