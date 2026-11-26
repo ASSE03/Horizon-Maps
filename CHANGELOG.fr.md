@@ -319,6 +319,8 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Carte « Votre voiture » en portrait : le titre n'est plus écrit lettre par lettre (une croix en double et le bouton « Revenir à pied » le serraient) ; « Google Maps » et « À pied » passent sur la ligne du dessous.
+- Volet du bas remonté en portrait : les boutons de la carte et le compteur ne passent plus par-dessus la recherche et le volet.
 - Réglages › Performances : la partie Diagnostic est traduite.
 - Radars sans itinéraire : la route devant vous est suivie dans ses virages, un radar après une courbe est annoncé à 300 m et non plus à 150 m ; un radar déjà annoncé l'est de nouveau au retour.
 - Mes itinéraires, enregistrement à l'arrivée et « Continuer vers… » sur Android Auto : textes traduits en français.

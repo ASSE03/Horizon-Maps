@@ -356,6 +356,10 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         var turnExtraMax by remember { mutableStateOf(3) }
         var boxTopPx by remember { mutableStateOf(0f) }
         var railHPx by remember { mutableStateOf(0) }
+        // fork FR : volet du bas remonté en portrait : la place libre entre la barre de recherche et le volet. Quand elle manque, les
+        // boutons de la carte et le compteur sont masqués au lieu de passer par-dessus la recherche et le volet
+        val sheetRoom = if (sheetMode && tripPx > 0) screenH - tripH - 92.dp else 10_000.dp
+        val railFits = !sheetMode || railHPx == 0 || sheetRoom >= with(dens) { railHPx.toDp() } + 16.dp
         // (only whether there is a turn card is read here: the turn itself changes every few metres, and reading it here redrew the whole
         // screen up to 4 times a second at motorway speed; the card below reads it in its own, much smaller part)
         val hasTurn by remember { derivedStateOf { engine.turn != null } }
@@ -595,7 +599,8 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
                     val mid = gapTop + (gapBottom - gapTop) * 0.55f
                     (mid - railHPx / 2f).coerceAtMost(gapBottom - railHPx).coerceAtLeast(gapTop).coerceAtLeast(16.dp.toPx()).toDp()
                 }
-                if (settingsAbove) Column(Modifier.align(side(Alignment.TopEnd)).padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = railTop).onGloballyPositioned { report(2, it.boundsInParent()); buttonsWPx = it.size.width; railHPx = it.size.height }, verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = if (mir) Alignment.Start else Alignment.End) {
+                if (!railFits) Unit
+                else if (settingsAbove) Column(Modifier.align(side(Alignment.TopEnd)).padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = railTop).onGloballyPositioned { report(2, it.boundsInParent()); buttonsWPx = it.size.width; railHPx = it.size.height }, verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = if (mir) Alignment.Start else Alignment.End) {
                     settings(); panelAndZoom()
                 }
                 // (the same with no Settings button above the panel: the panel itself goes under the turn card, Duddon Close)
@@ -661,7 +666,7 @@ private fun MapScreen(engine: NavEngine, onSettings: () -> Unit) {
         val besideButtons = with(dens) { buttonsWPx.toDp() } + 26.dp
         // (Card positions: on the other side if chosen, and lifted above the trip card when they share a corner)
         val speedShareTrip = !narrow && tripPx > 0 && tripAt == speedAt
-        if (!previewing && !altFocus && !hudOff) Box(
+        if (!previewing && !altFocus && !hudOff && !(sheetMode && sheetRoom < 150.dp)) Box(
             when {
                 // (the portrait route layout: bottom left, above the trip sheet)
                 routeSheet -> Modifier.align(side(Alignment.BottomStart)).sides(start = 16.dp, bottom = if (tripPx > 0) tripH + 8.dp else 16.dp)
@@ -2235,28 +2240,27 @@ private fun ParkedCard(engine: NavEngine) {
             Text("Votre voiture", color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text("Garée $ago" + (if (here != null) " · " + Geo.fmtDist(Geo.dist(here, spot), engine.imperial) else ""), color = c.sub, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        // walking directions in the phone's maps app (Horizon Nav plans driving routes); just the spot if there's none
-        ImmPill("Revenir à pied", {
-            val walk = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "google.navigation:q=%.6f,%.6f&mode=w", spot.lat, spot.lon)))
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "geo:%.6f,%.6f?q=%.6f,%.6f(Votre voiture)", spot.lat, spot.lon, spot.lat, spot.lon)))
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            // (Google Maps by name: on some phones the request went to a driving app, which drove you round to the car, Dotancom
-            // #320; then Google's walking directions on the web, then just the spot)
-            val web = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "https://www.google.com/maps/dir/?api=1&destination=%.6f,%.6f&travelmode=walking", spot.lat, spot.lon)))
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            val tries = listOf(android.content.Intent(walk).setPackage("com.google.android.apps.maps"), web.setPackage("com.google.android.apps.maps"),
-                android.content.Intent(web).setPackage(null), geo)
-            if (tries.none { t -> try { ctx.startActivity(t); true } catch (e: Exception) { false } }) engine.toast("Aucune appli de cartes à pied sur ce téléphone", 3000)
-        }, filled = true)
         Box(Modifier.size(40.dp).clip(CircleShape).clickable { engine.prefs.put(PreferenceKeys.PARKED_SPOT, "") }, contentAlignment = Alignment.Center) {
             Icon(Icons.Rounded.Close, "Oublier où vous êtes garé", tint = c.sub, modifier = Modifier.size(22.dp))
         }
-        Box(Modifier.size(40.dp).clip(CircleShape).clickable { engine.prefs.put(PreferenceKeys.PARKED_SPOT, "") }, contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Close, "Oublier l'emplacement de la voiture", tint = c.sub, modifier = Modifier.size(22.dp))
-        }
       }
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+      // fork FR : sur une seule ligne, « Revenir à pied », la croix et le titre se marchaient dessus (le titre écrit lettre par lettre) :
+      // les deux façons de revenir à pied passent sur la ligne du dessous
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+          // walking directions in the phone's maps app (Horizon Nav plans driving routes); just the spot if there's none
+          ImmPill("Google Maps", {
+              val walk = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "google.navigation:q=%.6f,%.6f&mode=w", spot.lat, spot.lon)))
+                  .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+              val geo = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "geo:%.6f,%.6f?q=%.6f,%.6f(Votre voiture)", spot.lat, spot.lon, spot.lat, spot.lon)))
+                  .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+              // (Google Maps by name: on some phones the request went to a driving app, which drove you round to the car, Dotancom
+              // #320; then Google's walking directions on the web, then just the spot)
+              val web = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "https://www.google.com/maps/dir/?api=1&destination=%.6f,%.6f&travelmode=walking", spot.lat, spot.lon)))
+                  .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+              val tries = listOf(android.content.Intent(walk).setPackage("com.google.android.apps.maps"), web.setPackage("com.google.android.apps.maps"),
+                  android.content.Intent(web).setPackage(null), geo)
+              if (tries.none { t -> try { ctx.startActivity(t); true } catch (e: Exception) { false } }) engine.toast("Aucune appli de cartes à pied sur ce téléphone", 3000)
+          }, filled = false)
         // fork FR : itinéraire à pied dans Horizon Nav (Mapbox, profil piéton) ; sans jeton Mapbox, l'appli de cartes du téléphone
         ImmPill("À pied", {
           if (!engine.walkTo(com.headunit.launcher.Place("Votre voiture", "", spot))) {
