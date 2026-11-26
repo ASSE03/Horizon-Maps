@@ -1159,7 +1159,7 @@ private fun TripArea(engine: NavEngine, shareEta: () -> Unit, narrow: Boolean = 
                 val evPct = engine.evCardPct()
                 val evCol = if (evPct == null) c.text else if (evPct < 10) Bad else if (evPct < 20) Warn else Good
                 // fork FR : la batterie maintenant, à côté de celle à l'arrivée (comme ABRP)
-                val evNow = if (evPct != null) engine.evNowPct() else null
+                val evNow = if (evPct != null) engine.evLivePct() else null
                 val nowCol = if (evNow == null) c.text else if (evNow < 10) Bad else if (evNow < 20) Warn else c.text
                 val evStop = if (evPct != null) engine.evChargerPct() else null
                 val stopCol = if (evStop == null) c.text else if (evStop < 10) Bad else if (evStop < 20) Warn else Good
@@ -1618,7 +1618,7 @@ internal fun ImmTurnCard(
     }
     val Teal by androidx.compose.animation.animateColorAsState(teal0, androidx.compose.animation.core.tween(900), label = "cardTop")
     val TealDeep by androidx.compose.animation.animateColorAsState(deep0, androidx.compose.animation.core.tween(900), label = "cardDeep")
-    val ukSign = engine.prefs.b(PreferenceKeys.UKSIGNS, true) && (t.sign.isNotBlank() && t.sign != t.street || t.tag.startsWith("Sortie") || t.shields.isNotEmpty() || t.exitNo.isNotBlank())
+    val ukSign = engine.prefs.b(PreferenceKeys.UKSIGNS, true) && (t.sign.isNotBlank() && t.sign != t.street || t.tag.startsWith("Sortie") || t.exitNo.isNotBlank())
     // (worked out once per sign, not on every distance update)
     val signPlaces = remember(t.sign, t.street, ukSign) { if (ukSign) junctionSignPlaces(t.sign, t.street) else "" }
     var placesBelow by remember(signPlaces) { mutableStateOf(false) }
@@ -1696,9 +1696,8 @@ internal fun ImmTurnCard(
         // arrows always pointed right, even for an exit on the left: mjdshibly #232)
         // A proper UK direction sign: blue for motorways, green for primary roads, white for local roads.
         if (ukSign)
-            // fork FR : panneau britannique (avec les cartouches de route de l'original) au Royaume-Uni et en Irlande, français ailleurs
-            if (engine.detectedCountry.uppercase() in setOf("GB", "IE", "IM", "JE", "GG")) JunctionSign(t, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp), engine.mbToken)
-            else FrSign(t.sign.ifBlank { t.ref }, t.exitNo.ifBlank { t.tag.removePrefix("Sortie ").takeIf { t.tag.startsWith("Sortie") }.orEmpty() }, t.street, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp))
+            // fork FR : le panneau de direction à la française (l'original l'a retiré de sa carte de direction)
+            FrSign(t.sign.ifBlank { t.ref }, t.exitNo.ifBlank { t.tag.removePrefix("Sortie ").takeIf { t.tag.startsWith("Sortie") }.orEmpty() }, t.street, Modifier.padding(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, bottom = if (compact) 5.dp else 12.dp))
         // (the lanes stay on a small car screen too: they were left off with everything else, so small screens had no lane guidance)
         if ((!compact || car) && engine.prefs.b(PreferenceKeys.LANE_STRIP, true)) t.lanes?.let { ls ->
             // lane hero view: before a complex junction the lanes grow into a big picture with yours lit; simple ones keep the strip

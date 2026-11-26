@@ -995,7 +995,7 @@ private fun TripCard(engine: NavEngine, actions: CarActions, fill: Boolean, oneL
             CarStat(e.arrive, "arrivée", c.text, m, share)
             CarStat(Geo.fmtDist(e.dist, engine.imperial), "restants", c.text, m, share)
             // fork FR : la batterie maintenant et à l'arrivée
-            engine.evCardPct()?.let { engine.evNowPct() }?.let { p -> CarStat("$p%", "batterie", if (p < 10) Bad else if (p < 20) Warn else c.text, m, share) }
+            engine.evCardPct()?.let { engine.evLivePct() }?.let { p -> CarStat("$p%", "batterie", if (p < 10) Bad else if (p < 20) Warn else c.text, m, share) }
             engine.evCardPct()?.let { engine.evChargerPct() }?.let { p -> CarStat("$p%", "à la borne", if (p < 10) Bad else if (p < 20) Warn else Good, m, share) }
             engine.evCardPct()?.let { p -> CarStat("$p%", "à l'arrivée", if (p < 10) Bad else if (p < 20) Warn else Good, m, share) }
         }

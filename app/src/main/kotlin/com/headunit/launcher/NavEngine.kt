@@ -1947,7 +1947,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val where = (info?.place?.sub ?: placeOf?.sub ?: "").takeIf { it.isNotBlank() }
         val cons = evKwhPerKm(); val batt = evBatteryKwh()
         // la batterie en y arrivant : depuis maintenant, avec une recharge à 80 % à chaque borne d'avant
-        var pct = (evNowPct() ?: prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80)).toDouble(); var pos = curProg
+        var pct = (evLivePct() ?: prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80)).toDouble(); var pos = curProg
         fun targetOf(p: LL) = chargeInfo[ckey(p)]?.extra?.let { Regex("charge à (\\d+) %").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 80
         for ((o, sp) in stops) {
             if (o <= curProg + 50.0) continue
@@ -8109,8 +8109,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Fork FR : la batterie estimée maintenant (%) : la valeur relue dans Home Assistant moins ce qui a été roulé depuis, sinon la
      *  charge réglée au départ moins ce qui a été roulé depuis le début du trajet. */
-    fun evNowPct(): Int? {
+    fun evLivePct(): Int? {
         if (!isEv || route == null) return null
+        // (la batterie de la voiture transmise par Android Auto, quand elle en donne une : déjà à jour)
+        CarData.soc?.let { return it.coerceIn(0, 100) }
         refreshHaBattery()
         if (haLivePct >= 0 && System.currentTimeMillis() - haLiveAt < 20 * 60_000L) {
             val since = max(0.0, tripDist - haLiveDist)
@@ -8167,7 +8169,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (fr.first > 0 || route !== r) return@launch
             busyWarned += ckey(next.second)
             val alt = withContext(Dispatchers.IO) {
-                try { findCharger(r, max(curProg + 2000.0, next.first - 15_000.0), next.first + 15_000.0, curProg, (evNowPct() ?: 50).toDouble(), evKwhPerKm(), evBatteryKwh()) } catch (e: Exception) { null }
+                try { findCharger(r, max(curProg + 2000.0, next.first - 15_000.0), next.first + 15_000.0, curProg, (evLivePct() ?: 50).toDouble(), evKwhPerKm(), evBatteryKwh()) } catch (e: Exception) { null }
             }?.takeIf { Geo.dist(it.place.pos, next.second) > 150.0 }
             val say = "La borne ${info.place.name} n'a plus de place libre" + (if (alt != null) ". Autre borne : ${alt.place.name}" else "")
             raiseAlert("plan", say, 9000); speak(say, true)
@@ -8177,7 +8179,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     /** Fork FR : la batterie estimée en arrivant au prochain arrêt recharge du trajet (null s'il n'y en a pas devant). */
     fun evChargerPct(): Int? {
-        val now = evNowPct() ?: return null
+        val now = evLivePct() ?: return null
         val r = route ?: return null
         val off = chargeVias.mapNotNull { RouteExtras.project(r, it, 300.0)?.first }.filter { it > curProg + 100.0 }.minOrNull() ?: return null
         return Math.round(now - (off - curProg) / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(-50, 100)
@@ -9243,7 +9245,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
     }
 
-    fun stopSim() = finishSim()
+    fun stopSim() { finishSim(); carEngine()?.let { if (it.simMode != 0) it.stopSim() } }
     /** Fork FR : la vitesse affichée au compteur : en démo accélérée, la vitesse « normale », sans le ×2 à ×8. */
     val shownSpeed: Double get() = (fix?.speed ?: 0.0) / maxOf(1, simMode)
 
@@ -9264,7 +9266,6 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Fork FR : dernier souci de la démo, pour le rapport. */
     @Volatile var simNote = ""
 
-    fun stopSim() { simJob?.cancel(); simJob = null; simMode = 0; if (!isCar) DemoLink.phone = 0; carEngine()?.let { if (it.simMode != 0) it.stopSim() } }
 
 
     var onRoad by mutableStateOf("")
