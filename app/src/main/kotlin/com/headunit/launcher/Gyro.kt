@@ -57,9 +57,38 @@ object Gyro : SensorEventListener {
                 total += w * dt
                 rate += (w - rate) * (dt / (dt + 0.15)).coerceIn(0.0, 1.0)
                 at = System.currentTimeMillis()
+                record(total)
             }
         }
     }
 
     override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+
+    // Fork FR : les 20 dernières secondes de l'angle tourné (une mesure toutes les 40 ms), pour mesurer le retard du GPS (GpsLag)
+    private const val N = 512
+    private val hT = LongArray(N)
+    private val hA = DoubleArray(N)
+    private var hN = 0
+    private var hLast = 0L
+
+    @Synchronized private fun record(a: Double) {
+        val t = android.os.SystemClock.uptimeMillis()
+        if (t - hLast < 40L) return
+        hLast = t
+        hT[hN % N] = t; hA[hN % N] = a; hN++
+    }
+
+    /** L'angle total tourné à l'instant [t] (SystemClock.uptimeMillis), interpolé ; null s'il n'est plus (ou pas encore) gardé. */
+    @Synchronized fun totalAt(t: Long): Double? {
+        val n = minOf(hN, N)
+        if (n < 2) return null
+        val first = hN - n
+        if (t < hT[first % N] || t > hT[(hN - 1) % N]) return null
+        var lo = first; var hi = hN - 1
+        while (hi - lo > 1) { val mid = (lo + hi) / 2; if (hT[mid % N] <= t) lo = mid else hi = mid }
+        val t0 = hT[lo % N]; val t1 = hT[hi % N]
+        if (t1 - t0 > 500L) return null
+        val f = if (t1 == t0) 0.0 else (t - t0).toDouble() / (t1 - t0)
+        return hA[lo % N] + (hA[hi % N] - hA[lo % N]) * f
+    }
 }

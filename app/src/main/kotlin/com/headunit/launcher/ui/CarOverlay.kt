@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material.icons.rounded.Eco
+import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -652,6 +653,14 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
                 val f = isImperial(engine.prefs)
                 val tt = if (f) wx.tempC * 9.0 / 5.0 + 32.0 else wx.tempC
                 Text("${Math.round(tt)}°", color = c.text, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp))
+                // fork FR : en guidage, la météo prévue à l'arrivée, après le drapeau
+                val aw = if (guiding) engine.arrivalWx else null
+                if (aw != null) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Flag, null, tint = c.sub, modifier = Modifier.padding(start = 14.dp).size(20.dp))
+                    androidx.compose.material3.Icon(wxIcon(aw.code), null, tint = wxTint(aw.code), modifier = Modifier.padding(start = 4.dp).size(26.dp))
+                    val at = if (f) aw.tempC * 9.0 / 5.0 + 32.0 else aw.tempC
+                    Text("${Math.round(at)}°", color = c.text, fontSize = 22.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
+                }
             }
         }
         if (tempOn && wx != null && !tempAtSound && !tempAtTrip) Row((if (tempBar && !portrait) Modifier.align(Alignment.TopStart).padding(start = left + topW + 12.dp, top = top)

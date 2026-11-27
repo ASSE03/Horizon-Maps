@@ -5,6 +5,9 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Avance de la flèche automatique : « Auto » mesure le retard du GPS dans les virages grâce au gyroscope du téléphone (Réglages › En conduisant › Avance de la flèche).
+- Météo à l'arrivée : en guidage de plus de 20 minutes, la bulle de température montre aussi le temps prévu à destination pour l'heure d'arrivée (après le drapeau).
+- Diagnostic automatique après un trajet où un radar n'a été annoncé qu'à moins de 200 m (une fois par trajet, si l'envoi automatique est configuré).
 - Itinéraire sans péage proposé à côté d'un plus rapide qui en a, avec le temps en plus (Réglages › Itinéraires).
 - Étapes numérotées sur la carte et prochaine étape sur la carte de trajet.
 - Filtre « Aires d'autoroute » dans les aires.
@@ -184,6 +187,10 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Recharge : la consommation prévue tient compte du froid, de la clim et de la vitesse moyenne de l'itinéraire.
+- Radars en guidage : le sens contrôlé est comparé à la direction de la route à l'endroit du radar, pas à votre cap actuel (avant un virage).
+- Signalement d'une limitation fausse : l'appli dit d'où venait la valeur (zone téléchargée, itinéraire, OpenStreetMap…).
+- Android Auto : les boutons de droite et le décalage du compteur suivent la place réellement laissée par Android Auto.
 - Adresse : l'itinéraire vers une maison part plus vite (rue cherchée pendant l'affichage des résultats).
 - Vue d'ensemble de l'itinéraire ajustée autour des cartes à l'écran, aussi sur Android Auto ; cartes des autres itinéraires plus petites.
 - Panneaux sur la carte dimensionnés d'après le tracé, pareils sur tous les écrans ; bandeaux d'alerte éloignés du panneau de limitation.
@@ -351,6 +358,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Textes encore en anglais (hors cartes téléchargées, prévisions « Today »).
 - Android Auto : quand ses boutons reviennent, le compteur et le logo Mapbox se décalent bien pour ne pas être dessous.
 - Android Auto : toucher la carte fait revenir les boutons d'Android Auto (signaler, lieux, réglages, zoom, recentrer) sans passer par la barre de recherche.
 - Android Auto : sans guidage, la température reste en bas à gauche même quand Android Auto change la place laissée à la carte (après la recherche, elle remontait en haut).

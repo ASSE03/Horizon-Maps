@@ -617,8 +617,8 @@ private fun ArrowSection(prefs: Prefs, engine: NavEngine) {
     }
     SGroup("Position de la flèche") {
         SToggle(prefs, "Garder la flèche sur la route sans itinéraire", "snaproad", true)
-        SChoice("Avance de la flèche", listOf("0" to "Aucune", "0.5" to "0,5 s", "1.0" to "1 s", "1.5" to "1,5 s", "2.0" to "2 s"), prefs.s("arrowlead", "1.0"),
-            "Compense le retard du GPS : la flèche est placée là où vous serez dans ce délai. Augmentez si elle arrive aux croisements après la voiture, baissez si elle les dépasse avant") { prefs.put("arrowlead", it) }
+        SChoice("Avance de la flèche", listOf("auto" to (com.headunit.launcher.GpsLag.lag?.let { "Auto (" + String.format(java.util.Locale.FRANCE, "%.1f", it) + " s)" } ?: "Auto"), "0" to "Aucune", "0.5" to "0,5 s", "1.0" to "1 s", "1.5" to "1,5 s", "2.0" to "2 s"), prefs.s("arrowlead", "1.0"),
+            "Compense le retard du GPS : la flèche est placée là où vous serez dans ce délai. Auto le mesure tout seul dans les virages (gyroscope du téléphone), 1 s en attendant. Sinon, augmentez si elle arrive aux croisements après la voiture, baissez si elle les dépasse avant") { prefs.put("arrowlead", it) }
         SToggle(prefs, "Garder la flèche sur le côté", PreferenceKeys.ARROW_SIDE, false, "Quand les cartes se replient, au lieu de revenir au centre")
     }
     SGroup("Tracé de l'itinéraire") {

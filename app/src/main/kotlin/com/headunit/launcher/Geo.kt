@@ -956,7 +956,7 @@ object Weather {
         val parse = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
         val show = java.text.SimpleDateFormat("EEE", java.util.Locale.getDefault())
         val days = (0 until dt.length()).map { i ->
-            val label = if (i == 0) "Today" else show.format(parse.parse(dt.getString(i))!!)
+            val label = if (i == 0) "Aujourd'hui" else show.format(parse.parse(dt.getString(i))!!)
             Day(label, dc.getInt(i), mx.getDouble(i), mn.getDouble(i))
         }
         Forecast(

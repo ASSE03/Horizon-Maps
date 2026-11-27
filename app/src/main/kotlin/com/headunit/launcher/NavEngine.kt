@@ -785,6 +785,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var lm: LocationManager? = null
     /** Fork FR : la température ici (bulle en haut à droite d'Android Auto), lue toutes les 15 min ou après 10 km. */
     var tempHere by mutableStateOf<Weather.Now?>(null)
+    /** Fork FR : la météo prévue à l'arrivée (destination, heure d'arrivée), pendant un guidage de plus de 20 minutes. */
+    var arrivalWx by mutableStateOf<Weather.Now?>(null)
+    private var arrWxAt = 0L
+    private var arrWxDest: LL? = null
     private var tempAt = 0L
     private var tempPos: LL? = null
     private var limitAt = 0L
@@ -1733,6 +1737,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             tempAt = now; tempPos = cur
             scope.launch { tempHere = withContext(Dispatchers.IO) { Weather.fetch(cur) } ?: tempHere }
         }
+        // fork FR : météo à l'arrivée, revue toutes les 20 minutes ou quand la destination change
+        run {
+            val d = dest?.pos
+            val left = eta?.secs ?: 0.0
+            if (!isCar || !prefs.b("cartemp", true) || route == null || d == null) { if (arrivalWx != null) arrivalWx = null; arrWxDest = null }
+            else if (left > 20 * 60.0 && (arrWxDest?.let { Geo.dist(it, d) > 200.0 } ?: true || now - arrWxAt > 20 * 60 * 1000L) && now - arrWxAt > 60_000L) {
+                arrWxAt = now; arrWxDest = d
+                val whenMs = System.currentTimeMillis() + (left * 1000.0).toLong()
+                scope.launch { val w = withContext(Dispatchers.IO) { ArrivalWx.at(d, whenMs) }; if (route != null) arrivalWx = w }
+            }
+        }
         // current weather is only used for the rain effect on the map, so it is only fetched when that is switched on
         // (every 10 minutes: showers come and go quicker than the 20 it used to be)
         // (a different key, or none any more: fetched again now, not in up to 10 minutes)
@@ -1945,7 +1960,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val info = chargeInfo[ckey(hit.second)]
         val name = info?.place?.name ?: placeOf?.name ?: "Borne"
         val where = (info?.place?.sub ?: placeOf?.sub ?: "").takeIf { it.isNotBlank() }
-        val cons = evKwhPerKm(); val batt = evBatteryKwh()
+        val cons = evRouteCons(r); val batt = evBatteryKwh()
         // la batterie en y arrivant : depuis maintenant, avec une recharge à 80 % à chaque borne d'avant
         var pct = (evLivePct() ?: prefs.i(PreferenceKeys.EV_CHARGE_PCT, 80)).toDouble(); var pos = curProg
         fun targetOf(p: LL) = chargeInfo[ckey(p)]?.extra?.let { Regex("charge à (\\d+) %").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 80
@@ -2056,15 +2071,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val shown = speedLimit?.let { Math.round(it * k / 5.0) * 5 }
         val note = "Limitation signalée comme fausse : affichée ${shown ?: "aucune"} " + (if (imperial) "mph" else "km/h") +
             (if (limitEstimated) " (estimée)" else "") + " · source ${prefs.s("limitsrc", "mg4")}" +
+            (if (limitInfo.isNotBlank()) " · $limitInfo" else "") +
             (if (inTown) " · en agglomération ($townName)" else "") +
             " · position ${p?.let { String.format(java.util.Locale.US, "%.5f,%.5f", it.lat, it.lon) } ?: "inconnue"}" +
             " · cap ${Math.round(fix?.heading ?: 0.0)}° · vitesse ${Math.round((fix?.speed ?: 0.0) * 3.6)} km/h"
         LimitLog.add(ctx, "signalement : ${shown ?: "-"} @ ${LimitLog.pos(p)}")
         val report = feedbackReport(note)
-        if (!DiagUpload.hasToken(ctx)) { toast("Limitation notée dans le journal (pas d'envoi automatique configuré)", 3500); return }
-        toast("Signalement de la limitation envoyé…", 2500)
+        // fork FR : d'où venait la valeur, dit tout de suite (carte téléchargée, itinéraire, OpenStreetMap…)
+        val from = limitInfo.ifBlank { "source inconnue" }
+        tripIssues += "limitation signalée"
+        if (!DiagUpload.hasToken(ctx)) { toast("Limitation notée dans le journal : $from (pas d'envoi automatique configuré)", 4500); return }
+        toast("Signalement envoyé… ($from)", 3500)
         Thread {
-            val msg = try { DiagUpload.send(ctx, "limite-${DiagUpload.stamp()}.txt", report); "Limitation signalée, merci" } catch (e: Exception) { "Envoi impossible : ${e.message}" }
+            val msg = try { DiagUpload.send(ctx, "limite-${DiagUpload.stamp()}.txt", report); "Limitation signalée, merci ($from)" } catch (e: Exception) { "Envoi impossible : ${e.message}" }
             android.os.Handler(android.os.Looper.getMainLooper()).post { toast(msg, 3500) }
         }.start()
     }
@@ -2133,6 +2152,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             appendLine("Adresses (BAN) : ${BanAddr.lastNote.ifBlank { "-" }}")
             appendLine("Fichier des radars de France : ${RadarsFr.status}")
             appendLine("Gyroscope (flèche dans les virages) : ${if (Gyro.alive()) "actif" else "absent ou arrêté"}, accords avec le GPS $gyroOk, désaccords $gyroBad")
+            if (isEv) appendLine("Consommation VE pour le trajet : ×${"%.2f".format(evConsFactor(route))} (température ${tempHere?.tempC?.let { Math.round(it) } ?: "?"} °C, vitesse moyenne ${route?.takeIf { it.time > 60.0 }?.let { Math.round(it.len / it.time * 3.6) } ?: "?"} km/h)")
+            appendLine("Avance de la flèche : réglage ${prefs.s("arrowlead", "1.0")}, utilisée ${"%.1f".format(arrowLead)} s, retard GPS mesuré ${GpsLag.lag?.let { "%.1f s".format(it) } ?: "pas encore"} (${GpsLag.turns} virages, dernier ${if (GpsLag.lastFound.isNaN()) "—" else "%.1f s".format(GpsLag.lastFound)})")
             appendLine("Lampadaires : ${map.lampInfo()}")
             appendLine("Agglomération (panneaux OSM) : ${if (inTown) "dans $townName" else "hors agglomération"}, ${townSigns.size} panneaux connus autour")
             appendLine("Radars : ${if (camerasOn()) "activés" else "coupés"} · ${aroundCams.size} autour · ${cameras.size} affichés · dernière recherche : ${Overpass.camNote.ifBlank { "aucune" }.take(160)} · OpenStreetMap : ${Overpass.lastNote.ifBlank { "-" }.take(200)}" + " · Nominatim : ${NominatimPoi.lastNote.ifBlank { "-" }} · zones : ${Zones.status.take(120)}")
@@ -3889,7 +3910,19 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         return Geo.dist(f.pos, d) < 400.0 && r.len - curProgress < 800.0
     }
 
+    /** Fork FR : ce qui a cloché pendant le guidage en cours (radar vu trop tard, limitation signalée), pour le diagnostic automatique. */
+    private val tripIssues = java.util.Collections.synchronizedList(ArrayList<String>())
+    /** Fork FR : à la fin d'un guidage où un radar n'a été vu que de près, un diagnostic part tout seul (une fois par trajet). */
+    private fun sendTripDiag() {
+        val issues = synchronized(tripIssues) { tripIssues.toList() }.also { tripIssues.clear() }
+        if (issues.none { it != "limitation signalée" } || simMode != 0 || !DiagUpload.hasToken(ctx)) return
+        val report = try { feedbackReport("Diagnostic automatique après le trajet : " + issues.take(8).joinToString(" ; ")) } catch (e: Exception) { return }
+        toast("Un radar a été annoncé tard : diagnostic envoyé automatiquement", 3500)
+        Thread { try { DiagUpload.send(ctx, "trajet-${DiagUpload.stamp()}.txt", report) } catch (e: Exception) { } }.start()
+    }
+
     fun endRoute() {
+        if (route != null && !previewing) try { sendTripDiag() } catch (e: Throwable) { } else tripIssues.clear()
         if (walking) { walking = false; MapboxRest.walkProfile = false }
         // (what ended a trip under way, for the problem report: a route that ends by itself, as on carlb051's Home button, #226)
         if (route != null && !previewing) try { RouteEnds.note(ctx, if (isCar) "car" else "phone", dest?.let { d ->
@@ -4111,7 +4144,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
     @Volatile private var limSrc = ""
     /** What the speed limit sign last showed and where it came from, for the problem report (no road names or places). */
-    private var limitInfo = ""
+    /** D'où vient la limitation affichée (« 50 km/h d'après la zone téléchargée ») : diagnostic, et appui long sur le panneau. */
+    var limitInfo = ""; private set
     private fun noteLimit(ms: Double, src: String, estimated: Boolean) {
         limitInfo = "%d %s d'après %s%s".format(Math.round(ms * (if (imperial) 2.23694 else 3.6)), if (imperial) "mph" else "km/h", src, if (estimated) " (estimée d'après le type de route)" else "")
     }
@@ -4420,7 +4454,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             for ((c, off) in rc) {
                 val ahead = off - curProg
                 if (ahead < -15.0 || ahead > warnAt || ahead >= bestD) continue
-                if (!camFacesUs(c, p.heading)) continue
+                // fork FR : le sens contrôlé comparé à la direction de l'itinéraire là où est le radar, pas à votre cap actuel :
+                // avant un virage, un radar dans votre sens était écarté (ou un radar de l'autre sens gardé)
+                val rr = route
+                val routeHead = if (rr != null && ahead > 40.0) try { pointAt(rr, off).second } catch (e: Exception) { p.heading } else p.heading
+                if (!camFacesUs(c, routeHead)) continue
                 if (zones.any { off >= it.start - 150.0 && off <= it.end + 150.0 }) continue
                 best = c; bestD = max(0.0, ahead)
             }
@@ -4462,6 +4500,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             val radar = if (v != null && !imperial) "Radar à $v" else "Radar"
             if (bestD <= 300.0 && camAlerted.add(best)) {
                 camStep[best] = 2; camAlertedAt[best] = now
+                // fork FR : vu seulement de près, en roulant, en guidage : noté pour le diagnostic de fin de trajet
+                if (bestD < 200.0 && p.speed > 8.0 && navigatingNow() && simMode == 0 && System.currentTimeMillis() - tripStart > 120_000L)
+                    tripIssues += "radar annoncé à ${bestD.toInt()} m (${if (onRouteNow) "sur l'itinéraire" else "hors itinéraire"}, ${Math.round(p.speed * 3.6)} km/h, ${LimitLog.pos(best)})"
                 val say = if (bestD < 60.0) "$radar tout de suite" else "$radar dans ${Geo.spoken(bestD, imperial)}"
                 achime("camera", android.media.ToneGenerator.TONE_PROP_PROMPT); raiseAlert("camera", say); aspeak("camera", say, true)
             } else if (bestD <= 160.0 && bestD >= 60.0 && (camStep[best] ?: 0) == 2) {
@@ -5289,7 +5330,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // the battery and made it hot, and a hot phone slows itself down, which made the arrow lag)
             glideFps = minOf(want, heatCap(), if (coolOn) 30 else 60)
             if (isCar) updateCool()
-            arrowLead = (prefs.s("arrowlead", "1.0").toDoubleOrNull() ?: 1.0).coerceIn(0.0, 2.5)
+            // fork FR : « Auto » : le retard du GPS mesuré dans les virages (GpsLag), 1 s tant qu'il n'est pas connu
+            val al = prefs.s("arrowlead", "1.0")
+            if (al == "auto") GpsLag.restore(prefs.s("arrowlead_auto", "").toDoubleOrNull())
+            arrowLead = (if (al == "auto") GpsLag.lag ?: 1.0 else al.toDoubleOrNull() ?: 1.0).coerceIn(0.0, 2.5)
         }
         // with another app in front (guidance carrying on in the background) a few updates a second is plenty: nobody sees the map
         val fps = if (appVisible) glideFps else 5
@@ -5682,6 +5726,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     val dG = angDiff(headNow, mHead); val dY = Gyro.total - gyroAtFix
                     if (Gyro.alive() && sp > 4.0 && abs(dG) > 15.0 && abs(dY) > 8.0) { if ((dG > 0) == (dY > 0)) gyroOk++ else gyroBad++ }
                     gyroAtFix = Gyro.total
+                    // fork FR : mesure du retard du GPS dans les virages (Avance de la flèche › Auto)
+                    if (simMode == 0 && sp > 5.0) GpsLag.onFix(p.heading, sp)?.let { v -> prefs.put("arrowlead_auto", String.format(java.util.Locale.US, "%.1f", v)) }
                     mHead = headNow
                 } else yawRate = 0.0
                 val gp = gPos
@@ -8227,7 +8273,10 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun evBatteryKwh(): Double = (prefs.s(PreferenceKeys.EV_BATTERY_KWH, "").toDoubleOrNull() ?: 60.0).coerceIn(10.0, 200.0)
     /** kWh used per km: from the efficiency in Settings > Fuel (miles per kWh), or a typical 0.18. */
     private fun evKwhPerKm(): Double = prefs.s(PreferenceKeys.EVMPK, "").toDoubleOrNull()?.takeIf { it in 1.0..8.0 }?.let { 1.0 / (it * 1.609344) } ?: 0.18
-    /** Fork FR : puissance de charge maximale de la voiture (kW), 135 par défaut (MG4 grande batterie). */
+    /** Fork FR : la consommation réglée corrigée pour ce trajet (température d'ici, vitesse moyenne de l'itinéraire), voir EvCons. */
+    fun evConsFactor(r: Route?): Double = EvCons.factor(tempHere?.tempC, if (r != null && r.time > 60.0) r.len / r.time * 3.6 else null)
+    private fun evRouteCons(r: Route? = route): Double = evKwhPerKm() * evConsFactor(r)
+, 135 par défaut (MG4 grande batterie). */
     private fun evMaxKw(): Double = (prefs.s("ev_max_kw", "135").toDoubleOrNull() ?: 135.0).coerceIn(20.0, 350.0)
 
     /** Fork FR : batterie réelle relue dans Home Assistant pendant le trajet (%, et la distance parcourue à ce moment). */
@@ -8307,7 +8356,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             if (fr.first > 0 || route !== r) return@launch
             busyWarned += ckey(next.second)
             val alt = withContext(Dispatchers.IO) {
-                try { findCharger(r, max(curProg + 2000.0, next.first - 15_000.0), next.first + 15_000.0, curProg, (evLivePct() ?: 50).toDouble(), evKwhPerKm(), evBatteryKwh()) } catch (e: Exception) { null }
+                try { findCharger(r, max(curProg + 2000.0, next.first - 15_000.0), next.first + 15_000.0, curProg, (evLivePct() ?: 50).toDouble(), evRouteCons(r), evBatteryKwh()) } catch (e: Exception) { null }
             }?.takeIf { Geo.dist(it.place.pos, next.second) > 150.0 }
             val say = "La borne ${info.place.name} n'a plus de place libre" + (if (alt != null) ". Autre borne : ${alt.place.name}" else "")
             raiseAlert("plan", say, 9000); speak(say, true)
@@ -8320,7 +8369,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val now = evLivePct() ?: return null
         val r = route ?: return null
         val off = chargeVias.mapNotNull { RouteExtras.project(r, it, 300.0)?.first }.filter { it > curProg + 100.0 }.minOrNull() ?: return null
-        return Math.round(now - (off - curProg) / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(-50, 100)
+        return Math.round(now - (off - curProg) / 1000.0 * evRouteCons() / evBatteryKwh() * 100.0).toInt().coerceIn(-50, 100)
     }
 
     /** Roughly how much battery (%) you'll arrive with: the charge you set before the trip, less what's been driven and what's left. */
@@ -8333,17 +8382,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // fork FR : un arrêt recharge encore devant : on y recharge à 80 %, l'arrivée se compte à partir de là
         route?.let { r ->
             val off = chargeVias.mapNotNull { RouteExtras.project(r, it, 300.0)?.first }.filter { it > curProg + 100.0 }.maxOrNull()
-            if (off != null) return Math.round(80.0 - (r.len - off) / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(-50, 100)
+            if (off != null) return Math.round(80.0 - (r.len - off) / 1000.0 * evRouteCons(r) / evBatteryKwh() * 100.0).toInt().coerceIn(-50, 100)
         }
         // fork FR : avec la batterie réelle relue en route, l'estimation part d'elle (moins ce qui a été roulé depuis)
         if (haLivePct >= 0 && System.currentTimeMillis() - haLiveAt < 20 * 60_000L) {
             val since = max(0.0, tripDist - haLiveDist)
-            return Math.round(haLivePct - (since + e.dist) / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0).toInt().coerceIn(-50, 100)
+            return Math.round(haLivePct - (since + e.dist) / 1000.0 * evRouteCons() / evBatteryKwh() * 100.0).toInt().coerceIn(-50, 100)
         }
         val start = evNowPct().coerceIn(1, 100)
         // (the car's live battery level already has what's been driven taken off)
         val driven = if (CarData.soc == null && navStartMs > 0) max(0.0, tripDist - navStartDist) else 0.0
-        val usedPct = (driven + e.dist) / 1000.0 * evKwhPerKm() / evBatteryKwh() * 100.0
+        val usedPct = (driven + e.dist) / 1000.0 * evRouteCons() / evBatteryKwh() * 100.0
         return Math.round(start - usedPct).toInt().coerceIn(-50, 100)
     }
 
@@ -8425,7 +8474,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (fuel == "EV") {
             // fork FR : autant d'arrêts que le trajet en demande (comme ABRP), pas un seul : on avance de borne en borne, en
             // rechargeant à 80 % à chacune, jusqu'à pouvoir finir le trajet avec la charge à garder (Réglages › Carburant)
-            val cons = evKwhPerKm(); val batt = evBatteryKwh()
+            val cons = evRouteCons(r); val batt = evBatteryKwh()
             val startPct = evNowPct().coerceIn(1, 100); val minPct = prefs.i(PreferenceKeys.EV_MIN_ARRIVE, 20).coerceIn(0, 60)
             val target = 80.0
             fun rangeOf(pct: Double) = max(0.0, (pct - minPct) / 100.0 * batt / cons * 1000.0)

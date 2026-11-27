@@ -2055,9 +2055,9 @@ private fun OfflineHealth(engine: NavEngine, onOffline: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Warn.copy(alpha = 0.14f)).clickable { onOffline() }.padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Rounded.CloudDownload, null, tint = Warn, modifier = Modifier.size(20.dp))
-        Text("You're outside your downloaded maps", color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Text("Vous êtes hors de vos cartes téléchargées", color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = 10.dp).weight(1f))
-        Text("Get this area", color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text("Télécharger la zone", color = c.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 

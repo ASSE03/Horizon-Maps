@@ -117,9 +117,20 @@ object CarLayout {
     var onChange: (() -> Unit)? = null
     fun touched() {
         touchAt = System.currentTimeMillis()
+        // (Android Auto dit lui-même, par la zone visible, si ses boutons sont là : voir fromArea)
+        if (byArea) return
         h.removeCallbacks(hide)
         if (!controlsShown) { controlsShown = true; onChange?.invoke() }
         h.postDelayed(hide, 10_000L)
+    }
+    /** Fork FR : la zone visible d'Android Auto montre si ses boutons sont dépliés (shown) ou repliés. */
+    @Volatile var byArea = false
+    fun fromArea(shown: Boolean) {
+        h.post {
+            byArea = true
+            h.removeCallbacks(hide)
+            if (controlsShown != shown) { controlsShown = shown; onChange?.invoke() }
+        }
     }
     /** The trip card's red "end the route" button is showing on the car screen (see CarOverlay). */
     @Volatile var endOnCard = false
@@ -626,6 +637,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
 
     override fun onVisibleAreaChanged(visibleArea: Rect) {
         lastVisible = Rect(visibleArea)
+        areaSaysButtons()
         // (in the log, for working out layouts on a head unit or the Desktop Head Unit)
         android.util.Log.i("CarNav", "visible area ${visibleArea.toShortString()} of ${width}x$height at $currentDpi dpi")
         applyArea(visibleArea)
@@ -667,7 +679,27 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
      * of the screen until something else made Android Auto report it again. The stable area is used until it does, and Android
      * Auto is asked to lay its screen out again, which makes it report.
      */
+    /** Fork FR : la zone stable (toujours libre, boutons d'Android Auto compris) : voir areaSaysButtons. */
+    private var lastStable: Rect? = null
+    private var areaMoved = false
+
+    /**
+     * Fork FR : Android Auto agrandit la zone visible quand il replie ses boutons, et la ramène à la zone stable quand il les montre.
+     * Dès qu'on l'a vu faire une fois, c'est lui qui dit si ses boutons sont là (le compteur, le logo Mapbox et la température se
+     * placent d'après ça) au lieu de deviner avec un minuteur de 10 s. Sur une voiture qui ne change jamais la zone, rien ne change.
+     */
+    private fun areaSaysButtons() {
+        val v = lastVisible ?: return; val st = lastStable ?: return
+        if (st.isEmpty || v.isEmpty) return
+        val d = carContext.resources.displayMetrics.density
+        val wider = v.right - st.right > 30 * d || st.left - v.left > 30 * d
+        if (wider) areaMoved = true
+        if (areaMoved) CarLayout.fromArea(!wider)
+    }
+
     override fun onStableAreaChanged(stableArea: Rect) {
+        lastStable = Rect(stableArea)
+        areaSaysButtons()
         android.util.Log.i("CarNav", "stable area ${stableArea.toShortString()} of ${width}x$height, visible ${lastVisible?.toShortString()}")
         if (stableArea.isEmpty) return
         val v = lastVisible
