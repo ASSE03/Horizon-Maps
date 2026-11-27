@@ -8276,7 +8276,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     /** Fork FR : la consommation réglée corrigée pour ce trajet (température d'ici, vitesse moyenne de l'itinéraire), voir EvCons. */
     fun evConsFactor(r: Route?): Double = EvCons.factor(tempHere?.tempC, if (r != null && r.time > 60.0) r.len / r.time * 3.6 else null)
     private fun evRouteCons(r: Route? = route): Double = evKwhPerKm() * evConsFactor(r)
-, 135 par défaut (MG4 grande batterie). */
+    /** Fork FR : puissance de charge maximale de la voiture (kW), 135 par défaut (MG4 grande batterie). */
     private fun evMaxKw(): Double = (prefs.s("ev_max_kw", "135").toDoubleOrNull() ?: 135.0).coerceIn(20.0, 350.0)
 
     /** Fork FR : batterie réelle relue dans Home Assistant pendant le trajet (%, et la distance parcourue à ce moment). */
