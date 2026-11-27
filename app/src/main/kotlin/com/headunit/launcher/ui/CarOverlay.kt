@@ -403,8 +403,11 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         val c = LocalVw.current
         val wx = engine.tempHere
         val tempOn = wx != null && !previewing && engine.prefs.b("cartemp", true)
+        // fork FR : sans guidage, la température est en bas à gauche à côté du bouton du son (demandé par Cédric, 27/11) ; en guidage
+        // (le bouton du son est alors sur la carte de trajet), elle reste en haut à droite
+        val tempAtSound = tempOn && !guiding && !small && engine.prefs.b(PreferenceKeys.CAR_SOUND_BTN, true) && !covered
         var tempW by remember { mutableStateOf(0) }
-        val tempGap = if (tempOn && tempW > 0) with(LocalDensity.current) { tempW.toDp() } + 10.dp else 0.dp
+        val tempGap = if (tempOn && !tempAtSound && tempW > 0) with(LocalDensity.current) { tempW.toDp() } + 10.dp else 0.dp
         val topW = if (portrait) {
             (maxWidth - left - rightTop - tempGap).coerceAtLeast(0.dp).coerceAtMost(600.dp)
         } else {
@@ -638,7 +641,15 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         val tempBar = engine.route == null && !arriving
         // (boutons d'Android Auto cachés : la bulle remonte dans le coin)
         val tempDrop by androidx.compose.animation.core.animateDpAsState(if (portrait || !ctlShown) 0.dp else 76.dp, tween(300), label = "tempDrop")
-        if (tempOn && wx != null) Row((if (tempBar && !portrait) Modifier.align(Alignment.TopStart).padding(start = left + topW + 12.dp, top = top)
+        val tempBubble: @Composable (Modifier) -> Unit = { m ->
+            if (wx != null) Row(m.height(60.dp).panel(10.dp, RoundedCornerShape(30.dp), c.surface).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Icon(wxIcon(wx.code), null, tint = wxTint(wx.code), modifier = Modifier.size(30.dp))
+                val f = isImperial(engine.prefs)
+                val tt = if (f) wx.tempC * 9.0 / 5.0 + 32.0 else wx.tempC
+                Text("${Math.round(tt)}°", color = c.text, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+        if (tempOn && wx != null && !tempAtSound) Row((if (tempBar && !portrait) Modifier.align(Alignment.TopStart).padding(start = left + topW + 12.dp, top = top)
             else Modifier.align(Alignment.TopEnd).padding(end = if (portrait) rightTop else (if (!ctlShown && insR > 60.dp) 0.dp else insR) + edge, top = top + tempDrop)).height(60.dp)
             .onSizeChanged { tempW = it.width }
             .panel(10.dp, RoundedCornerShape(30.dp), c.surface).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -654,7 +665,7 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
             // (beside the turn card, from where it actually ends: it was started 42% of the way across, which a turn card of that
             // width, set in from the edge, ran a little past, so the two overlapped)
             else Modifier.align(Alignment.TopCenter).padding(top = top,
-                start = maxOf(if (showTurn && turnW > 0) left + with(dens) { turnW.toDp() } + 10.dp else if (guiding) maxWidth * 0.42f + left else left, if (tempOn && engine.route == null && !arriving) left + topW + 12.dp + tempGap else 0.dp), end = maxOf(rightTop, maxWidth * 0.30f))
+                start = maxOf(if (showTurn && turnW > 0) left + with(dens) { turnW.toDp() } + 10.dp else if (guiding) maxWidth * 0.42f + left else left, if (tempOn && !tempAtSound && engine.route == null && !arriving) left + topW + 12.dp + tempGap else 0.dp), end = maxOf(rightTop, maxWidth * 0.30f))
         val worksPopup = worksOnCard && alert?.kind == "incident" && alert?.text?.startsWith("Travaux") == true
         AnimatedVisibility(alert != null && !altsOpen && !worksPopup, modifier = alertMod, enter = fadeIn(), exit = fadeOut()) { alert?.let { a ->
             // (the speed limit pop-up follows Speed-limit sign size, like the sign itself: it was small on an 8-inch screen, José Antonio Arriaga)
@@ -736,7 +747,10 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
                 ) {
                     if (guiding && tripCol) CompositionLocalProvider(LocalDensity provides Density(dens.density * cardScale, dens.fontScale)) { FasterCard(engine, Modifier.widthIn(max = 520.dp)) }
                     // (while guiding, the sound button is on the trip card instead of a pill of its own)
-                    if (!guiding && !small && soundBtn) CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) { SoundPill(engine) }
+                    if (!guiding && !small && soundBtn) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) { SoundPill(engine) }
+                        if (tempAtSound) CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) { tempBubble(Modifier) }
+                    }
                     hazards()
                     if (carSpeedLeft) {
                         // bottom left (picked, or a short screen (#67)): the speed stays put in the bottom-left corner, with the one-line trip strip beside it
