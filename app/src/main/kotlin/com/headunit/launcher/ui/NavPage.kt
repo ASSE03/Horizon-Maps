@@ -334,7 +334,7 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
         rs.forEachIndexed { i, r ->
             val sel = i == engine.active
             val shape = RoundedCornerShape(18.dp)
-            val label = if (r.mine.isNotBlank()) "Votre itinéraire" else if (i == fastest) "La plus rapide" else if (rs[i].mainRoads) "Grands axes" else if (rs[i].simpler) "La plus simple" else if (i == shortest) "La plus courte" else "Alternative"
+            val label = if (r.mine.isNotBlank()) "Votre itinéraire" else if (i == fastest) "La plus rapide" else if (rs[i].noToll) "Sans péage" else if (rs[i].mainRoads) "Grands axes" else if (rs[i].simpler) "La plus simple" else if (i == shortest) "La plus courte" else "Alternative"
             Column(
                 Modifier.weight(1f).inset(18.dp, if (sel) c.accent else null)
                                         .clickable { engine.selectRoute(i) }.padding(horizontal = 14.dp, vertical = 9.dp),
@@ -357,6 +357,11 @@ internal fun BoxScope.RoutePreview(engine: NavEngine) {
                     mine ?: if (delayMin >= 1) "+$delayMin min de trafic" else if (via.isNotEmpty()) "via $via" else "Aucun retard",
                     color = if (mine != null) Good else if (delayMin >= 10) Bad else if (delayMin >= 1) Warn else c.sub, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
+                // toll roads: which routes have them, and how much longer the toll-free one takes (Luís Pedro Antunes)
+                if (r.noToll) {
+                    val extra = Math.round((r.time - rs[fastest].time) / 60.0).toInt()
+                    Text(if (extra >= 1) "Sans péage · +$extra min" else "Sans péage", color = Good, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                } else if (r.toll && rs.any { it.noToll }) Text("Péages", color = Warn, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 // roughly what this route costs in fuel (or charging), from Settings › Fuel (pc4096: it was only at the far end of the
                 // Stops row, scrolled out of sight)
                 if (mpg != null && ppl != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
@@ -630,6 +635,11 @@ internal fun NearbyCard(engine: NavEngine) {
         if (engine.nearbyKind == "charging") engine.chargerFilterText().takeIf { it.isNotEmpty() }?.let { ft ->
             Text("Filter: $ft", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.55f)).padding(horizontal = 12.dp, vertical = 6.dp))
+        }
+        // services: all of them, or motorway services only (without rest and picnic areas, d3stiny999 #437)
+        if (engine.nearbyKind == "services") Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Pill("Tout", !engine.servicesMotorwayOnly, { engine.setServicesFilter(false) })
+            Pill("Aires d'autoroute", engine.servicesMotorwayOnly, { engine.setServicesFilter(true) })
         }
         if (hasPrices) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Pill(if (along) "Les plus proches sur le trajet" else "Les plus proches", engine.nearbySort != "cheap", { engine.changeNearbySort("near") })

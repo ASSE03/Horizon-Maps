@@ -30,15 +30,16 @@ data class Step(val off: Double, val maneuver: String, val street: String, val m
  */
 data class Place(val name: String, val sub: String, val pos: LL, val web: String = "", val onStreet: Boolean = false) {
     /** "28 wrengardens" for "28 Wren Gardens, Alder Holt": the house number and street, to tell one address from two. Blank when not an address. */
-    val addressKey: String get() {
+    // (worked out once per place: search results are compared with each other many times as you type)
+    val addressKey: String by lazy {
         // (only a number then a street: "Flat 2" or "Unit 4" could be in a different building next door)
         val first = name.substringBefore(',').trim().lowercase()
-        if (!Regex("^\\d+[a-z]?(?:[-/]\\d+[a-z]?)?\\s+\\p{L}").containsMatchIn(first)) return ""
-        return first.filter { it.isLetterOrDigit() }
+        if (!HOUSE_NUMBER_STREET.containsMatchIn(first)) "" else first.filter { it.isLetterOrDigit() }
     }
     /** The same house as [o]: the same number and street, close together (two search services, spelt a little differently). */
-    fun sameAddress(o: Place): Boolean = addressKey.isNotEmpty() && addressKey == o.addressKey && Geo.dist(pos, o.pos) < 300.0
+    fun sameAddress(o: Place): Boolean { val k = addressKey; return k.isNotEmpty() && k == o.addressKey && Geo.dist(pos, o.pos) < 300.0 }
 }
+private val HOUSE_NUMBER_STREET = Regex("^\\d+[a-z]?(?:[-/]\\d+[a-z]?)?\\s+\\p{L}")
 
 /** A live incident. [mag]: how much it holds traffic up, 0 unknown, 1 minor, 2 moderate, 3 major (TomTom's magnitude / Mapbox's impact). */
 class Incident(val id: String, val cat: String, val text: String, val delaySec: Int, val pts: List<LL>, val mag: Int = 0)
@@ -83,6 +84,10 @@ class Route(
     /** Metres of it on small roads (residential streets, lanes, service roads), from Mapbox's junction data; -1 when not known
      *  (TomTom and offline routes). For Prefer main roads (#402). */
     @Volatile var minorM: Double = -1.0
+    /** The route uses toll roads (from Mapbox's junction data); false when it doesn't or isn't known (TomTom and offline routes). */
+    @Volatile var toll: Boolean = false
+    /** The toll-free route offered next to a quicker one that has tolls (Settings › Routes › Offer a route without tolls): labelled "No tolls". */
+    @Volatile var noToll: Boolean = false
     /** Picked first for keeping to main roads (Prefer main roads): labelled "Main roads" on the route choice. */
     @Volatile var mainRoads: Boolean = false
     /** An offline route's own time before the usual-traffic estimate ([JourneyTimes]) was added; 0 for other routes. */
@@ -92,7 +97,7 @@ class Route(
     fun withTime(secs: Double): Route {
         val n = Route(pts, cum, steps, len, secs, 0.0, lanes, sev)
         n.delays = delays; n.segmentTimes = segmentTimes.copyOf(); n.tunnels = tunnels; n.limits = limits; n.incidents = incidents; n.lorry = lorry; n.from = from; n.simpler = simpler
-        n.minorM = minorM; n.mainRoads = mainRoads
+        n.minorM = minorM; n.mainRoads = mainRoads; n.toll = toll; n.noToll = noToll
         n.baseTime = if (baseTime > 0) baseTime else time
         return n
     }

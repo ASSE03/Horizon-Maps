@@ -104,6 +104,12 @@ internal object PreferenceKeys {
     const val ALT_ROUTE_COLOUR = "altroutecolour"
     const val FASTER_ROUTE = "fasterroute"
     const val CAMERA_WARNINGS = "cameras"
+    /** How speed cameras are warned about (#436): "both" (chime and voice), "voice", "chime" or "silent" (the screen only). */
+    const val CAM_HOW = "camhow"
+    /** The camera banner on screen as you come up to one (#436). */
+    const val CAM_POPUP = "campopup"
+    /** The services list along the route: motorway services only, without rest and picnic areas (#437). */
+    const val SERVICES_MW_ONLY = "svcmwonly"
     const val VOICE = "voice"
     const val TRIPS = "trips"
     const val PLACES_CUSTOM = "places_custom"
@@ -243,6 +249,8 @@ internal object PreferenceKeys {
     /** How a limit change is told: "both" chime then voice, "voice", "chime" (LIMITCHANGE off: not at all). */
     const val LIMITCHANGE_HOW = "limitchange_how"
     const val LIMITEST = "limitest"
+    /** Show speed limits at all (Settings › Screen & sizes › Speed display); off hides the sign, the over-the-limit warnings and the signs on the map. */
+    const val SHOW_LIMITS = "showlimits"
     const val LIVECARD = "livecard"
     const val MAPFAST = "mapfast"
     const val MAPSPEED = "mapspeed"
@@ -330,6 +338,8 @@ internal object PreferenceKeys {
     const val LAMPS_INVERT = "lampsinvert"
     /** How close the map on the driver's display is: -2 (furthest out) to 1 (closest), 0 normal. */
     const val CLUSTER_ZOOM = "clusterzoom"
+    /** The writing on the driver's display (the turn, time left, distance and arrival): -1 smaller, 0 normal (bigger than it was), 1 larger, 2 largest. */
+    const val CLUSTER_TEXT = "clustertext"
     /** The speed camera badge's size on the map, in percent (50 to 350, 100 as it always was). */
     const val CAM_SIZE = "camsize"
     /** Roadworks, closures and hazard signs on the map (50 to 300%; Strong_Force1302, Reddit). */
@@ -482,6 +492,8 @@ internal object PreferenceKeys {
     /** Directions that name the traffic lights or stop sign at the turn ("At the traffic lights, turn right"), on the card and in the voice. */
     const val LANDMARK_DIRS = "landmarkdirs"
     const val AVOID_TOLL_COUNTRIES = "avoid_toll_cc"
+    /** Also show a route without tolls when the fastest one has them (Luís Pedro Antunes). On unless switched off. */
+    const val OFFER_NO_TOLL = "offernotoll"
     const val ROAD_NAME_SIZE = "roadnamesize"
     const val CAR_ROAD_NAME_SIZE = "carroadnamesize"
     const val CAR_MODEL = "carmodel"

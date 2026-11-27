@@ -1812,6 +1812,10 @@ class CarSettingsScreen(carContext: CarContext, private val holder: CarHolder, p
         }
         if (cluster) {
             val cz = prefs.i(PreferenceKeys.CLUSTER_ZOOM, 0).coerceIn(-2, 1)
+            val ct = prefs.i(PreferenceKeys.CLUSTER_TEXT, 0).coerceIn(-1, 2)
+            rows += Row.Builder().setTitle("Texte du combiné")
+                .addText(when (ct) { -1 -> "Plus petit"; 1 -> "Plus grand"; 2 -> "Très grand"; else -> "Normal" } + " · touchez pour changer")
+                .setOnClickListener { prefs.put(PreferenceKeys.CLUSTER_TEXT, when (ct) { 0 -> 1; 1 -> 2; 2 -> -1; else -> 0 }); invalidate() }.build()
             rows += Row.Builder().setTitle("Zoom de l'écran conducteur")
                 .addText(L.t(when (cz) { 1 -> "Closer"; -1 -> "Further out"; -2 -> "Furthest out"; else -> "Normal" }) + " · touchez pour changer")
                 .setOnClickListener { prefs.put(PreferenceKeys.CLUSTER_ZOOM, when (cz) { 0 -> -1; -1 -> -2; -2 -> 1; else -> 0 }); invalidate() }.build()

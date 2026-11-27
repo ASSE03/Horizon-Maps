@@ -2989,6 +2989,12 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             .circleRadius(zoomed(1.0, 8 to 6.0, 14 to 9.0, 17 to 11.0)).circleColor(Expression.fromRaw("[\"case\",[\"==\",[\"get\",\"c\"],1],\"#34A853\",\"#8E5CF0\"]"))
             .circleStrokeColor("#ffffff").circleStrokeWidth(3.0).circleEmissiveStrength(1.0)
             .circlePitchAlignment(CirclePitchAlignment.VIEWPORT))
+        // the stops' numbered pins, the size of the app's own buttons on this screen
+        stopPinImgs.clear()
+        addS(st, GeoJsonSource.Builder("dl-stoppins").featureCollection(empty()).build())
+        addL(st, SymbolLayer("dl-stoppins-l", "dl-stoppins").iconImage(Expression.get("img")).iconAllowOverlap(true).iconIgnorePlacement(true)
+            .iconPitchAlignment(IconPitchAlignment.VIEWPORT).iconEmissiveStrength(1.0).iconSize(sized("dl-stoppins-l") { lit(kEff) }))
+        pushStopPins()
         // the 3D flags (destination red, stops amber), lit from within so they stand out day and night
         if (!satellite) try {
             addL(st, FillExtrusionLayer("dl-flags-3d", "dl-flags").inSlot(MID).minZoom(12.0)
@@ -3026,7 +3032,9 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             .iconImage(Expression.get("img")).iconAnchor(IconAnchor.BOTTOM)
             .iconAllowOverlap(true).iconIgnorePlacement(false).iconEmissiveStrength(1.0)
             .iconPitchAlignment(IconPitchAlignment.VIEWPORT)
-            .iconSize(zoomed(1.0, 9 to 0.45, 14 to 0.5, 18 to 0.56)))
+            // (sized with the screen like the other signs: 46 of the app's own units tall at close zoom, about 30% smaller than it was,
+            // and the picture is 130 units tall at full size; joel941703-hash, #444)
+            .iconSize(sized("dl-live-bub") { zoomed(1.0, 9 to 46.0 * 0.9 * kEff / 130.0, 14 to 46.0 * kEff / 130.0, 18 to 46.0 * 1.12 * kEff / 130.0) }))
         // "See all locations": a dotted line from you to the one picked, and every branch as its logo with the drive time
         addL(st, LineLayer("dl-chain-line", "dl-chain-line").lineColor("#4C8DFF").lineWidth(5.0).lineOpacity(0.9)
             .lineCap(LineCap.ROUND).lineDasharray(listOf(0.1, 2.2)).lineEmissiveStrength(1.0))
@@ -3328,7 +3336,14 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
     private val signZooms = listOf(10.0 to 0.7, 12.0 to 0.75, 13.0 to 0.8, 15.0 to 0.9, 17.0 to 1.0, 19.0 to 1.05)
 
     /** How wide a sign is at full size, in the app's own screen units, and so how wide it shows on the map at [z]. */
-    private fun signWidth(baseUi: Double, z: Double, f: Double): Double = maxOf(baseUi * uiK * f, 1.5 * routeAt(z))
+    private fun signWidth(baseUi: Double, z: Double, f: Double): Double = maxOf(baseUi * kEff * f, 1.5 * routeAt(z))
+
+    /**
+     * [uiK] for sizing signs and cards on the map. On the car screen the app's own cards are made small on purpose (a small
+     * screen seen from a distance), which left the signs and the cards on other routes tiny there (TheHairforce, #449): the
+     * map's signs keep to the size they have on a phone.
+     */
+    private val kEff: Double get() = if (onCar) maxOf(uiK, 1.0) else uiK
 
     /**
      * The size for a sign on the map drawn from picture [id] (or [fallbackW] map units wide when it isn't added yet): [baseUi]
@@ -4099,11 +4114,34 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
             if (cardsMirrored) btn + halfW else side + halfW, h * 0.14f + cardH,
             if (cardsMirrored) w - side - halfW else w - btn - halfW, h * 0.84f)
         val loose = floatArrayOf(halfW + 12f * dp, cardH + 12f * dp, w - halfW - 12f * dp, h - 24f * dp)
-        // Keep each card on the actual branch point, not an arbitrary visible stretch farther along.
+        // Each card sits a little way along its own line, not right at the branch point, so cards of other routes that leave the
+        // same junction in different directions don't pile on top of each other (as Google Maps does). It goes on the first spot 56 dp
+        // along that doesn't overlap a card already placed, moving further along its line when it would; none when the branch is off
+        // the screen.
+        val placed = ArrayList<FloatArray>()
+        val cw = 80f * dp; val ch = 52f * dp; val gap = 4f * dp
         val spots = liveLines.map { line ->
-            val branch = line.firstOrNull() ?: return@map null
-            val p = pixels(listOf(branch)).firstOrNull() ?: return@map null
-            if (p.x >= loose[0] && p.x <= loose[2] && p.y >= loose[1] && p.y <= loose[3]) branch else null
+            if (line.isEmpty()) return@map null
+            val pts = line.take(220)
+            val px = pixels(pts)
+            if (px.size != pts.size) return@map null
+            fun ok(i: Int) = px[i].x.toFloat() >= loose[0] && px[i].x.toFloat() <= loose[2] && px[i].y.toFloat() >= loose[1] && px[i].y.toFloat() <= loose[3]
+            fun far(i: Int) = Math.hypot(px[i].x - px[0].x, px[i].y - px[0].y).toFloat()
+            if (!ok(0)) return@map null
+            fun rect(i: Int) = floatArrayOf(px[i].x.toFloat() - cw - gap, px[i].y.toFloat() - ch - gap, px[i].x.toFloat() + cw + gap, px[i].y.toFloat() + gap)
+            fun free(i: Int): Boolean { val r = rect(i); return placed.none { o -> r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1] } }
+            var first = -1; var clear = -1
+            for (i in 1 until pts.size) {
+                val d = far(i)
+                if (!ok(i)) { if (d >= 56f * dp) break else continue }
+                if (d < 56f * dp) continue
+                if (first < 0) first = i
+                if (free(i)) { clear = i; break }
+                if (d > 420f * dp) break
+            }
+            val pick = if (clear >= 0) clear else if (first >= 0) first else 0
+            placed += rect(pick)
+            pts[pick]
         }
         val zoom = try { mbMap.cameraState.zoom } catch (e: Throwable) { 15.0 }
         val moved = spots.size != cardSpots.size || spots.indices.any { k ->
@@ -5219,7 +5257,7 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
         // they were for the first stretch, so lights further along never appeared)
         pushSignals()
     }
-    fun setDest(p: LL?) { dest = p; pushDest(); pushFlags() }
+    fun setDest(p: LL?) { dest = p; pushDest(); pushFlags(); if (p == null) setStopPins(emptyList()) }
 
     // ---- 3D flags: a tall flag at the destination (and smaller ones at your stops) standing above the buildings ----
     private var flagsOn = true
@@ -5227,6 +5265,55 @@ class MapBinding(private val ctx: Context, fast: Boolean = false, res: Float = 1
 
     fun setFlags(on: Boolean) { if (on != flagsOn) { flagsOn = on; pushFlags() } }
     fun setStopFlags(stops: List<LL>) { if (stops != stopPts) { stopPts = stops; pushFlags() } }
+
+    // ---- the stops on the way as numbered pins with their names, seen at every zoom (the 3D flags are too small to see on an
+    // overview, d3stiny999 #437) ----
+    private var stopPins: List<Pair<LL, String>> = emptyList()
+    private val stopPinImgs = HashSet<String>()
+    fun setStopPins(stops: List<Pair<LL, String>>) { if (stops != stopPins) { stopPins = stops; pushStopPins() } }
+    private fun pushStopPins() {
+        val st = style ?: return
+        try {
+            val fs = ArrayList<Feature>()
+            for ((i, sp) in stopPins.take(10).withIndex()) {
+                val (pos, name) = sp
+                val id = "dl-stoppin-" + (i + 1) + "-" + name.hashCode()
+                if (stopPinImgs.add(id)) addImg(st, id, stopPinBitmap(i + 1, name))
+                fs += Feature.fromGeometry(Point.fromLngLat(pos.lon, pos.lat)).also { it.addStringProperty("img", id) }
+            }
+            src("dl-stoppins")?.featureCollection(FeatureCollection.fromFeatures(fs))
+        } catch (e: Throwable) { }
+    }
+    /** An orange disc with the stop's number, white-edged, and its name in a white tag to the right. The disc is the middle. */
+    private fun stopPinBitmap(n: Int, name: String): Bitmap {
+        val dm = mapView.resources.displayMetrics
+        val d = dm.density
+        val r = 14f * d
+        val label = if (name.length > 26) name.take(25) + "…" else name
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12f * d; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = 0xFF222222.toInt() }
+        val tw = if (label.isBlank()) 0f else text.measureText(label)
+        val gap = 6f * d; val padX = 8f * d; val tagH = 20f * d
+        // (the disc in the middle of the picture, so it sits on the stop; the tag reaches out to the right, the left is left empty)
+        val half = r + 2f * d + (if (tw > 0f) gap + tw + 2 * padX else 0f)
+        val h = 2 * r + 6f * d
+        val b = Bitmap.createBitmap((half * 2).toInt() + 2, h.toInt() + 2, Bitmap.Config.ARGB_8888)
+        b.density = dm.densityDpi
+        val cv = Canvas(b)
+        val cx = b.width / 2f; val cy = b.height / 2f
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        if (tw > 0f) {
+            val l = cx + r + gap; val rect = RectF(l, cy - tagH / 2, l + tw + 2 * padX, cy + tagH / 2)
+            p.color = 0x55000000; cv.drawRoundRect(RectF(rect.left, rect.top + 1.5f * d, rect.right, rect.bottom + 1.5f * d), tagH / 2, tagH / 2, p)
+            p.color = 0xF5FFFFFF.toInt(); cv.drawRoundRect(rect, tagH / 2, tagH / 2, p)
+            cv.drawText(label, l + padX, cy - (text.descent() + text.ascent()) / 2, text)
+        }
+        p.color = 0x55000000; cv.drawCircle(cx, cy + 1.5f * d, r + 2.5f * d, p)
+        p.color = 0xFFFFFFFF.toInt(); cv.drawCircle(cx, cy, r + 2.5f * d, p)
+        p.color = 0xFFFF8A00.toInt(); cv.drawCircle(cx, cy, r, p)
+        val num = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 15f * d; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = 0xFFFFFFFF.toInt(); textAlign = Paint.Align.CENTER }
+        cv.drawText("$n", cx, cy - (num.descent() + num.ascent()) / 2, num)
+        return b
+    }
 
     /** A flag at [p], [h] metres tall: a thin pole and a flag near its top, as 3D shapes ("part" pole / flag, "kind" dest / stop). */
     private fun flagShapes(p: LL, h: Double, kind: String): List<Feature> {

@@ -644,6 +644,7 @@ private fun RoutesSection(prefs: Prefs, engine: NavEngine) {
         SToggle(prefs, "Éviter les péages", "avoid_toll", false, if (prefs.b(PreferenceKeys.AVOID_TOLL, false)) "Partout" else null)
         // ...or only in some countries: a route that would use a toll road in one of them is planned without toll roads
         if (!prefs.b(PreferenceKeys.AVOID_TOLL, false)) {
+            SToggle(prefs, "Proposer un itinéraire sans péage", PreferenceKeys.OFFER_NO_TOLL, true, "Quand le plus rapide passe par des péages, en montrer aussi un sans, avec le temps en plus")
             val chosen = prefs.s(PreferenceKeys.AVOID_TOLL_COUNTRIES, "").split(',').filter { it.isNotBlank() }.toSet()
             SItem("Éviter les péages seulement en", if (chosen.isEmpty()) "Choisissez des pays : un itinéraire qui y passerait par un péage est calculé sans péage" else "Un itinéraire qui passerait par un péage dans l'un de ces pays est calculé sans péage")
             androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 8.dp),
@@ -1138,7 +1139,7 @@ private fun PlacesSection(engine: NavEngine) {
     ShortcutsGroup(engine)
     SGroup("Historique", footer = "Faites glisser un lieu sur le côté dans la liste Enregistrés & récents pour le retirer.") {
         SItem("Destinations récentes", "${pl.recents().size} récents, plus des lieux mémorisés pour chercher sans réseau") {
-            SButton("Effacer", danger = true) { pl.clearHistory(); engine.toast("Historique effacé", 2000) }
+            SButton("Effacer", danger = true) { pl.clearHistory(); engine.habits.clear(); engine.toast("Historique effacé", 2000) }
         }
     }
     TripsGroup(engine)
@@ -1411,6 +1412,7 @@ private fun ScreenSection(prefs: Prefs, engine: NavEngine) {
 
     }
     SGroup("Affichage de la vitesse") {
+        SToggle(prefs, "Afficher les limitations", PreferenceKeys.SHOW_LIMITS, true, "Désactivé : plus de panneau de limitation, d'alerte de dépassement ni de limitations sur la carte")
         SToggle(prefs, "Votre vitesse à côté de la limitation", "mapspeed", true)
         SToggle(prefs, "Anneau du compteur", "speedring", true, "Se remplit vers la limite, passe à l'orange puis au rouge")
         SToggle(prefs, "Grand panneau de limitation", PreferenceKeys.SPEED_SWAP, false, "Inverse les deux : le panneau de limitation en grand, votre vitesse en petit à côté")
@@ -1451,7 +1453,7 @@ private fun WhileDrivingSection(prefs: Prefs) {
         SToggle(prefs, "Moins de boutons en conduisant", "drivesimple", true)
         if (android.os.Build.VERSION.SDK_INT >= 26) SToggle(prefs, "Image dans l'image", PreferenceKeys.PIP, true, "Sur un téléphone, en guidage : en allant sur l'écran d'accueil ou dans une autre appli, la carte, la prochaine direction et le temps restant restent dans une petite fenêtre")
         SToggle(prefs, "Horloge sur la carte", PreferenceKeys.CLOCK_MAP, false, "L’heure, avec le compteur de vitesse. Pratique quand la barre d’état de l’autoradio est masquée")
-        SToggle(prefs, "Bloquer la saisie en conduisant", "drivelock", true, "La recherche vocale fonctionne toujours")
+        SToggle(prefs, "Bloquer la saisie en conduisant", "drivelock", false, "La recherche vocale fonctionne toujours")
         SToggle(prefs, "Commandes multimédia", PreferenceKeys.MEDIA_BAR, false, "Précédent, lecture / pause et suivant en bas de l'écran pendant que de la musique ou la radio joue sur cet appareil, depuis n'importe quelle appli")
         if (prefs.b(PreferenceKeys.MEDIA_BAR, false) && com.headunit.launcher.MediaNow.songInfoPossible) {
             val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -1834,10 +1836,28 @@ private fun FeedbackDialog(engine: NavEngine, onClose: () -> Unit) {
     val c = LocalVw.current
     val ctx = LocalContext.current
     var note by remember { mutableStateOf("") }
+    // a newer version than this one? Reports from old versions are often about things already fixed, so it's offered first. The GitHub
+    // build can look (the Play edition can't tell, so it only reminds)
+    var newer by remember { mutableStateOf(engine.appUpdate) }
+    var checked by remember { mutableStateOf(engine.appUpdate != null || !com.headunit.launcher.Updater.enabled) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (!checked) {
+            newer = try { withContext(Dispatchers.IO) { com.headunit.launcher.Updater.check() } } catch (e: Exception) { null }
+            checked = true
+        }
+    }
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
         // (scrolls: on a short, wide head unit screen the buttons were below the bottom of the screen and couldn't be reached, bluelions25 #329)
         Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.panel).verticalScroll(rememberScrollState()).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Un retour ou un problème", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            val nv = newer
+            if (nv != null) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Warn.copy(alpha = 0.16f)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Une nouvelle version (${nv.version}) est disponible", color = c.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("Mettez d'abord à jour et vérifiez si le problème est toujours là avant d'envoyer : il est peut-être déjà corrigé.", color = c.text, fontSize = 14.sp)
+                if (engine.updateStatus.isNotBlank()) Text(engine.updateStatus, color = c.sub, fontSize = 13.sp)
+                else Row { SButton("Mettre à jour", primary = true) { if (engine.appUpdate == null) engine.appUpdate = nv; engine.installAppUpdate() } }
+            } else if (!com.headunit.launcher.Updater.enabled) Text(
+                "Avant d'envoyer, vérifiez s'il existe une version plus récente et si le problème est toujours là.", color = c.sub, fontSize = 13.sp)
             Text("Que s'est-il passé, ou que souhaitez-vous ? L'endroit et ce que vous avez touché aident.", color = c.sub, fontSize = 14.sp)
             SField(note, { note = it.take(600) }, placeholder = "ex. Mauvais recalcul près de Lyon", width = 516.dp, fill = true)
             Text("Envoyés avec : la version de l'appli, votre autoradio, les principaux réglages, vos zones téléchargées le dernier plantage et les derniers changements de limitation avec leur position (aucune clé API).", color = c.sub, fontSize = 12.sp)

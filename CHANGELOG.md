@@ -4,10 +4,58 @@ Everything that has changed in Horizon Nav, newest first. Each version lists wha
 
 ## Unreleased
 
-### New
+## 1.0.1044 — 27 Nov 2026
 
 ### Improved
-- Route to a house address plans faster: it no longer waits up to 10 seconds or more to find the house's street first when the search already gave its entrance, and never waits more than 3 seconds otherwise
+- Sending a report: if a newer version of the app is out, the Feedback screen says so and offers Update now first, with a reminder to check the problem is still there before sending (Send anyway is still there). On Google Play, it reminds you to check for a newer version. The problem report also says where the last speed limit came from (the route, TomTom, Mapbox, OpenStreetMap or a downloaded area), to help with wrong limits
+- Driver's display: its writing is bigger by default and there's a Driver's display text size setting (Android Auto settings: Smaller, Normal, Larger, Largest). The phone battery badge on the car screen has a bigger number and colours: green while charging, amber under 30%, red under 15%. Junction zoom is now in the Android Auto settings too (thanks to joel941703-hash, #451)
+- Android Auto position: the arrow and the distance to the next turn run about half a second ahead of the last GPS fix, so you're no longer drawn slightly behind where you are as you pass a junction (thanks to yurividal, #450)
+- Search box staying put: when search results appear while you type, the field and keyboard stay where they are (thanks to desko1973, #442)
+
+### Fixed
+- Clearing recent destinations also clears the places the app has learned you usually go to, which were still suggested ("Usually around …") after clearing (thanks to Dotancom, #457)
+- Turn card off-centre: with no "Then" line or lanes under it, the arrow and writing sat higher than the middle of the card (the progress bar's room was all below them); they're now centred (thanks to desko1973, #448)
+- Signs and the cards on other routes tiny on Android Auto: after the size update the "Same time" cards, the speed limit signs on the route and the other map signs came out very small on the car screen. They now keep a readable size there (thanks to TheHairforce, #449)
+- Services list: "Motorway services" now finds only real motorway service areas (it showed a block of flats and nothing else), and a search for services with no route looks 30 km round you instead of 6 (thanks to d3stiny999, #446)
+- Charging stations list hidden behind the route panels: when adding a stop while choosing a route, the list now comes in front of the weather, stops and departure bars (thanks to Dixet, #454)
+
+## 1.0.1041 — 26 Nov 2026
+
+### New
+- Hide speed limits: Settings › Screen & sizes › Speed display › Show speed limits switches the limit sign, the warnings for going over it and the limit signs on the map off, for roads where the limits shown aren't right (thanks to a tester in Germany)
+- A route without tolls: when the fastest route uses toll roads, the route choice also offers a "No tolls" route, with how much longer it takes, and marks the routes that have tolls. Switch it off under Settings › Routes › Avoid › Offer a route without tolls (thanks to Luís Pedro Antunes)
+
+### Improved
+- The time cards on the other routes ("Same time", "5 min slower") are about 30% smaller, size with the screen like the other signs on the map, and sit a little way along their own route instead of right on the junction, so cards of routes leaving the same point no longer pile on top of each other (thanks to joel941703-hash, #444)
+- Typing while driving is no longer locked by default: the search box stays open when the speed reads high (a passenger, or a GPS blip). The lock is still there under Settings › Sound & voice › Lock typing while driving (thanks to desko1973, #442)
+
+## 1.0.1038 — 26 Nov 2026
+
+### Fixed
+- Route overview while driving: it now fills all the map left clear by the turn card, the trip card and the map buttons, instead of being squeezed small and partly hidden under the turn card
+- The next stop's arrival time now shows on a phone held upright too, under the route bar (it only showed on wider screens)
+
+## 1.0.1036 — 26 Nov 2026
+
+### New
+- Choose how speed cameras are warned about: Settings › Alerts › Cameras › How picks chime and voice, voice only, chime only or the screen only, and Camera pop-up turns the banner on screen on or off (thanks to jvetsuypens, #436)
+- Close from the notification: the app's notification has a Close button, which ends the route and closes the app, as Close Horizon Nav in the menu does (thanks to desko1973, #439)
+- Stops easier to follow: each stop on the way now has an orange numbered pin with its name on the map, seen at every zoom (on the route overview too), and while driving the trip card shows the next stop with when you'll get there and how far it is (thanks to d3stiny999, #437)
+- Motorway services only: the Services list along the route can show just motorway services, without rest and picnic areas. Your choice is remembered (thanks to d3stiny999, #437)
+
+### Fixed
+- Route overview while driving: it now fills all the map left clear by the turn card, the trip card and the map buttons, instead of being squeezed small and partly hidden under the turn card
+- Android Auto route overview too small: the route preview, the overview and the other-routes view on the car screen squeezed the route into the top third, as if the phone's route panel were covering the rest. They now fit it into the space beside the cards, using the whole height (thanks to neilch0111, #441)
+
+## 1.0.1034 — 26 Nov 2026
+
+### Improved
+- UK fuel prices update by themselves: with your Fuel Finder details added, prices now refresh in the background when the app is opened or comes back to the screen (at most every half hour), on the same Wi-Fi or mobile data setting as the offline data (Settings › Offline maps › Update automatically), and Settings › Fuel prices shows when they were last updated, even after an app update (thanks to ricres77, #428)
+
+## 1.0.1032 — 26 Nov 2026
+
+### Improved
+- Routes to a house address plan quicker: the street the house is on is looked up while the search results are showing, so picking one doesn't wait for it (it could wait 10 seconds or more), and search results come up a little faster as you type
 - Alerts (speed cameras, traffic, hazards) no longer cover the speed limit sign: they stop short of its corner
 - Speed limit signs on the route are a little smaller
 - Signs on the map the same size on every screen: saved places, speed limit signs, give way and stop signs, cameras, roadworks, closures, speed bumps and traffic lights are now sized like the rest of the screen's buttons and text, so they're easy to read and grow with bigger screens (and the car screen), and they're always a little wider than the route line. They change less as you zoom in and out. They were tiny on some screens and huge on others. The size sliders still make them bigger or smaller
@@ -25,6 +73,7 @@ Everything that has changed in Horizon Nav, newest first. Each version lists wha
 
 ### Improved
 - Android Auto driver's display: the next turn (arrow, distance and road) now shows with the time left, distance and arrival, in a bar at the top where the car's own bar along the bottom can't hide it, and the map zooms in a little for a turn (thanks to joel941703-hash, #430)
+- Signs on the map the same size on every screen: saved places, speed limit signs, give way and stop signs, cameras, roadworks, closures, speed bumps and traffic lights are now sized like the rest of the screen's buttons and text, so they're easy to read and grow with bigger screens (and the car screen), and they're always a little wider than the route line. They change less as you zoom in and out. They were tiny on some screens and huge on others. The size sliders still make them bigger or smaller
 - Other-route bubbles on the map ("Same time", "+3 min") are about a quarter smaller, and road names no longer run over them or over the lane sign at a junction (thanks to karthikeyansr-lgtm, #429)
 
 ### Fixed

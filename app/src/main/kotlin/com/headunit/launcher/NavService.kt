@@ -72,6 +72,13 @@ class NavService : Service() {
             }
         }
 
+        /** The notification's Close button: handled by the app's screen, which closes as its own Close Horizon Nav does. */
+        const val ACTION_CLOSE = "com.headunit.launcher.CLOSE"
+        private fun closeAction(ctx: Context): Notification.Action = Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Fermer",
+            PendingIntent.getActivity(ctx, 1, Intent(ctx, MainActivity::class.java).setAction(ACTION_CLOSE)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)).build()
+
         private fun openApp(ctx: Context): PendingIntent = PendingIntent.getActivity(
             ctx, 0,
             Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
@@ -84,6 +91,7 @@ class NavService : Service() {
                 .setContentTitle(L.appName)
                 .setContentText(text)
                 .setContentIntent(openApp(ctx))
+                .addAction(closeAction(ctx))
                 .setCategory(Notification.CATEGORY_NAVIGATION)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
@@ -188,6 +196,7 @@ class NavService : Service() {
                     .setContentTitle("$dist · $doing")
                     .setContentText(road.ifBlank { plainText })
                     .setContentIntent(openApp(ctx))
+                .addAction(closeAction(ctx))
                     .setCategory(Notification.CATEGORY_NAVIGATION)
                     .setColor(GREEN)
                     .setShowWhen(false)

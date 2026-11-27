@@ -174,6 +174,15 @@ internal fun CarSettingsPanel(engine: NavEngine, actions: CarActions, small: Boo
                         val cluster = prefs.b(PreferenceKeys.CLUSTER_MAP, true)
                         item { SetSwitch("st-clu", "Carte sur l'écran conducteur", "Sur les voitures qui le proposent", cluster) { prefs.put(PreferenceKeys.CLUSTER_MAP, it) } }
                         if (cluster) item {
+                            SetChoice("st-clut", "Texte du combiné", listOf("-1" to "Plus petit", "0" to "Normal", "1" to "Plus grand", "2" to "Très grand"),
+                                prefs.i(PreferenceKeys.CLUSTER_TEXT, 0).coerceIn(-1, 2).toString()) { prefs.put(PreferenceKeys.CLUSTER_TEXT, it.toInt()) }
+                        }
+                        // how close the map zooms in for turns and junctions (also in the phone's Settings)
+                        item {
+                            SetChoice("st-jz", "Zoom aux carrefours", listOf("-1" to "Plus loin", "0" to "Habituel", "1" to "Plus proche", "2" to "Au plus près"),
+                                prefs.s(PreferenceKeys.JUNCTION_ZOOM, "0")) { prefs.put(PreferenceKeys.JUNCTION_ZOOM, it) }
+                        }
+                        if (cluster) item {
                             SetChoice("st-cluz", "Zoom de l'écran conducteur", listOf("1" to "Plus proche", "0" to "Normal", "-1" to "Plus éloigné", "-2" to "Le plus éloigné"),
                                 prefs.i(PreferenceKeys.CLUSTER_ZOOM, 0).coerceIn(-2, 1).toString()) { prefs.put(PreferenceKeys.CLUSTER_ZOOM, it.toInt()) }
                         }

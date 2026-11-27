@@ -252,7 +252,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (!previewing) return
         flyingOver = true
         val allPts = routes.take(3).flatMap { x -> x.pts.filterIndexed { i, _ -> i % 8 == 0 } + x.pts.last() }
-        map.flyRoute(r.pts, r.cum, r.len, 62.0, full = true) { flyingOver = false; if (previewing) map.fit(allPts) }
+        map.flyRoute(r.pts, r.cum, r.len, 62.0, full = true) { flyingOver = false; if (previewing) fitMap(allPts) }
     }
 
     /** Stops the fly-over and goes back to the route overview. */
@@ -262,7 +262,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     fun refitPreview() {
         if (!previewing || flyingOver) return
         val allPts = routes.take(3).flatMap { x -> x.pts.filterIndexed { i, _ -> i % 8 == 0 } + x.pts.last() }
-        if (allPts.size >= 2) map.fit(allPts)
+        if (allPts.size >= 2) fitMap(allPts)
     }
 
     /** The way back to where this trip started (home when it started near home). */
@@ -2145,6 +2145,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             run { val ll = LimitLog.read(ctx); if (ll.isNotBlank()) { appendLine(); appendLine("Limitations (dernières) :"); appendLine(ll) } }
             // what Android Auto checks before listing the app (Play as installer, the system installer as initiating)
             appendLine("Install record: ${Updater.installRecord(ctx)}")
+            if (lastPlanTiming.isNotBlank()) appendLine("Last route planned in: $lastPlanTiming")
+            if (limitInfo.isNotBlank()) appendLine("Speed limit last shown: $limitInfo")
             try { RouteEnds.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Last routes ended:"); append(it) } } catch (e: Throwable) { }
             try { com.headunit.launcher.car.CarCardLog.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Car search card closed:"); append(it) } } catch (e: Throwable) { }
             try { SoundLog.text(ctx).takeIf { it.isNotBlank() }?.let { appendLine(); appendLine("Music lowered and given back:"); append(it) } } catch (e: Throwable) { }
@@ -2232,7 +2234,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val r = route ?: return
         following = false
         val pts = (-3..3).map { k -> pointAt(r, (row.off + k * 50.0).coerceIn(0.0, r.len)).first }
-        map.fit(pts)
+        fitMap(pts)
     }
 
     fun closeItinerary() {
@@ -2409,6 +2411,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             // updated by itself: the first now, the others one after another as each finishes (as Update does)
             if (found.isNotEmpty() && autoDataNow() && !packBusy) { autoPending = found.drop(1); dataUpdates = emptyList(); updateData(found.first()) }
             else dataUpdates = found
+            // UK pump prices (with your Fuel Finder details): only what's changed since last time, so a small download. On the same
+            // Wi-Fi / mobile data setting as the rest, but while driving too, as prices are what you want on the way (ricres77, #428)
+            val dataMode = prefs.s(PreferenceKeys.DATA_AUTO, "wifi")
+            if (FuelFinder.configured(prefs) && dataMode != "off" && (dataMode == "always" || onWifi()))
+                try { withContext(Dispatchers.IO) { FuelFinder.refresh(ctx, prefs) } } catch (e: Exception) { }
             // the town and village names too, once they're a month old
             if (autoDataNow() && OfflinePlaces.installed(ctx) && OfflinePlaces.ageMs(ctx) > 30L * 86_400_000L) {
                 val cc = chosenPack().country.ifBlank { detectedCountry }.ifBlank { "GB" }
@@ -2627,6 +2634,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 val net = try { withContext(Dispatchers.IO) { netGeocode(countryCode(), q, near, typed, gen) } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
                 val merged = postcodeFirst(pcJob, rankResults(q, near, net ?: emptyList(), local))
                 results = merged
+                prefetchStreets(merged)
                 if (merged.isEmpty() && !typed) toast(if (net == null) "Échec de la recherche : réseau faible ou absent" else "Aucun résultat. Ajoutez une ville ou un code postal.", 3500)
                 return@launch
             }
@@ -2659,7 +2667,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             val merged = postcodeFirst(pcJob, rankResults(q, near, net ?: emptyList(), local))
             results = merged
-            if (merged.isEmpty()) toast(if (net == null) "Échec de la recherche : réseau faible ou absent" else "Aucun résultat. Essayez d'ajouter une ville ou un code postal.", 3500)
+            prefetchStreets(merged)
+            if (merged.isEmpty()) toast(if (net == null) "Échec de la recherche : réseau faible ou absent" else "Aucun résultat. Ajoutez une ville ou un code postal.", 3500)
             else if (net == null) toast("Réseau faible : lieux enregistrés et villes hors ligne affichés", 3500)
         }
     }
@@ -3199,6 +3208,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 k * 0.7, k, k * 1.45, now, batt)
         } else ""
         // tolls avoided only in chosen countries (when "Éviter les péages" itself is off)
+        MapboxRest.offerNoToll = prefs.b(PreferenceKeys.OFFER_NO_TOLL, true) && !prefs.b(PreferenceKeys.AVOID_TOLL, false)
         MapboxRest.tollCountries = if (prefs.b(PreferenceKeys.AVOID_TOLL, false)) emptySet()
             else prefs.s(PreferenceKeys.AVOID_TOLL_COUNTRIES, "").split(',').map { it.trim().uppercase() }.filter { it.length == 2 }.toSet()
     }
@@ -3271,7 +3281,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             shownTrack = t
             map.setTrack(t.pts)
             following = false
-            map.fit(t.pts, panel = false)
+            fitMap(t.pts, panel = false)
         }
     }
 
@@ -3390,7 +3400,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             shownTrack = GpxTrack("mine-" + r.id, r.name, r.len, r.at, r.pts, "", r.pts.first())
             map.setTrack(r.pts)
             following = false
-            map.fit(r.pts, panel = false)
+            fitMap(r.pts, panel = false)
         }
     }
 
@@ -3404,10 +3414,34 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private fun streetTarget(to: Place): LL {
         if (!hasOnline || to.web.startsWith("gpx:") || to.onStreet) return to.pos
         val street = Overpass.streetOf(to.name) ?: Overpass.streetOf(to.name.substringBefore(',')) ?: return to.pos
+        val key = streetKey(to)
+        streetFound[key]?.let { return it }
         if (!try { online() } catch (e: Exception) { false }) return to.pos
         val p = Overpass.nearestOnStreet(to.pos, street) ?: return to.pos
-        return if (Geo.dist(p, to.pos) < 150.0) p else to.pos
+        val out = if (Geo.dist(p, to.pos) < 150.0) p else to.pos
+        if (streetFound.size > 200) streetFound.clear()
+        streetFound[key] = out
+        return out
     }
+    /** Street points already looked up (by address), so picking one again, or one looked up while the results showed, is instant. */
+    private val streetFound = java.util.concurrent.ConcurrentHashMap<String, LL>()
+    private fun streetKey(p: Place) = p.name.lowercase() + "@" + Math.round(p.pos.lat * 1e4) + "," + Math.round(p.pos.lon * 1e4)
+    private var streetPrefetch: kotlinx.coroutines.Job? = null
+    /**
+     * While search results are on screen: the street of the first two house addresses is looked up already (once typing has
+     * stopped for a moment), so the route to the one you pick doesn't wait for it.
+     */
+    private fun prefetchStreets(list: List<Place>) {
+        streetPrefetch?.cancel()
+        val todo = list.filter { !it.onStreet && it.addressKey.isNotEmpty() && !it.web.startsWith("gpx:") && !streetFound.containsKey(streetKey(it)) }.take(2)
+        if (todo.isEmpty() || !hasOnline) return
+        streetPrefetch = scope.launch(Dispatchers.IO) {
+            delay(700)
+            for (p in todo) { if (coroutineContext[Job]?.isActive == false) break; try { streetTarget(p) } catch (e: Exception) { } }
+        }
+    }
+    /** How long the last route took to plan, for the problem report: "street 0.0 s, routes 1.8 s". */
+    @Volatile private var lastPlanTiming = ""
 
     fun startRoute(to0: Place, departInMin: Int = 0, keepVia: Boolean = false, startNow: Boolean = false, preferVia: String = "", fromTrack: Boolean = false) {
         // a GPX track picked from the search (on the car screen, say): drive it rather than to its start
@@ -3439,8 +3473,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 // a house address: the route ends on the street the house is on, not whichever road is nearest the middle of its plot
                 // (3 s at most: the lookup could take 10 s or more when the map server was slow, and the route waited for it. If
                 // it's slow, the route goes to the address as found and the lookup finishes by itself in the background)
+                val t0 = android.os.SystemClock.elapsedRealtime()
                 val look = scope.async(Dispatchers.IO) { try { streetTarget(to) } catch (e: Exception) { to.pos } }
-                val target = kotlinx.coroutines.withTimeoutOrNull(3000L) { look.await() } ?: to.pos
+                // (usually already looked up while the search results showed; 1.5 s at most otherwise)
+                val target = kotlinx.coroutines.withTimeoutOrNull(1500L) { look.await() } ?: to.pos
+                val t1 = android.os.SystemClock.elapsedRealtime()
                 var rs = withContext(Dispatchers.IO) {
                     val haveOffline = OfflineRouter.installed(ctx)
                     // the free version on Play plans routes from the downloaded country pack (no route service): say what's needed
@@ -3452,6 +3489,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     }
                 }
                 if (rs.isEmpty()) throw IllegalStateException("aucun itinéraire trouvé")
+                val t2 = android.os.SystemClock.elapsedRealtime()
+                lastPlanTiming = String.format(java.util.Locale.US, "street %.1f s, routes %.1f s%s", (t1 - t0) / 1000.0, (t2 - t1) / 1000.0, if (to.onStreet) " (entrance given)" else "")
                 // one of your own saved routes fits this trip (#321): planned through points along it, and put first
                 val myMode = prefs.s(PreferenceKeys.MY_ROUTES, "offer")
                 val mineRs = if (usedOffline || keepVia || fromTrack || via.isNotEmpty() || myMode == "off") emptyList()
@@ -3500,8 +3539,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 // those go straight to the overview)
                 if (!startNow && prefs.b(PreferenceKeys.CINEMATIC, true) && rs[0].len < 40_000.0) {
                     val r0 = rs[active.coerceIn(0, rs.size - 1)]
-                    map.flyRoute(r0.pts, r0.cum, r0.len, 50.0) { if (previewing && routes === rs) map.fit(allPts) }
-                } else map.fit(allPts)
+                    map.flyRoute(r0.pts, r0.cum, r0.len, 50.0) { if (previewing && routes === rs) fitMap(allPts) }
+                } else fitMap(allPts)
                 waitingFor = null; waitJob?.cancel()
                 // changing stops while already driving carries straight on, without the route options in between
                 // (and Settings › My routes › Start on it: straight onto your own route)
@@ -3527,7 +3566,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         updateRouteZones()
         drawRoutes()
         val r = routes[i]
-        map.fit(r.pts.filterIndexed { n, _ -> n % 6 == 0 } + r.pts.last())
+        fitMap(r.pts.filterIndexed { n, _ -> n % 6 == 0 } + r.pts.last())
     }
 
     /** A name for the map strip of the current route: "Southampton → Bristol" style, from where you are to the destination. */
@@ -3624,7 +3663,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val r = route ?: return
         try { pushJams() } catch (e: Exception) { }
         map.setRoute(r.pts, routes.filterIndexed { i, _ -> i != active }.map { it.pts }, r.sev)
-        map.setStopFlags(via.map { it.pos })
+        map.setStopFlags(via.map { it.pos }); map.setStopPins(via.map { it.pos to it.name })
         map.setTunnels(r.tunnels.map { (a, b) -> slice(r, a, b) })
         drawBends(r)
     }
@@ -3938,7 +3977,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         following = false
         // on Android Auto there's no preview panel at the bottom: fitting as if there were left the route in the top third of
         // the screen, zoomed out further than needed, with place names too small to read
-        map.fit(pts, panel = !isCar)
+        fitMap(pts)
         scheduleRecentre(10_000)
     }
 
@@ -3994,6 +4033,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private var pendHits = 0
 
     /** True while the posted limits that came with the route are being shown (they're exact, so nothing else overrides them). */
+    /** Settings › Screen & sizes › Speed display › Show speed limits (on unless switched off, #445). */
+    private fun limitsOn(): Boolean = prefs.b(PreferenceKeys.SHOW_LIMITS, true)
+
+    /** With speed limits switched off: nothing of them is left showing (the sign, the next-limit sign, the one on the map). */
+    private fun hideLimits() {
+        if (speedLimit != null || limitEstimated) { speedLimit = null; limitEstimated = false }
+        if (nextLimit != null) nextLimit = null
+        if (limitSignOnMap) { limitSignOnMap = false; map.setSpeedChange(null, null) }
+        routeLimitShown = false
+    }
+    private var limitSignOnMap = true
+
     private fun routeLimitLive() = route != null && !previewing && System.currentTimeMillis() - routeLimitAt < 4000L
 
     /**
@@ -4017,6 +4068,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         val osm = Overpass.speedLimit(p, hd, if (Overpass.countryAt(p) == "GB") "GB" else detectedCountry.ifBlank { Overpass.countryAt(p) })
         osmLimMs = osm?.takeIf { !it.estimated && it.ms > 0.0 }?.ms ?: -1.0
         osmLimAt = System.currentTimeMillis(); osmLimPos = p
+        // where the limit shown comes from, for the problem report (#447)
+        limSrc = if (Overpass.lastLocal) "la zone téléchargée" else "OpenStreetMap"
         // your last few positions, for Mapbox to match to its roads
         synchronized(mbTrail) {
             if (mbTrail.isEmpty() || Geo.dist(mbTrail.last(), p) > 15.0) { mbTrail.add(p); while (mbTrail.size > 5) mbTrail.removeAt(0) }
@@ -4039,6 +4092,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             }
             val v = (if (osm == null || mbWay == way) mbLim else null) ?: return osm
             if (v <= 0.0) return osm
+            limSrc = "Mapbox"
             return Overpass.Limit(v, false, osm?.road ?: "", osm?.wayId ?: 0L, osm?.names ?: emptyList(), true)
         }
         val tNow = System.currentTimeMillis()
@@ -4052,7 +4106,14 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         // TomTom's limit whenever it has one (it's the more complete and up-to-date source); OpenStreetMap is the backup
         val tt = (if (osm == null || ttWay == way) ttLim else null) ?: return osm
+        limSrc = "TomTom"
         return Overpass.Limit(tt.ms, false, osm?.road ?: "", osm?.wayId ?: 0L, osm?.names ?: emptyList(), true)
+    }
+    @Volatile private var limSrc = ""
+    /** What the speed limit sign last showed and where it came from, for the problem report (no road names or places). */
+    private var limitInfo = ""
+    private fun noteLimit(ms: Double, src: String, estimated: Boolean) {
+        limitInfo = "%d %s d'après %s%s".format(Math.round(ms * (if (imperial) 2.23694 else 3.6)), if (imperial) "mph" else "km/h", src, if (estimated) " (estimée d'après le type de route)" else "")
     }
 
     /**
@@ -4061,7 +4122,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
      * seen twice, so passing a side road at a junction doesn't flash its limit.
      */
     private fun showLimit(r: Overpass.Limit, at: LL) {
-        if (walking) return
+        if (walking || !limitsOn()) return
         val showEst = prefs.b(PreferenceKeys.LIMITEST, false)
         val v = if (r.ms <= 0.0 || (r.estimated && !showEst)) -1.0 else r.ms
         val cur = speedLimit ?: -1.0
@@ -4071,8 +4132,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                 if (pendHits < 2) return
             }
             pendHits = 0; pendLimit = -2.0
-            if (v <= 0.0) { speedLimit = null; limitEstimated = false }
-            else { speedLimit = v; limitEstimated = r.estimated }
+            if (v <= 0.0) { speedLimit = null; limitEstimated = false; limitInfo = "aucune (" + limSrc + " n'a pas de limitation pour cette route)" }
+            else { speedLimit = v; limitEstimated = r.estimated; noteLimit(v, limSrc, r.estimated) }
             LimitLog.add(ctx, "carte ${if (r.sure) "sûr" else "probable"}${if (r.estimated) " estimé" else ""} : ${if (v > 0) Math.round(v * 3.6) else 0} km/h · ${r.road.ifBlank { "?" }} (way ${r.wayId}) @ ${LimitLog.pos(at)}")
         }
         // A successful live road lookup takes ownership from the route sections, so later route gaps won't erase it.
@@ -4121,7 +4182,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     }
 
     private fun applyRouteLimit(r: Route, prog: Double, p: Fix) {
-        if (mgLimits()) return
+        if (mgLimits() || !limitsOn()) return
         val secs = r.limits
         if (secs.isEmpty()) { clearRouteLimitIfNeeded(); return }
         // a few metres ahead, to make up for the GPS being about a second behind
@@ -4168,6 +4229,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         if (speedLimit != ms || limitEstimated) {
             if (speedLimit == null || abs((speedLimit ?: 0.0) - ms) > 0.3) LimitLog.add(ctx, "itinéraire : ${Math.round(ms * 3.6)} km/h @ ${LimitLog.pos(p.pos)}")
+            noteLimit(ms, "l'itinéraire (" + r.from.ifBlank { "hors ligne" } + ")", false)
             speedLimit = ms; limitEstimated = false
         }
         checkLimitChange(ms, false)
@@ -4273,7 +4335,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // a quick local check every few seconds (the roads around you are downloaded a few hundred metres at a time, so most
         // checks need no network): the sign changes within a few seconds of passing the real one
         if (shadow()) return
-        if (!limitBusy && now - limitAt > (if (moving) 3000L else 12000L) && (lp == null || Geo.dist(lp, p.pos) > 25) && (moving || lp == null)) {
+        // speed limits switched off: none shown, none looked up
+        if (!limitsOn()) hideLimits() else limitSignOnMap = true
+        if (limitsOn() && !limitBusy && now - limitAt > (if (moving) 3000L else 12000L) && (lp == null || Geo.dist(lp, p.pos) > 25) && (moving || lp == null)) {
             limitAt = now; limitPos = p.pos; limitBusy = true
             // where the car really is: on the route line while navigating, or snapped to the road the map shows
             val look = (if (glideOnRoute) gPos else mPos)?.takeIf { Geo.dist(it, p.pos) < 40.0 } ?: p.pos
@@ -4552,7 +4616,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // chargers: how far off the route to look (Settings › Your electric car › Charger detour, #343): minutes of detour, 0 = as before
         val evDetour = if (kind == "charging" && alongRoute) prefs.i(PreferenceKeys.EV_DETOUR_MIN, 0) else 0
         val evOffM = if (evDetour > 0) (evDetour - 1) * 330.0 else 0.0
-        val radius = if (nearDest) 900 else if (kind == "parking") 2000 else if (kind == "toilets" || kind == "coffee") 3000 else 6000
+        // (services are miles apart: a 6 km circle found none, or only an apartment block, #446)
+        val radius = if (nearDest) 900 else if (kind == "parking") 2000 else if (kind == "toilets" || kind == "coffee") 3000 else if (kind == "services") 30_000 else 6000
         val fuelType = prefs.s(PreferenceKeys.FUEL_TYPE, "E10")
         // (Fuel Finder has no E85 prices, and its station list would show every station rather than ones selling it)
         val fuelLive = kind == "fuel" && FuelFinder.configured(prefs) && fuelType != "E85" && fuelType != "LPG"
@@ -4561,7 +4626,28 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             try {
                 // the search runs on its own, and the 30 s limit just stops waiting for it: a blocked network read used to hold the
                 // limit up too (the timeout can't end a read that's waiting on a server), so a busy server left it spinning for minutes
+                val mwOnly = kind == "services" && servicesMotorwayOnly
                 val work = searchScope.async {
+                    // motorway services only, along the route: the ones already found for it (the services card's), at once
+                    if (mwOnly && alongRoute && rt != null) {
+                        val pl = placed?.takeIf { it.route === rt }
+                        val mine = pl?.services.orEmpty().filter { it.poi.kind == "services" && it.off > progress - 100.0 && it.side < 1200.0 }
+                            .sortedBy { it.off }.map { Nearby(Place(it.poi.name, "", it.poi.pos), it.off - progress, "", detourMin = detour(it.side), ahead = true) }
+                        if (mine.isNotEmpty()) return@async mine
+                    }
+                    // motorway services only: straight from OpenStreetMap's service areas (not the shops and flats the other services
+                    // searches bring back), along the route ahead or round you (#446)
+                    if (mwOnly) {
+                        if (alongRoute && rt != null) {
+                            val line = RouteExtras.line(rt, progress, progress + 120_000.0, 1500.0, 60)
+                            val raw = Overpass.nearbyAlong("services_mw", line, 1200)
+                            return@async raw.mapNotNull { n ->
+                                val pr = RouteExtras.project(rt, n.place.pos, 1500.0, progress) ?: return@mapNotNull null
+                                if (pr.first < progress - 100) null else n.copy(dist = pr.first - progress, detourMin = detour(pr.second), ahead = true)
+                            }
+                        }
+                        return@async Overpass.nearby("services_mw", centre, radius).map { it.copy(dist = Geo.dist(origin, it.place.pos)) }
+                    }
                     if (fuelLive) {
                         try { FuelFinder.refresh(ctx, prefs) } catch (e: Exception) { /* use what is stored */ }
                         val st = FuelFinder.stations(ctx)
@@ -4685,7 +4771,9 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
                     }
                 }
                 val found = kotlinx.coroutines.withTimeoutOrNull(30_000L) { work.await() }
-                val list = if (kind == "charging") found?.let { filterChargers(it) } else found
+                val list = if (kind == "charging") found?.let { filterChargers(it) }
+                    else if (mwOnly) found?.filter { !notServices.containsMatchIn(it.place.name) && !notServices.containsMatchIn(it.extra) }
+                    else found
                 if (list == null) { work.cancel(); toast("La recherche a pris trop de temps. Vérifiez le réseau et réessayez.", 4000); clearNearby(); return@launch }
                 if (pickBest) {
                     val ahead = list.filter { it.ahead || route == null }
@@ -4960,6 +5048,18 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
 
     fun changeNearbySort(mode: String) { nearbySort = mode; nearby = sortNearby(nearby) }
 
+    /** The services list: motorway services only (rest and picnic areas left out), remembered for next time (d3stiny999, #437). */
+    var servicesMotorwayOnly by mutableStateOf(prefs.b(PreferenceKeys.SERVICES_MW_ONLY, false))
+        private set
+    fun setServicesFilter(motorwayOnly: Boolean) {
+        if (motorwayOnly == servicesMotorwayOnly) return
+        servicesMotorwayOnly = motorwayOnly
+        prefs.put(PreferenceKeys.SERVICES_MW_ONLY, motorwayOnly)
+        if (nearbyKind == "services") loadNearby("services", false)
+    }
+    /** Not a rest stop, picnic or play area, lay-by or car park (by its name, for search services that don't say which it is). */
+    private val notServices = Regex("apartment|flats|residen|picnic|play|rest ?area|rest stop|lay-?by|toilet|viewpoint|car ?park|parking|rastplatz|parkplatz|aire de repos|aire de pique|area di sosta|área de descanso|rustplaats|parkeerplaats", RegexOption.IGNORE_CASE)
+
     /** A destination shared from another app: routes straight to coordinates, or puts text in the search box. */
     fun openShared(t: SharedTarget) {
         externalTick++
@@ -5211,7 +5311,11 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // instead of stopping and then jumping when the signal comes back
         val drOk = glideOnRoute && glideRoute != null && mSpeed > 3.0 && !previewing && simMode == 0
         val rawAge = (now - mAt) / 1000.0
-        val age = rawAge.coerceIn(0.0, if (drOk) 120.0 else 2.5)
+        // On Android Auto the arrow is drawn a little ahead of the last GPS fix: a fix is already about a second old when it arrives,
+        // and the picture takes a moment more to reach the car's screen, so it showed you slightly behind where you were as you went
+        // past a junction (yurividal, #450). Not while nearly stopped.
+        val lead = if (isCar && mSpeed > 4.0) 0.6 else 0.0
+        val age = (rawAge + lead).coerceIn(0.0, if (drOk) 120.0 else 2.5)
         val dr = drOk && rawAge > 3.0 && rawAge < 120.0
         // fork FR : le point GPS a déjà environ une seconde quand il arrive : la flèche est avancée d'autant (réglable)
         val lead = if (simMode == 0 && mSpeed > 2.0) arrowLead else 0.0
@@ -5873,6 +5977,40 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         if (settingsPreview || orbiting) tLeft = 0.0
         map.cardsMirrored = layoutMirrored && !isCar // (Android Auto always has its cards on the left)
         camTargetAt = android.os.SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * Fits [pts] on the map. On Android Auto: into the part beside the cards, using the whole height. It used to leave the bottom
+     * 60% empty as if the phone's route panel were there, so on a small car screen the route was a thin strip at the top
+     * (neilch0111, #441).
+     */
+    private fun fitMap(pts: List<LL>, panel: Boolean = true) {
+        // the phone's route choice has its own panel (the map leaves room for it); otherwise, around the cards actually showing
+        if (!isCar && (previewing || !panel)) { map.fit(pts, panel); return }
+        fitAroundCards(pts)
+    }
+
+    /**
+     * Fits [pts] into the map left clear by the cards on screen (the turn card, the trip card, the map buttons), using all of it:
+     * the overview while driving was fitted as if the route choice's panel covered the bottom 60%, so the route ended up small
+     * and under the turn card. A card across most of the width takes a band off the top or bottom; a narrower one, a strip off
+     * its side.
+     */
+    private fun fitAroundCards(pts: List<LL>) {
+        var l = 0.0; var t = 0.0; var r = 0.0; var b = 0.0
+        for (p in panels) {
+            val w = (p[2] - p[0]).toDouble(); val h = (p[3] - p[1]).toDouble()
+            if (w < 0.02 || h < 0.02) continue
+            if (w >= 0.5 && !isCar) {
+                if ((p[1] + p[3]) / 2.0 < 0.5) t = max(t, p[3].toDouble()) else b = max(b, 1.0 - p[1])
+            } else if (isCar || (p[0] + p[2]) / 2.0 < 0.5) l = max(l, p[2].toDouble()) else r = max(r, 1.0 - p[0])
+        }
+        // (a little room round the edges, and never less than a third of the map either way)
+        fun side(v: Double) = (v + 0.03).coerceIn(0.05, 0.6)
+        var fl = side(l); var fr = side(r); var ft = side(t); var fb = side(b)
+        if (fl + fr > 0.67) { val k = 0.67 / (fl + fr); fl *= k; fr *= k }
+        if (ft + fb > 0.67) { val k = 0.67 / (ft + fb); ft *= k; fb *= k }
+        map.fitFrac(pts, fl, ft, fr, fb)
     }
 
     // outlines of the cards on screen, as parts of its width and height (left, top, right, bottom), reported by the screen
@@ -7048,7 +7186,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             cover > 0.0 -> map.fitFrac(pts, 0.07, 0.14, 0.07, (cover + 0.04).coerceAtMost(0.7))
             // a phone held sideways: the panel down one side, the one-line turn card at the top of the other
             side != null -> map.fitFrac(pts, (side.first + 0.04).coerceAtMost(0.75), 0.2, (side.second + 0.04).coerceAtMost(0.75), 0.08)
-            else -> map.fit(pts)
+            else -> fitMap(pts)
         }
         scheduleRecentre(15_000)
     }
@@ -7280,7 +7418,7 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
             liveAlts = list
             // the plain grey lines make way for the ones with cards
             map.setRoute(cur.pts, emptyList(), cur.sev)
-            map.setStopFlags(via.map { it.pos })
+            map.setStopFlags(via.map { it.pos }); map.setStopPins(via.map { it.pos to it.name })
             map.setTunnels(cur.tunnels.map { (a, b) -> slice(r = cur, a = a, b = b) })
             map.setLiveAlts(list.map { it.line() }, list.map { it.bubble }, list.map { it.diffMin }, list.map { it.traffic }); syncPicked()
         }

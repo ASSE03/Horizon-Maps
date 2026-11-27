@@ -189,6 +189,9 @@ object Overpass {
      */
     class Limit(val ms: Double, val estimated: Boolean, val road: String = "", val wayId: Long = 0L, val names: List<String> = emptyList(), val sure: Boolean = false)
 
+    /** The last speed-limit lookup was answered from a downloaded area (not the network), for the problem report. */
+    @Volatile var lastLocal = false
+
     /** Set when the last speed-limit lookup failed (no network, server busy…), null when it worked. */
     @Volatile var lastError: String? = null
 
@@ -280,6 +283,7 @@ object Overpass {
     fun speedLimit(p: LL, heading: Double = -1.0, country: String = countryAt(p)): Limit? = try {
         // a downloaded area with speed limits covers this spot: its roads, straight from the file (no network)
         val local = try { localWays?.invoke(p) } catch (e: Throwable) { null }
+        lastLocal = local != null
         if (local != null) { cacheWays = local; cacheAt = null }
         val c0 = cacheAt
         if (local == null && (c0 == null || Geo.dist(c0, p) > 150.0)) {
@@ -577,12 +581,14 @@ object Overpass {
         "coffee" -> "[\"amenity\"=\"cafe\"]"
         "toilets" -> "[\"amenity\"=\"toilets\"]"
         "services" -> "[\"highway\"~\"^(services|rest_area)$\"]"
+        // motorway service areas only, without rest areas and lay-bys (the Motorway services filter, #446)
+        "services_mw" -> "[\"highway\"=\"services\"]"
         else -> "[\"amenity\"=\"parking\"]"
     }
 
     fun kindLabel(kind: String): String = when (kind) {
         "fuel" -> "Station-service"; "fuel_e85" -> "Station E85"; "fuel_lpg" -> "Station GPL"; "charging" -> "Borne de recharge"; "food" -> "Restauration"; "coffee" -> "Café"
-        "toilets" -> "Toilettes"; "services" -> "Aires"; "lorrypark" -> "Parking poids lourds"; else -> "Parking"
+        "toilets" -> "Toilettes"; "services", "services_mw" -> "Aires"; "lorrypark" -> "Parking poids lourds"; else -> "Parking"
     }
 
     /** kind: "fuel", "charging", "parking", "food", "coffee", "toilets" or "services". */

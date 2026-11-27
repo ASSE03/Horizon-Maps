@@ -5,6 +5,12 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 ## Non publié
 
 ### Nouveau
+- Itinéraire sans péage proposé à côté d'un plus rapide qui en a, avec le temps en plus (Réglages › Itinéraires).
+- Étapes numérotées sur la carte et prochaine étape sur la carte de trajet.
+- Filtre « Aires d'autoroute » dans les aires.
+- Fermer dans la notification de guidage.
+- Afficher les limitations (désactivable : plus de panneau, d'alerte ni de limitations sur la carte).
+- Prix des carburants mis à jour tout seuls, avec la date de la dernière mise à jour.
 - Données de la voiture par Android Auto : vitesse, batterie et position de la voiture quand elle les donne (Réglages › Android Auto › Données de la voiture).
 - Préférer les grands axes, aussi en ligne (Mapbox) : l'itinéraire « Grands axes » dans les choix.
 - Éviter les autoroutes sur les petits trajets seulement (jamais, toujours ou petits trajets, avec la distance).
@@ -178,6 +184,11 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Adresse : l'itinéraire vers une maison part plus vite (rue cherchée pendant l'affichage des résultats).
+- Vue d'ensemble de l'itinéraire ajustée autour des cartes à l'écran, aussi sur Android Auto ; cartes des autres itinéraires plus petites.
+- Panneaux sur la carte dimensionnés d'après le tracé, pareils sur tous les écrans ; bandeaux d'alerte éloignés du panneau de limitation.
+- Saisie en conduisant plus bloquée par défaut ; la recherche garde le clavier.
+- Avis envoyés : ils disent d'où vient la limitation affichée et le temps de calcul de l'itinéraire, et proposent d'abord la mise à jour.
 - Android Auto : en guidage, la température est en bas, à droite de la carte de trajet.
 - Android Auto : sans guidage, la température est en bas à gauche, à côté du bouton du son (en guidage, elle reste en haut à droite).
 - Bandeaux d'alerte placés à l'opposé du panneau de limitation, ajustés à leur texte.
