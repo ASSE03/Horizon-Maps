@@ -868,6 +868,8 @@ class MapScreen(carContext: CarContext, private val holder: CarHolder) : Screen(
     override fun onGetTemplate(): Template {
         // (Android Auto brings its buttons back up when they're laid out again)
         com.headunit.launcher.ui.CarButtons.poke()
+        // fork FR : et le compteur, le logo Mapbox et la température se décalent pour eux (ils restaient dessous)
+        try { CarLayout.touched() } catch (e: Exception) { }
         val e = holder.engine
         val guiding = e != null && e.route != null && !e.previewing
         val strip = ActionStrip.Builder()
