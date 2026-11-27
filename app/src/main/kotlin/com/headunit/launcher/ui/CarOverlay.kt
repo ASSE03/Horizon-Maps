@@ -405,7 +405,8 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         val tempOn = wx != null && !previewing && engine.prefs.b("cartemp", true)
         // fork FR : sans guidage, la température est en bas à gauche à côté du bouton du son (demandé par Cédric, 27/11) ; en guidage
         // (le bouton du son est alors sur la carte de trajet), elle reste en haut à droite
-        val tempAtSound = tempOn && !guiding && !small && engine.prefs.b(PreferenceKeys.CAR_SOUND_BTN, true) && !covered
+        // (sans tenir compte des panneaux ouverts : après la recherche, elle restait en haut ; panneau ouvert, elle suit le bouton du son)
+        val tempAtSound = tempOn && !guiding && !small && engine.prefs.b(PreferenceKeys.CAR_SOUND_BTN, true)
         var tempW by remember { mutableStateOf(0) }
         val tempGap = if (tempOn && !tempAtSound && tempW > 0) with(LocalDensity.current) { tempW.toDp() } + 10.dp else 0.dp
         val topW = if (portrait) {
