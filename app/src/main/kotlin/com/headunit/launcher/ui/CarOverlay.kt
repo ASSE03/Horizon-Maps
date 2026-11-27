@@ -406,7 +406,9 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         // fork FR : sans guidage, la température est en bas à gauche à côté du bouton du son (demandé par Cédric, 27/11) ; en guidage
         // (le bouton du son est alors sur la carte de trajet), elle reste en haut à droite
         // (sans tenir compte des panneaux ouverts : après la recherche, elle restait en haut ; panneau ouvert, elle suit le bouton du son)
-        val tempAtSound = tempOn && !guiding && !small && engine.prefs.b(PreferenceKeys.CAR_SOUND_BTN, true)
+        // (aussi quand le bouton du son n'est pas affiché, sur un écran compté comme bas : la bulle reste alors seule en bas à
+        // gauche. Avant, elle remontait en haut dès qu'Android Auto changeait la place laissée à la carte, après la recherche)
+        val tempAtSound = tempOn && !guiding && !portrait
         var tempW by remember { mutableStateOf(0) }
         val tempGap = if (tempOn && !tempAtSound && tempW > 0) with(LocalDensity.current) { tempW.toDp() } + 10.dp else 0.dp
         val topW = if (portrait) {
@@ -748,8 +750,8 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
                 ) {
                     if (guiding && tripCol) CompositionLocalProvider(LocalDensity provides Density(dens.density * cardScale, dens.fontScale)) { FasterCard(engine, Modifier.widthIn(max = 520.dp)) }
                     // (while guiding, the sound button is on the trip card instead of a pill of its own)
-                    if (!guiding && !small && soundBtn) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) { SoundPill(engine) }
+                    if (!guiding && ((!small && soundBtn) || tempAtSound)) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (!small && soundBtn) CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) { SoundPill(engine) }
                         if (tempAtSound) CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) { tempBubble(Modifier) }
                     }
                     hazards()
