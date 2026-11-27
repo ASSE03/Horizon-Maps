@@ -409,6 +409,8 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
         // (aussi quand le bouton du son n'est pas affiché, sur un écran compté comme bas : la bulle reste alors seule en bas à
         // gauche. Avant, elle remontait en haut dès qu'Android Auto changeait la place laissée à la carte, après la recherche)
         val tempAtSound = tempOn && !guiding && !portrait
+        // fork FR : en guidage, à droite de la carte de trajet en bas (en haut à droite, elle flottait sous les boutons d'Android Auto)
+        val tempAtTrip = tempOn && guiding && !portrait && !small && carTripAt == "auto" && !splitView
         var tempW by remember { mutableStateOf(0) }
         val tempGap = if (tempOn && !tempAtSound && tempW > 0) with(LocalDensity.current) { tempW.toDp() } + 10.dp else 0.dp
         val topW = if (portrait) {
@@ -652,7 +654,7 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
                 Text("${Math.round(tt)}°", color = c.text, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp))
             }
         }
-        if (tempOn && wx != null && !tempAtSound) Row((if (tempBar && !portrait) Modifier.align(Alignment.TopStart).padding(start = left + topW + 12.dp, top = top)
+        if (tempOn && wx != null && !tempAtSound && !tempAtTrip) Row((if (tempBar && !portrait) Modifier.align(Alignment.TopStart).padding(start = left + topW + 12.dp, top = top)
             else Modifier.align(Alignment.TopEnd).padding(end = if (portrait) rightTop else (if (!ctlShown && insR > 60.dp) 0.dp else insR) + edge, top = top + tempDrop)).height(60.dp)
             .onSizeChanged { tempW = it.width }
             .panel(10.dp, RoundedCornerShape(30.dp), c.surface).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -763,13 +765,17 @@ private fun CarScreenBody(engine: NavEngine, a: android.graphics.Rect?, actions:
                             CompositionLocalProvider(LocalDensity provides Density(dens.density * speedScale, dens.fontScale)) { ImmSpeed(engine) }
                             // (allowed to shrink, so on the narrowest tiles it gives way rather than pushing past the edge)
                             if (guiding && carTripAt == "auto" && !tripDocked && !tripCol) Box(Modifier.weight(1f, fill = false)) { CompositionLocalProvider(LocalDensity provides Density(dens.density * cardScale, dens.fontScale)) { TripCard(engine, actions, false, oneLine = small, buttonsShown = !tile, bar = !slim) } }
+                            if (tempAtTrip && !tripDocked && !tripCol) CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) { tempBubble(Modifier.align(Alignment.CenterVertically)) }
                         }
                     } else if (guiding && carTripAt == "auto" && !tripDocked && !tripCol) {
                         // as wide as the turn card above it (with more than a couple of buttons picked for it, it needs its own width)
                         // (Add stop doesn't count: it sits at the end of the route bar, not among the buttons)
                         val sameW = (carTripButtonsOn(engine.prefs) - "stop").size <= 2
-                        Box(if (sameW) Modifier.width(turnCardW) else Modifier) {
-                            CompositionLocalProvider(LocalDensity provides Density(dens.density * cardScale, dens.fontScale)) { TripCard(engine, actions, sameW, oneLine = small, buttonsShown = !tile, bar = !slim) }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(if (sameW) Modifier.width(turnCardW) else Modifier) {
+                                CompositionLocalProvider(LocalDensity provides Density(dens.density * cardScale, dens.fontScale)) { TripCard(engine, actions, sameW, oneLine = small, buttonsShown = !tile, bar = !slim) }
+                            }
+                            if (tempAtTrip) CompositionLocalProvider(LocalDensity provides Density(dens.density * buttonScale, dens.fontScale)) { tempBubble(Modifier) }
                         }
                     }
                 }

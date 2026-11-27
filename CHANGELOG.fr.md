@@ -178,6 +178,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Android Auto : en guidage, la température est en bas, à droite de la carte de trajet.
 - Android Auto : sans guidage, la température est en bas à gauche, à côté du bouton du son (en guidage, elle reste en haut à droite).
 - Bandeaux d'alerte placés à l'opposé du panneau de limitation, ajustés à leur texte.
 - Disposition portrait plus compacte (carte de direction, compteur, boussole en guidage).
