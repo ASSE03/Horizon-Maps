@@ -355,6 +355,7 @@ class CarNavSession : Session() {
         screen.closeSearch = { CarCardLog.note(carContext.applicationContext); voice.finish(""); holder.engine?.pendingSave = null; com.headunit.launcher.ui.CarSearch.open = false; com.headunit.launcher.ui.CarSettingsCard.open = false; com.headunit.launcher.ui.CarStops.open = false; screen.invalidate() }
         // (Android Auto works the visible area out again when it lays the screen out)
         surface.onAreaDoubt = { try { screen.invalidate() } catch (e: Exception) { } }
+        surface.onWake = { try { screen.invalidate() } catch (e: Exception) { } }
         try { carContext.getCarService(AppManager::class.java).setSurfaceCallback(surface) } catch (e: Exception) { }
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             // (Horizon's screen in front on the car, or another app over it: with no route it keeps quiet behind another app)
@@ -492,6 +493,14 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
     @Volatile var lastVisible: Rect? = null
     /** Asks Android Auto to lay its screen out again, which makes it report the visible area afresh (set by the session). */
     var onAreaDoubt: () -> Unit = {}
+    /** Fork FR : un toucher sur la carte alors que les boutons d'Android Auto sont repliés : l'écran est redemandé, ce qui les fait
+     *  revenir (un simple toucher ne les rappelait plus, il fallait passer par la barre de recherche). */
+    var onWake: () -> Unit = {}
+    private var wakeAt = 0L
+    private fun wake() {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (!CarLayout.controlsShown && now - wakeAt > 1000L) { wakeAt = now; try { onWake() } catch (e: Exception) { } }
+    }
     val dark = androidx.compose.runtime.mutableStateOf(true)
     var engine: NavEngine? = null
         set(v) {
@@ -678,6 +687,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
     }
 
     override fun onScroll(distanceX: Float, distanceY: Float) {
+        wake()
         CarLayout.touched()
         com.headunit.launcher.ui.CarButtons.poke()
         // the app's search card is open: a drag scrolls its list, and the map under it stays put
@@ -691,6 +701,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
 
     // a tap on the car screen (newer cars): the app's own cards and buttons react, as in the app
     override fun onClick(x: Float, y: Float) {
+        wake()
         CarLayout.touched()
         com.headunit.launcher.ui.CarButtons.poke()
         // this car passes taps on: remembered, so the app's own buttons can stand in for Android Auto's
@@ -702,6 +713,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
     }
 
     override fun onScale(focusX: Float, focusY: Float, scaleFactor: Float) {
+        wake()
         CarLayout.touched()
         com.headunit.launcher.ui.CarButtons.poke()
         val m = map ?: return

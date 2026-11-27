@@ -339,6 +339,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Android Auto : toucher la carte fait revenir les boutons d'Android Auto (signaler, lieux, réglages, zoom, recentrer) sans passer par la barre de recherche.
 - Android Auto : sans guidage, la température reste en bas à gauche même quand Android Auto change la place laissée à la carte (après la recherche, elle remontait en haut).
 - Carte « Votre voiture » en portrait : le titre n'est plus écrit lettre par lettre (une croix en double et le bouton « Revenir à pied » le serraient) ; « Google Maps » et « À pied » passent sur la ligne du dessous.
 - Volet du bas remonté en portrait : les boutons de la carte et le compteur ne passent plus par-dessus la recherche et le volet.
