@@ -5314,8 +5314,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         // On Android Auto the arrow is drawn a little ahead of the last GPS fix: a fix is already about a second old when it arrives,
         // and the picture takes a moment more to reach the car's screen, so it showed you slightly behind where you were as you went
         // past a junction (yurividal, #450). Not while nearly stopped.
-        val lead = if (isCar && mSpeed > 4.0) 0.6 else 0.0
-        val age = (rawAge + lead).coerceIn(0.0, if (drOk) 120.0 else 2.5)
+        // (fork FR : l'avance réglable de la flèche, plus bas, fait déjà ce travail, sur le téléphone comme sur Android Auto)
+        val age = rawAge.coerceIn(0.0, if (drOk) 120.0 else 2.5)
         val dr = drOk && rawAge > 3.0 && rawAge < 120.0
         // fork FR : le point GPS a déjà environ une seconde quand il arrive : la flèche est avancée d'autant (réglable)
         val lead = if (simMode == 0 && mSpeed > 2.0) arrowLead else 0.0
