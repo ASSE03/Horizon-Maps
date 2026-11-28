@@ -736,6 +736,7 @@ class CarSurface(private val carContext: CarContext, private val onReady: (MapBi
         wake()
         CarLayout.touched()
         com.headunit.launcher.ui.CarButtons.poke()
+        // (fork FR : #455 de l'original déjà couvert par wake() ci-dessus)
         // this car passes taps on: remembered, so the app's own buttons can stand in for Android Auto's
         if (!tapNoted) { tapNoted = true; try { Prefs(carContext.applicationContext).let { if (!it.b(PreferenceKeys.CAR_TAPS_SEEN, false)) it.put(PreferenceKeys.CAR_TAPS_SEEN, true) } } catch (e: Exception) { } }
         try {
