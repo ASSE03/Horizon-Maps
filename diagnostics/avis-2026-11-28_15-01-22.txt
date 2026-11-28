@@ -1,0 +1,123 @@
+---
+Horizon Nav 1.0.195 (public)
+État : carte ✓ · radars ✓ · limitation ✓ · Nominatim – · Overpass ✗ · GPS ✓
+Unit: samsung SM-S921B, Android 17 (API 37), screen 1080x2340
+Country: FR · map: mapbox · TomTom key: yes · Mapbox token: yes · routes from: mapbox · online: yes
+Offline area: none
+Map view: standard · map on screen: standard
+Arrow: picture (arrow)
+Frame rate: auto · map detail: full · steering wheel: left (traffic on the right)
+Night signals: system setting auto · screen day since 15:01:14 · config day since 15:01:14 · setting day since 15:01:14 · theme sun
+Heat: cool · cool running: off
+Chip: s5e9945 / s5e9945 / s5e9945 · safer drawing step 0 · fast map drawing: on
+Last session didn't close normally: open 0 min 50 s, Android says: other (on screen; [INVALID START] [INVALID START] killedByAm=true;No entry in mProcessNames;pendingStart=false;). Speed then: 0 mph. Last note (Sat Nov 28 10:57:52 GMT+01:00 2026): app memory 56 MB + native 105 MB; unit free 2161 of 7223 MB; 
+Android Auto screen: 1802x692, visible 23,100,1684,678 · 
+Mapbox token: pk.… looks whole
+Démo : ×0 · 0 m sur 0 · départ choisi : non · aperçu : false · -
+Adresses (BAN) : -
+Fichier des radars de France : 4629 radars (fichier du 2026-11-23)
+Gyroscope (flèche dans les virages) : absent ou arrêté, accords avec le GPS 0, désaccords 0
+Consommation VE pour le trajet : ×1,00 (température ? °C, vitesse moyenne ? km/h)
+Avance de la flèche : réglage 0.5, utilisée 0,5 s, retard GPS mesuré 0,4 s (11 virages, dernier 0,1 s)
+Lampadaires : désactivés
+Agglomération (panneaux OSM) : hors agglomération, 0 panneaux connus autour
+Radars : activés · 1 autour · 1 affichés · dernière recherche : fichier France : 1 · OpenStreetMap : mail.ru: HTTP 504; overpass-api: Connection reset · Nominatim : - · zones : 
+Carte : mapbox://styles/mapbox/standard · satellite : non
+Mises à jour :
+27/11 18:45:52 installation lancée vers com.google.android.packageinstaller (content://downloads/all_downloads/2316)
+27/11 18:46:05 supprimé de Téléchargements : HorizonNav-1.0.190.apk
+27/11 18:46:07 installé : 1.0.190
+27/11 21:31:22 téléchargé et vérifié 1.0.192 (68819205 octets)
+27/11 21:31:22 installation lancée vers com.google.android.packageinstaller (content://downloads/all_downloads/2317)
+27/11 21:31:43 installé : 1.0.192
+27/11 21:31:43 supprimé de Téléchargements : HorizonNav-1.0.192.apk
+27/11 21:53:28 téléchargé et vérifié 1.0.194 (68817917 octets)
+27/11 21:53:28 installation lancée vers com.google.android.packageinstaller (content://downloads/all_downloads/2318)
+27/11 21:53:59 installé : 1.0.194
+27/11 21:54:00 supprimé de Téléchargements : HorizonNav-1.0.194.apk
+28/11 10:57:11 téléchargé et vérifié 1.0.195 (68817861 octets)
+28/11 10:57:11 installation lancée vers com.google.android.packageinstaller (content://downloads/all_downloads/2319)
+28/11 10:58:25 installé : 1.0.195
+28/11 10:58:26 supprimé de Téléchargements : HorizonNav-1.0.195.apk
+Limitations (MG4Dash) : 50 · paquets : p45_4.bin chargé (9636 cases, 224 ms) · 96 en ligne · residential (paquet OSM) · position gps ±1 m à 15:01:22 · tuiles 4/4 (stockage 0, réseau 0) · aucune tuile chargée
+
+Limitations (dernières) :
+28/11 10:08:41 MG4Dash : 50 · 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±0 m à 10:08:41 · tu @ 45.26846,4.68749
+28/11 10:08:46 MG4Dash : 90 · 90 · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 10:08:46 · tuiles 4/4 (stock @ 45.26876,4.68809
+28/11 10:08:47 MG4Dash : 50 · 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±0 m à 10:08:47 · tu @ 45.26881,4.68820
+28/11 10:08:52 MG4Dash : 90 · 90 · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 10:08:52 · tuiles 4/4 (stock @ 45.26913,4.68836
+28/11 10:08:53 MG4Dash : 50 · 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±0 m à 10:08:53 · tu @ 45.26920,4.68840
+28/11 10:08:54 MG4Dash : 90 · 90 · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 10:08:54 · tuiles 4/4 (stock @ 45.26927,4.68838
+28/11 10:10:07 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 10:10:07 · tuiles 3/3 (stock @ 45.27036,4.67557
+28/11 10:12:01 MG4Dash : 90 · 90 · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 10:12:01 · tuiles 5/5 (stock @ 45.27155,4.65751
+28/11 10:12:49 MG4Dash : 80 · 80 (estimée) · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 10:12:49 · tuiles  @ 45.27652,4.64852
+28/11 10:12:51 MG4Dash : 90 · 90 · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 10:12:51 · tuiles 3/3 (stock @ 45.27656,4.64830
+28/11 10:13:41 MG4Dash : 70 · 70 · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 10:13:41 · tuiles 4/4 (stock @ 45.28049,4.63914
+28/11 10:14:41 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 189 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 10:14:41 · tuiles 2/2 (stock @ 45.28342,4.63320
+28/11 10:57:03 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28774,4.62709
+28/11 10:57:04 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 292 ms) · 96 en ligne · residential (paquet OSM) · position network ±12 m à 10:57:04 · tuiles 4 @ 45.28775,4.62708
+28/11 10:58:26 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28772,4.62718
+28/11 11:10:28 MG4Dash : inconnue · position ignorée (network, précision 4800 m) · aucune tuile chargée @ 45.28775,4.62708
+28/11 11:10:29 MG4Dash : 50 · 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±0 m à 11:10:29 · tu @ 45.28724,4.62592
+28/11 11:11:49 MG4Dash : 20 · 20 · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±0 m à 11:11:49 · tuiles 3/3 ( @ 45.28528,4.63116
+28/11 11:11:50 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 11:11:50 · tuiles 3/3 (stock @ 45.28535,4.63117
+28/11 11:12:20 MG4Dash : 70 · 70 · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 11:12:20 · tuiles 4/4 (stock @ 45.28925,4.62992
+28/11 11:12:54 MG4Dash : 80 · 80 · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 11:12:54 · tuiles 3/3 (stock @ 45.29233,4.62430
+28/11 11:16:19 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 11:16:19 · tuiles 3/3 (stock @ 45.29938,4.58612
+28/11 11:19:41 MG4Dash : 80 · 80 · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 11:19:41 · tuiles 4/4 (stock @ 45.29934,4.58621
+28/11 11:22:54 MG4Dash : 70 · 70 · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 11:22:54 · tuiles 3/3 (stock @ 45.29229,4.62407
+28/11 11:23:30 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 11:23:30 · tuiles 4/4 (stock @ 45.28941,4.62984
+28/11 11:24:04 MG4Dash : 20 · 20 · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±0 m à 11:24:04 · tuiles 2/2 ( @ 45.28530,4.63108
+28/11 11:24:06 MG4Dash : 50 · 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 187 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±0 m à 11:24:06 · tu @ 45.28526,4.63101
+28/11 13:26:14 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.28774,4.62709
+28/11 13:26:15 MG4Dash : 50 · 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±0 m à 13:26:15 · tu @ 45.28725,4.62602
+28/11 13:28:19 MG4Dash : 70 · 70 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 13:28:19 · tuiles 4/4 (stock @ 45.28921,4.62993
+28/11 13:28:48 MG4Dash : 80 · 80 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 13:28:48 · tuiles 3/3 (stock @ 45.29232,4.62423
+28/11 13:32:20 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 248 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 13:32:20 · tuiles 5/5 (stock @ 45.29939,4.58632
+28/11 14:53:53 MG4Dash : inconnue · inconnue · routes pas encore chargées · paquets : — · tuiles 0/4 (stockage 0, réseau 0) · aucune tuile chargée @ 45.29973,4.57759
+28/11 14:53:54 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 224 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 14:53:54 · tuiles 5/5 (stock @ 45.29983,4.58265
+28/11 14:54:10 MG4Dash : 80 · 80 · paquets : p45_4.bin chargé (9636 cases, 224 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 14:54:10 · tuiles 4/4 (stock @ 45.29934,4.58618
+28/11 14:57:23 MG4Dash : 70 · 70 · paquets : p45_4.bin chargé (9636 cases, 224 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 14:57:23 · tuiles 3/3 (stock @ 45.29230,4.62402
+28/11 14:57:58 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 224 ms) · 96 en ligne · primary (paquet OSM) · position gps ±0 m à 14:57:58 · tuiles 4/4 (stock @ 45.28931,4.62987
+28/11 14:58:32 MG4Dash : 20 · 20 · paquets : p45_4.bin chargé (9636 cases, 224 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±0 m à 14:58:32 · tuiles 3/3 ( @ 45.28531,4.63109
+28/11 14:58:33 MG4Dash : 50 · 50 (estimée) · paquets : p45_4.bin chargé (9636 cases, 224 ms) · 96 en ligne · unclassified (paquet OSM) · position gps ±0 m à 14:58:33 · tu @ 45.28524,4.63094
+28/11 15:01:14 MG4Dash : 50 · 50 · paquets : p45_4.bin chargé (9636 cases, 224 ms) · 96 en ligne · residential (paquet OSM) · position gps ±1 m à 15:01:14 · tuiles 4/4 (s @ 45.28766,4.62727
+Install record: installer=com.android.vending · initiating=com.google.android.packageinstaller
+
+Last routes ended:
+21 Nov 23:04:31 · phone · other · ImmersiveNavKt:1031 < ImmersiveNavKt:0 < ImmersiveNavKt:0 < ComponentsKt:76
+22 Nov 08:55:29 · car · other · NavEngine:6733
+27 Nov 18:46:31 · car · other · CarOverlayKt:1000 < CarOverlayKt:0 < CarOverlayKt:0 < CarOverlayKt:275
+27 Nov 18:46:31 · phone · other · RouteSync:87 < NavEngine:3865 < CarOverlayKt:1000 < CarOverlayKt:0
+27 Nov 21:55:08 · phone · other · ImmersiveNavKt:1839 < ImmersiveNavKt:0 < ImmersiveNavKt:0 < ComponentsKt:76
+
+Car search card closed:
+27 Nov 18:47:15 · empty · CarNavSession:355 < CarNavSession:0 < CarNavSession:0 < CarNavSession:338
+27 Nov 18:47:19 · empty · CarNavSession:355 < CarNavSession:0 < CarNavSession:0 < CarNavSession:338
+27 Nov 18:47:24 · empty · CarNavSession:355 < CarNavSession:0 < CarNavSession:0 < CarNavSession:338
+27 Nov 18:47:50 · empty · CarNavSession:355 < CarNavSession:0 < CarNavSession:0 < CarNavSession:338
+27 Nov 18:48:00 · empty · CarNavSession:355 < CarNavSession:0 < CarNavSession:0 < CarNavSession:338
+
+Music lowered and given back:
+28 Nov 13:28:55 · music lowered for the beep
+28 Nov 13:28:59 · music given back after the voice (4.0 s)
+28 Nov 13:29:01 · music lowered for the voice
+28 Nov 13:29:04 · music given back after the voice (2.9 s)
+28 Nov 14:56:49 · music lowered for the voice
+28 Nov 14:56:52 · music given back after the voice (2.7 s)
+28 Nov 14:56:57 · music lowered for the voice
+28 Nov 14:57:00 · music given back after the voice (2.9 s)
+
+Connection problems:
+22 Nov 08:50:16 · Mapbox directions/v5 · GaiException: android_getaddrinfo failed: EAI_NODATA (No address associated with hostname) · no network
+22 Nov 12:03:57 · Mapbox directions/v5 · GaiException: android_getaddrinfo failed: EAI_NODATA (No address associated with hostname) · mobile data
+22 Nov 12:03:57 · Mapbox directions/v5 · UnknownHostException: Unable to resolve host "api.mapbox.com": No address associated with hostname · mobile data
+26 Nov 16:17:43 · Mapbox directions/v5 · GaiException: android_getaddrinfo failed: EAI_NODATA (No address associated with hostname) · network not working
+26 Nov 16:17:43 · Mapbox directions/v5 · UnknownHostException: Unable to resolve host "api.mapbox.com": No address associated with hostname · network not working
+26 Nov 16:17:53 · Mapbox search/geocode · GaiException: android_getaddrinfo failed: EAI_NODATA (No address associated with hostname) · network not working
+
+How the app last ended (Android's record):
+28 Nov 13:35:58 · closed for low memory
+28 Nov 11:28:22 · other · [TOO MANY EMPTY PROCS] too many empty
+28 Nov 10:58:30 · closed by you (swiped away or Close) · [REMOVE TASK] remove task
+28 Nov 10:57:58 · other · [INVALID START] [INVALID START] killedByAm=true;No entry in mProcessNames;pendingStart=false;
