@@ -187,6 +187,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Rapport en un appui : Réglages › À propos et sauvegarde › Rapport envoie directement le rapport dans le dépôt GitHub, sans texte à écrire.
 
 ### Amélioré
+- Limitation estimée : affichée comme les autres, plus transparente.
 - Couleurs des panneaux de direction selon le pays : Norvège, Pologne, Autriche, Hongrie et pays baltes (autoroutes bleues, routes vertes) ; Russie, Lituanie, Ukraine, Turquie, Bosnie et Albanie (autoroutes vertes).
 - Android Auto : les panneaux et les cartes des autres itinéraires sur la carte grandissent avec la taille générale.
 - Choix de l'itinéraire : seuls les radars de l'itinéraire sont affichés, plus ceux autour de vous.

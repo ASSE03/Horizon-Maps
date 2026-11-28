@@ -294,9 +294,10 @@ fun LimitSignFace(n: Int, board: String, size: Dp, modifier: Modifier = Modifier
 }
 
 @Composable
+// fork FR : une limitation estimée (d'après le type de route) est affichée comme les autres, pas transparente (Cédric, 28/11)
 private fun Roundel(n: Int, size: Dp, over: Boolean, estimated: Boolean, modifier: Modifier, onClick: (() -> Unit)?) {
     Box(
-        modifier.graphicsLayer { alpha = if (estimated) 0.62f else 1f }.size(size).shadow(10.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
+        modifier.graphicsLayer { alpha = 1f }.size(size).shadow(10.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
@@ -318,7 +319,7 @@ private fun Roundel(n: Int, size: Dp, over: Boolean, estimated: Boolean, modifie
         }
         // the number, drawn centred on the digits themselves: as text it sat a little high, as the line's space includes room
         // below the digits for letters like g and y (karthikeyansr, #188). Sized from the sign, not the text-size setting.
-        val ink = if (estimated) 0xFF4A4A4A.toInt() else 0xFF111111.toInt()
+        val ink = 0xFF111111.toInt()
         Canvas(Modifier.fillMaxSize()) {
             drawContext.canvas.nativeCanvas.apply {
                 val tp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -348,7 +349,7 @@ private fun LimitBoard(n: Int, canada: Boolean, over: Boolean, estimated: Boolea
     val w = size * 0.8f
     val shape = RoundedCornerShape(size * 0.1f)
     Box(
-        modifier.graphicsLayer { scaleX = sc; scaleY = sc; alpha = if (estimated) 0.62f else 1f }.size(w, size).shadow(10.dp, shape, ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
+        modifier.graphicsLayer { scaleX = sc; scaleY = sc; alpha = 1f }.size(w, size).shadow(10.dp, shape, ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
             .clip(shape).background(Color(0xFF151515)).padding(size * 0.035f).clip(RoundedCornerShape(size * 0.075f))
             .background(if (over) Color(0xFFFFD6D6) else Color.White).padding(size * 0.03f).border(size * 0.022f, Color(0xFF151515), RoundedCornerShape(size * 0.055f))
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
@@ -367,7 +368,7 @@ private fun LimitBoard(n: Int, canada: Boolean, over: Boolean, estimated: Boolea
                 Text("SPEED", color = Color(0xFF151515), fontSize = head, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, lineHeight = head, style = tight)
                 Text("LIMIT", color = Color(0xFF151515), fontSize = head, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, lineHeight = head, style = tight)
             }
-            Text("$n", color = if (estimated) Color(0xFF4A4A4A) else Color(0xFF111111), fontSize = sz(if (n >= 100) 0.3f else 0.38f),
+            Text("$n", color = Color(0xFF111111), fontSize = sz(if (n >= 100) 0.3f else 0.38f),
                 fontWeight = FontWeight.Black, maxLines = 1, softWrap = false, lineHeight = sz(0.4f), style = tight)
         }
     }
