@@ -361,6 +361,7 @@ Ajoutez chaque changement visible dans l'appli sous **Non publié**, avant de pu
 - Réglages allégés : plus de rubrique de don, ni de proposition de don à l'ouverture.
 
 ### Corrigé
+- Radar non annoncé au retour : après un aller-retour de moins de 10 minutes, le radar est de nouveau annoncé dans l'autre sens.
 - Textes encore en anglais (hors cartes téléchargées, prévisions « Today »).
 - Android Auto : quand ses boutons reviennent, le compteur et le logo Mapbox se décalent bien pour ne pas être dessous.
 - Android Auto : toucher la carte fait revenir les boutons d'Android Auto (signaler, lieux, réglages, zoom, recentrer) sans passer par la barre de recherche.

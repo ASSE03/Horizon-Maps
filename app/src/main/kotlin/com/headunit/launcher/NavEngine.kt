@@ -4492,14 +4492,17 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
         }
         cameraDist = if (best != null) bestD.toInt() else null
         if (best != null) {
-            if (camAlerted.size > 100) { camAlerted.clear(); camStep.clear() }
+            if (camAlerted.size > 100) { camAlerted.clear(); camStep.clear(); camAlertedAt.clear(); camAlertHead.clear() }
             // fork FR : un radar annoncé il y a plus de 10 min (dépassé depuis) peut être annoncé de nouveau, au retour par exemple
-            camAlertedAt[best]?.let { if (now - it > 600_000L) { camAlerted.remove(best); camStep.remove(best); camAlertedAt.remove(best) } }
+            // (et tout de suite si vous arrivez dans l'autre sens : un aller-retour en moins de 10 min n'avait pas d'alerte au retour,
+            // Cédric 28/11 : aller 11:13, retour 11:22)
+            val sameWay = camAlertHead[best]?.let { abs(angDiff(it, p.heading)) < 100.0 } ?: true
+            camAlertedAt[best]?.let { if (now - it > 600_000L || (!sameWay && now - it > 60_000L)) { camAlerted.remove(best); camStep.remove(best); camAlertedAt.remove(best); camAlertHead.remove(best) } }
             // fork FR : une alerte à 300 m (avec la vitesse contrôlée, d'après la liste officielle), puis un rappel à 150 m
             val v = RadarsFr.vma[Overpass.camKey(best)]
             val radar = if (v != null && !imperial) "Radar à $v" else "Radar"
             if (bestD <= 300.0 && camAlerted.add(best)) {
-                camStep[best] = 2; camAlertedAt[best] = now
+                camStep[best] = 2; camAlertedAt[best] = now; camAlertHead[best] = p.heading
                 // fork FR : vu seulement de près, en roulant, en guidage : noté pour le diagnostic de fin de trajet
                 if (bestD < 200.0 && p.speed > 8.0 && navigatingNow() && simMode == 0 && System.currentTimeMillis() - tripStart > 120_000L)
                     tripIssues += "radar annoncé à ${bestD.toInt()} m (${if (onRouteNow) "sur l'itinéraire" else "hors itinéraire"}, ${Math.round(p.speed * 3.6)} km/h, ${LimitLog.pos(best)})"
@@ -4517,6 +4520,8 @@ class NavEngine(private val ctx: Context, val prefs: Prefs, val map: MapBinding)
     private val camStep = HashMap<LL, Int>()
     /** Fork FR : l'heure de la première annonce de chaque radar. */
     private val camAlertedAt = HashMap<LL, Long>()
+    /** Fork FR : votre cap quand le radar a été annoncé (pour l'annoncer de nouveau dans l'autre sens). */
+    private val camAlertHead = HashMap<LL, Double>()
     private var aheadCache: List<LL>? = null
     private var aheadAt = 0L
     private var aheadFrom: LL? = null
